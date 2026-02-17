@@ -1,0 +1,44 @@
+#!/bin/sh
+# Install and launch Claude Code CLI
+# Usage: llmos-claude [args...]
+#
+# First run installs @anthropic-ai/claude-code globally via npm.
+# Requires ANTHROPIC_API_KEY in /opt/llm-os/.env or environment.
+
+set -e
+
+# Source API key from .env if not already set
+if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f /opt/llm-os/.env ]; then
+    key=$(grep '^ANTHROPIC_API_KEY=' /opt/llm-os/.env 2>/dev/null | cut -d= -f2-)
+    if [ -n "$key" ]; then
+        export ANTHROPIC_API_KEY="$key"
+    fi
+fi
+
+# Check for API key
+if [ -z "${ANTHROPIC_API_KEY:-}" ]; then
+    echo ""
+    echo "  Claude Code requires an Anthropic API key."
+    echo ""
+    echo "  Set it with:"
+    echo "    llmos-config set ANTHROPIC_API_KEY sk-ant-api03-..."
+    echo ""
+    echo "  Or export it directly:"
+    echo "    export ANTHROPIC_API_KEY=sk-ant-api03-..."
+    echo ""
+    echo "  Get a key at: https://console.anthropic.com/settings/keys"
+    echo "  Or use Claude Max for unlimited CLI usage."
+    echo ""
+    exit 1
+fi
+
+# Install Claude Code if not present
+if ! command -v claude >/dev/null 2>&1; then
+    echo "  Installing Claude Code CLI (first run only)..."
+    npm install -g @anthropic-ai/claude-code
+    echo "  Done."
+    echo ""
+fi
+
+# Launch Claude Code with any passed arguments
+exec claude "$@"

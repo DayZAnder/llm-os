@@ -32,8 +32,24 @@ else
     echo "not running — try: rc-service llmos start"
 fi
 
+printf "  Claude:  "
+if command -v claude >/dev/null 2>&1; then
+    if grep -q 'ANTHROPIC_API_KEY=.\+' /opt/llm-os/.env 2>/dev/null; then
+        echo "ready (API key configured)"
+    else
+        echo "installed (needs API key — see llmos-config)"
+    fi
+else
+    if grep -q 'ANTHROPIC_API_KEY=.\+' /opt/llm-os/.env 2>/dev/null; then
+        echo "not installed (run: llmos-claude to install + launch)"
+    else
+        echo "not installed (run: llmos-claude — needs API key)"
+    fi
+fi
+
 echo ""
-echo "  Type 'llmos-config' to configure API keys and Ollama URL."
+echo "  llmos-config   — configure API keys and Ollama URL"
+echo "  llmos-claude   — install + launch Claude Code CLI"
 echo ""
 
 exec /bin/sh -l
