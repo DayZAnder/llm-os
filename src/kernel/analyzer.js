@@ -104,6 +104,89 @@ const RULES = [
     description: 'Service worker registration can persist malicious code',
     pattern: /navigator\s*\.\s*serviceWorker/g,
   },
+  // --- Phase 2 rules: catch obfuscation & advanced escape vectors ---
+  {
+    id: 'BRACKET_EVAL',
+    severity: 'CRITICAL',
+    description: 'Bracket notation to access eval/Function/constructor',
+    // Catches: window["eval"], obj["constructor"], this["Function"]
+    pattern: /\[\s*['"](?:eval|Function|constructor|__proto__)['"]\s*\]/g,
+  },
+  {
+    id: 'COMPUTED_PROPERTY_EXEC',
+    severity: 'WARNING',
+    description: 'Computed property access on window/document (potential obfuscation)',
+    // Catches: window[varName], document[x], globalThis[y]
+    pattern: /\b(?:window|document|globalThis|self)\s*\[\s*[a-zA-Z_$]/g,
+  },
+  {
+    id: 'STRING_CONCAT_EVAL',
+    severity: 'CRITICAL',
+    description: 'String concatenation to build eval/Function calls',
+    // Catches: "ev"+"al", "Func"+"tion"
+    pattern: /['"]ev['"]\s*\+\s*['"]al['"]|['"]Func['"]\s*\+\s*['"]tion['"]/g,
+  },
+  {
+    id: 'DOCUMENT_WRITE',
+    severity: 'CRITICAL',
+    description: 'document.write can inject arbitrary HTML/scripts',
+    pattern: /document\s*\.\s*write(?:ln)?\s*\(/g,
+  },
+  {
+    id: 'INNER_HTML_ASSIGN',
+    severity: 'WARNING',
+    description: 'innerHTML/outerHTML assignment can inject scripts',
+    pattern: /\.(?:innerHTML|outerHTML)\s*[+]?=/g,
+  },
+  {
+    id: 'BLOB_URL',
+    severity: 'WARNING',
+    description: 'Blob URLs can bypass CSP and load arbitrary code',
+    pattern: /URL\s*\.\s*createObjectURL\s*\(/g,
+  },
+  {
+    id: 'SHARED_ARRAY_BUFFER',
+    severity: 'CRITICAL',
+    description: 'SharedArrayBuffer enables timing attacks and Spectre exploits',
+    pattern: /\bSharedArrayBuffer\b/g,
+  },
+  {
+    id: 'WEB_RTC',
+    severity: 'WARNING',
+    description: 'WebRTC can leak local IP and enable fingerprinting',
+    pattern: /\bRTCPeerConnection\b|\bRTCDataChannel\b/g,
+  },
+  {
+    id: 'IMPORT_SCRIPTS',
+    severity: 'CRITICAL',
+    description: 'importScripts loads external code in workers',
+    pattern: /\bimportScripts\s*\(/g,
+  },
+  {
+    id: 'LOCATION_ASSIGN',
+    severity: 'CRITICAL',
+    description: 'Redirect or navigation can escape the sandbox',
+    pattern: /(?:location\s*\.\s*href\s*=|location\s*\.\s*(?:assign|replace)\s*\(|location\s*=\s*['"`])/g,
+  },
+  {
+    id: 'POSTMESSAGE_WILDCARD',
+    severity: 'WARNING',
+    description: 'postMessage with wildcard origin bypasses origin checks',
+    pattern: /\.postMessage\s*\([^)]*,\s*['"]\*['"]\s*\)/g,
+  },
+  {
+    id: 'CHAR_CODE_OBFUSCATION',
+    severity: 'WARNING',
+    description: 'Character code manipulation to hide malicious strings',
+    // Catches chained fromCharCode or charCodeAt patterns
+    pattern: /(?:fromCharCode|charCodeAt)\s*\([^)]*\)(?:\s*\+\s*.*(?:fromCharCode|charCodeAt))+/g,
+  },
+  {
+    id: 'MUTATION_OBSERVER_ABUSE',
+    severity: 'WARNING',
+    description: 'MutationObserver can monitor and manipulate the sandbox DOM',
+    pattern: /\bnew\s+MutationObserver\s*\(/g,
+  },
 ];
 
 // Dockerfile-specific rules (used by analyzeDockerfile)

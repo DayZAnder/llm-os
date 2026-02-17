@@ -1484,7 +1484,18 @@ async function init() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ value }),
+      }).then(r => r.json()).catch(() => ({ ok: true }));
+    },
+    onStorageRemove(appId, key) {
+      return fetch(`/api/storage/${appId}/${encodeURIComponent(key)}`, {
+        method: 'DELETE',
       }).catch(() => {});
+    },
+    onStorageKeys(appId) {
+      return fetch(`/api/storage/${appId}`)
+        .then(r => r.json())
+        .then(d => d.keys)
+        .catch(() => []);
     },
     onNotify(appId, message) {
       log(`[${appId}] ${message}`);

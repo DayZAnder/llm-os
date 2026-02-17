@@ -9,6 +9,7 @@ import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability,
 import { dockerPing } from './kernel/docker/client.js';
 import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses } from './kernel/docker/process-manager.js';
 import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
+import { storageGet, storageSet, storageRemove, storageKeys, storageUsage, storageClear, storageExport, storageImport, storageListApps, storageExportAll, storageFlushAll } from './kernel/storage.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -20,14 +21,6 @@ const MIME_TYPES = {
   '.png': 'image/png',
   '.svg': 'image/svg+xml',
 };
-
-// Per-app storage (in-memory for prototype)
-const appStorageMap = new Map();
-
-function getStorage(appId) {
-  if (!appStorageMap.has(appId)) appStorageMap.set(appId, new Map());
-  return appStorageMap.get(appId);
-}
 
 function serveStatic(url, res) {
   // Map URLs to files
@@ -54,7 +47,8 @@ function serveStatic(url, res) {
   res.end(content);
 }
 
-async function handleAPI(method, url, body, res) {
+async function handleAPI(method, fullUrl, body, res) {
+  const url = fullUrl.split('?')[0]; // path only for exact matching
   try {
     // POST /api/generate — generate an app from prompt
     if (method === 'POST' && url === '/api/generate') {
@@ -111,8 +105,7 @@ async function handleAPI(method, url, body, res) {
     const storageGetMatch = url.match(/^\/api\/storage\/([^/]+)\/(.+)$/);
     if (method === 'GET' && storageGetMatch) {
       const [, appId, key] = storageGetMatch;
-      const store = getStorage(appId);
-      const value = store.get(decodeURIComponent(key)) ?? null;
+      const value = storageGet(appId, decodeURIComponent(key));
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ value }));
       return;
@@ -123,10 +116,71 @@ async function handleAPI(method, url, body, res) {
     if (method === 'PUT' && storagePutMatch) {
       const [, appId, key] = storagePutMatch;
       const { value } = JSON.parse(body);
-      const store = getStorage(appId);
-      store.set(decodeURIComponent(key), value);
+      const result = storageSet(appId, decodeURIComponent(key), value);
+      if (!result.ok) {
+        res.writeHead(413, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: result.error }));
+        return;
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    // DELETE /api/storage/:appId/:key — remove key
+    const storageDelMatch = url.match(/^\/api\/storage\/([^/]+)\/(.+)$/);
+    if (method === 'DELETE' && storageDelMatch) {
+      const [, appId, key] = storageDelMatch;
+      storageRemove(appId, decodeURIComponent(key));
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    // GET /api/storage/:appId — list keys + usage
+    const storageInfoMatch = url.match(/^\/api\/storage\/([^/]+)$/);
+    if (method === 'GET' && storageInfoMatch) {
+      const appId = storageInfoMatch[1];
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        keys: storageKeys(appId),
+        usage: storageUsage(appId),
+      }));
+      return;
+    }
+
+    // DELETE /api/storage/:appId — clear all app storage
+    const storageClearMatch = url.match(/^\/api\/storage\/([^/]+)$/);
+    if (method === 'DELETE' && storageClearMatch) {
+      storageClear(storageClearMatch[1]);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    // GET /api/storage-export/:appId — export app data
+    const exportMatch = url.match(/^\/api\/storage-export\/([^/]+)$/);
+    if (method === 'GET' && exportMatch) {
+      const data = storageExport(exportMatch[1]);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(data));
+      return;
+    }
+
+    // POST /api/storage-import/:appId — import app data
+    const importMatch = url.match(/^\/api\/storage-import\/([^/]+)$/);
+    if (method === 'POST' && importMatch) {
+      const data = JSON.parse(body);
+      const result = storageImport(importMatch[1], data);
+      res.writeHead(result.ok ? 200 : 413, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // GET /api/storage-export-all — export all apps data
+    if (method === 'GET' && url === '/api/storage-export-all') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(storageExportAll()));
       return;
     }
 
@@ -226,17 +280,17 @@ async function handleAPI(method, url, body, res) {
     }
 
     // GET /api/registry/search?q=... — search by prompt similarity
-    const searchMatch = url.match(/^\/api\/registry\/search\?q=(.+)$/);
-    if (method === 'GET' && searchMatch) {
-      const query = decodeURIComponent(searchMatch[1]);
+    if (method === 'GET' && url === '/api/registry/search') {
+      const params = new URL(`http://x${fullUrl}`).searchParams;
+      const query = params.get('q') || '';
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(searchApps(query)));
       return;
     }
 
     // GET /api/registry/browse?offset=0&limit=20&tag=...&type=... — browse apps
-    if (method === 'GET' && url.startsWith('/api/registry/browse')) {
-      const params = new URL(`http://x${url}`).searchParams;
+    if (method === 'GET' && url === '/api/registry/browse') {
+      const params = new URL(`http://x${fullUrl}`).searchParams;
       const result = browseApps({
         offset: parseInt(params.get('offset') || '0', 10),
         limit: parseInt(params.get('limit') || '20', 10),
@@ -289,15 +343,20 @@ async function handleAPI(method, url, body, res) {
   }
 }
 
-const server = createServer((req, res) => {
-  const url = req.url.split('?')[0];
+// Flush storage on shutdown
+process.on('SIGINT', () => { storageFlushAll(); process.exit(0); });
+process.on('SIGTERM', () => { storageFlushAll(); process.exit(0); });
 
-  if (url.startsWith('/api/')) {
+const server = createServer((req, res) => {
+  const pathOnly = req.url.split('?')[0];
+
+  if (pathOnly.startsWith('/api/')) {
     let body = '';
     req.on('data', chunk => body += chunk);
-    req.on('end', () => handleAPI(req.method, url, body, res));
+    // Pass full URL (with query string) to API handler
+    req.on('end', () => handleAPI(req.method, req.url, body, res));
   } else {
-    serveStatic(url, res);
+    serveStatic(pathOnly, res);
   }
 });
 
