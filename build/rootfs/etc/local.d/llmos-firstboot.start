@@ -1,0 +1,16 @@
+#!/bin/sh
+# First-boot setup — runs once, then deletes itself.
+
+MARKER="/opt/llm-os/.firstboot-done"
+[ -f "$MARKER" ] && exit 0
+
+echo "[llmos] First boot setup..."
+
+# Pull NanoClaw dependencies (pre-warm Docker)
+if docker info >/dev/null 2>&1; then
+    echo "[llmos] Pre-pulling node:22-slim base image..."
+    docker pull node:22-slim 2>/dev/null || true
+fi
+
+touch "$MARKER"
+echo "[llmos] First boot complete."

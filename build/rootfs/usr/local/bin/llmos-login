@@ -1,0 +1,39 @@
+#!/bin/sh
+# Auto-login script for tty1 — shows system status, then drops to shell
+
+clear
+cat /etc/motd
+
+# Show IP addresses
+echo "  Network:"
+for iface in $(ls /sys/class/net/ 2>/dev/null | grep -v lo); do
+    ip=$(ip -4 addr show "$iface" 2>/dev/null | grep -oP '(?<=inet )\S+' | head -1)
+    if [ -n "$ip" ]; then
+        echo "    $iface: $ip"
+        echo ""
+        echo "  → Open http://${ip%/*}:3000 in your browser"
+    fi
+done
+
+echo ""
+
+# Service status
+printf "  Docker:  "
+if docker info >/dev/null 2>&1; then
+    echo "running"
+else
+    echo "not running"
+fi
+
+printf "  LLM OS:  "
+if rc-service llmos status >/dev/null 2>&1; then
+    echo "running (port 3000)"
+else
+    echo "not running — try: rc-service llmos start"
+fi
+
+echo ""
+echo "  Type 'llmos-config' to configure API keys and Ollama URL."
+echo ""
+
+exec /bin/sh -l

@@ -1,0 +1,11 @@
+
+  ╔══════════════════════════════════════╗
+  ║           LLM OS v0.1.0             ║
+  ║                                      ║
+  ║  The OS that generates its own apps  ║
+  ╚══════════════════════════════════════╝
+
+  Web UI:   http://<this-ip>:3000
+  SSH:      root / llmos (change me!)
+  Docs:     https://llm-os.dev
+

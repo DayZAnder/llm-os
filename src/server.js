@@ -301,7 +301,8 @@ const server = createServer((req, res) => {
   }
 });
 
-server.listen(config.port, () => {
+const host = process.env.HOST || 'localhost';
+server.listen(config.port, host, () => {
   console.log(`
   ╔══════════════════════════════════════╗
   ║           LLM OS v0.1.0             ║

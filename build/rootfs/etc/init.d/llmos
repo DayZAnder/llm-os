@@ -1,0 +1,36 @@
+#!/sbin/openrc-run
+# LLM OS Kernel Service
+
+name="LLM OS"
+description="LLM OS — AI-native operating system kernel"
+command="/usr/bin/node"
+command_args="/opt/llm-os/src/server.js"
+command_user="root"
+command_background="yes"
+pidfile="/run/llmos.pid"
+output_log="/var/log/llmos.log"
+error_log="/var/log/llmos.log"
+directory="/opt/llm-os"
+
+depend() {
+    need net docker
+    after docker
+}
+
+start_pre() {
+    # Wait for Docker to be ready
+    local i=0
+    while [ $i -lt 30 ]; do
+        docker info >/dev/null 2>&1 && break
+        i=$((i + 1))
+        sleep 1
+    done
+
+    # Source .env file
+    if [ -f /opt/llm-os/.env ]; then
+        export $(grep -v '^#' /opt/llm-os/.env | xargs)
+    fi
+
+    # Bind to all interfaces
+    export HOST=0.0.0.0
+}

@@ -1,0 +1,48 @@
+#!/bin/sh
+# LLM OS configuration helper
+
+ENV_FILE="/opt/llm-os/.env"
+
+echo ""
+echo "  LLM OS Configuration"
+echo "  ═══════════════════"
+echo ""
+
+# Show current config
+echo "  Current settings:"
+echo "  ─────────────────"
+grep -v '^#' "$ENV_FILE" | grep -v '^$' | while read line; do
+    key=$(echo "$line" | cut -d= -f1)
+    val=$(echo "$line" | cut -d= -f2-)
+    if echo "$key" | grep -qi "key\|secret\|password"; then
+        [ -n "$val" ] && val="****configured****" || val="(not set)"
+    fi
+    printf "  %-24s %s\n" "$key" "$val"
+done
+echo ""
+
+echo "  Commands:"
+echo "    llmos-config set OLLAMA_URL http://192.168.1.100:11434"
+echo "    llmos-config set ANTHROPIC_API_KEY sk-ant-..."
+echo "    llmos-config restart"
+echo ""
+
+case "${1:-}" in
+    set)
+        key="$2"
+        val="$3"
+        if grep -q "^${key}=" "$ENV_FILE"; then
+            sed -i "s|^${key}=.*|${key}=${val}|" "$ENV_FILE"
+        else
+            echo "${key}=${val}" >> "$ENV_FILE"
+        fi
+        echo "  Set ${key}. Run 'llmos-config restart' to apply."
+        ;;
+    restart)
+        echo "  Restarting LLM OS..."
+        rc-service llmos restart
+        echo "  Done."
+        ;;
+    *)
+        ;;
+esac
