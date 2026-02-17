@@ -304,6 +304,8 @@ Three variants available from [Releases](https://github.com/DayZAnder/llm-os/rel
 
 Formats: QCOW2 (Proxmox/KVM), VHDX (Hyper-V), OVA (VirtualBox). Default login: `root` / `llmos`.
 
+> **Licensing:** LLM OS code is MIT. VM images include the Linux kernel (GPLv2) and other open-source components. See [THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) for full details and upstream source links.
+
 ### Build VM images from source
 
 ```bash
