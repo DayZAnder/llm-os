@@ -290,21 +290,28 @@ Type a description in the prompt bar. The OS generates, analyzes, and sandboxes 
 
 ## Roadmap
 
-### Phase 1: Web Prototype (current)
+### Phase 1: Web Prototype ✓
 - [x] Browser-based shell with prompt bar and window manager
 - [x] iframe sandbox with strict CSP
 - [x] LLM gateway (Ollama + Claude API, routed by complexity)
 - [x] Static analysis pipeline (regex-based, blocks eval/injection)
 - [x] Capability system with user approval dialog
 - [x] SDK for generated apps (ui, storage, timer, caps)
-- [ ] App registry with content addressing
+- [x] App registry with content addressing and community sync
+- [x] Docker container runtime for process apps (NanoClaw support)
 - [ ] Persistent storage (currently in-memory)
 
-### Phase 2: Bootable Appliance
-- [ ] Minimal Linux image via Buildroot (~15MB, drivers + network only)
-- [ ] Boots directly into kiosk browser → LLM OS shell
-- [ ] No login screen, no desktop environment — just the OS
-- [ ] ISO/USB image for Hyper-V, VirtualBox, bare metal
+### Phase 2: Bootable Appliance (current)
+- [x] Alpine Linux VM image (kernel 6.12 + Docker + Node.js)
+- [x] QCOW2 (Proxmox/KVM) and VHDX (Hyper-V) output formats
+- [x] Auto-start LLM OS kernel on boot (OpenRC service)
+- [x] Networking (DHCP + SSH + serial console)
+- [x] First-boot setup (Docker pre-warm)
+- [x] Configuration helper (`llmos-config`)
+- [ ] Kiosk browser mode (boot straight into shell, no login)
+- [ ] OVA format for VirtualBox
+- [ ] Automated CI builds (GitHub Actions)
+- [ ] Smaller image via Buildroot (~50MB target)
 
 ### Phase 3: WASM Sandbox + Unikernel
 - [ ] Replace iframes with WebAssembly (Wasmtime/Extism)

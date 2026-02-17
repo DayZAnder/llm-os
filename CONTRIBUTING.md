@@ -107,62 +107,67 @@ Update src/kernel/capabilities.js in place. Add tests that verify:
 
 ---
 
-### Prompt 3: App Registry with Content Addressing
+### ~~Prompt 3: App Registry~~ — DONE
+
+> Implemented in `src/kernel/registry/store.js`. Content-addressed with SHA-256, trigram fuzzy search, community sync from GitHub. See the Browse Apps button in the shell.
+
+**Next step:** Improve the registry — add ratings, install counts, featured apps, or a web-based registry browser.
+
+---
+
+### ~~Prompt 4: Bootable Linux Image~~ — DONE
+
+> Implemented in `build/`. Alpine Linux VM with Docker + Node.js, outputs QCOW2 (Proxmox) and VHDX (Hyper-V). Download from [Releases](https://github.com/DayZAnder/llm-os/releases).
+
+**Next step:** Add kiosk browser mode (Chromium auto-launching into the shell), OVA for VirtualBox, or CI builds via GitHub Actions.
+
+---
+
+### Prompt 3: Persistent Storage Layer
 
 ```
-Read the existing architecture in src/server.js to understand the API pattern.
+Read the existing in-memory storage in src/sdk/sdk.js (LLMOS.storage API).
 
-Build an app registry — the "package manager" for LLM OS. When a user generates
-an app, it gets stored. Next time someone asks for something similar, offer the
-cached version instead of regenerating.
+Replace the ephemeral in-memory storage with persistent storage that survives
+app restarts and OS reboots.
 
-Core value reminder: Take a piece, leave a piece. The registry exists so that
-good apps can be shared and reused. But: never auto-share without user consent.
-Local registry by default, opt-in sharing later.
-
-Core value reminder: Protect the user first. Registry entries must be
-content-addressed (SHA-256 hash of the code). No one can silently swap out an
-app's code after it's been audited.
+Core value reminder: Protect the user first. Storage is per-app, isolated by
+appId. One app must NEVER be able to read another app's data. All data stays
+local — never synced to any external service.
 
 Requirements:
-- SQLite database (use better-sqlite3) at data/registry.db
-- Store: prompt, promptHash, code, codeHash, capabilities, model, rating, audited flag
-- Fuzzy prompt matching (trigram similarity or Levenshtein)
-- Content addressing: codeHash = SHA-256 of generated code
-- API endpoints: GET /api/registry/search?q=..., POST /api/registry/store
-- Wire into the generation flow: before calling LLM, check registry first
-- Show "use cached app" option in the shell UI
+- Use the filesystem (JSON files in data/apps/<appId>/) — no database dependency
+- LLMOS.storage.get/set/delete work the same but persist to disk
+- Storage quota per app (default 5MB, configurable)
+- Storage usage visible in capability approval dialog
+- Export/import user data (all apps or per-app)
+- Backward compatible: existing apps work without changes
 
-Put it in src/kernel/registry/. Add new API routes to src/server.js.
-Install better-sqlite3 as the only new dependency.
+Update src/server.js with storage API endpoints.
+Update src/sdk/sdk.js to use the new persistent backend.
+Add tests.
 ```
 
 ---
 
-### Prompt 4: Bootable Linux Image
+### Prompt 4: CI Pipeline (GitHub Actions)
 
 ```
-This is a self-contained task — create a Buildroot or Alpine Linux configuration
-that produces a bootable ISO/image of LLM OS.
+Set up GitHub Actions to automatically build and test LLM OS on every push/PR.
 
-Core value reminder: Empower the user. The image should boot directly into
-LLM OS with zero configuration. No login screen, no desktop environment.
-The user sees the prompt bar and starts generating apps immediately.
-
-Core value reminder: Protect the user first. The bootable image should have
-no unnecessary services running. Minimal attack surface. No SSH by default.
+Core value reminder: Nothing is perfect — but CI catches regressions before
+they reach users. Every PR should pass before merge.
 
 Requirements:
-- Buildroot config OR Alpine Linux setup script
-- Boots into a minimal graphical environment (cage + wlroots, or X11 + chromium --kiosk)
-- Chromium/Firefox in kiosk mode pointing to http://localhost:3000
-- Node.js installed, LLM OS server auto-starts on boot
-- Network configured via DHCP (for Ollama connectivity)
-- Produces: an ISO for VirtualBox/Hyper-V and an img for USB boot
-- Total image size target: under 200MB
+- Run all tests (node --test tests/*.test.js) on push and PR
+- Run the values-check workflow (already exists, wire it in)
+- Build the VM image on tagged releases (v*)
+- Upload QCOW2 and VHDX as release assets automatically
+- Build matrix: Node.js 22 on Ubuntu
+- Cache node_modules between runs
+- Badge in README showing build status
 
-Put config in bootable/. Include a build script and a README explaining how
-to build the image.
+Put workflows in .github/workflows/. The VM build needs Docker (privileged).
 ```
 
 ---
