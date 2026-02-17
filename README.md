@@ -6,6 +6,24 @@ No pre-built apps. No compiled binaries. You describe what you need, and the OS 
 
 > **Status:** Architecture & design phase. Looking for contributors.
 
+## Vision
+
+One of the core principles of this project is **consensus of agents** — a group of AI agents that agree on what features are allowed to make it in. When there's doubt, a human maintainer decides (until that right is handed over to someone or something else).
+
+### Core Rules
+
+**1. Protect the user first.**
+Their privacy and their integrity, through all means possible. This is non-negotiable.
+
+**2. Empower the user.**
+The OS should allow users to efficiently perform their tasks and launch any software or technically possible function they wish — as long as it is not detrimental to humanity as a whole. Users should be able to launch AI-generated software or, if they prefer, run other platforms. The tools should exist to do so efficiently.
+
+**3. Take a piece, leave a piece.**
+Every user may freely use this software on their own computer, network, or servers, and adapt it as they see fit. But if you benefit from it — contribute, even if just a little bit. Code that is contributed should not damage or otherwise disrupt the core idea of this OS.
+
+**4. Nothing is perfect.**
+These rules aren't perfect, but we can always improve — as long as the core intent isn't violated.
+
 ## Why This Doesn't Exist Yet
 
 The "LLM OS" label has been claimed by dozens of projects — agent frameworks, chatbot UIs, automation tools. None of them are actually an OS. Here's what exists vs. what we're building:
