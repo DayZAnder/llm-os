@@ -11,7 +11,7 @@
 # First build: ~45-60 min (downloads + compiles toolchain + kernel)
 # Cached rebuilds: ~5-10 min
 #
-# Output: /output/llmos-0.2.0-micro.{qcow2,vhdx,ova}
+# Output: /output/llmos-0.2.1-micro.{qcow2,vhdx,ova}
 
 FROM debian:bookworm-slim
 

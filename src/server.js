@@ -475,7 +475,7 @@ server.listen(config.port, host, () => {
     .join('\n');
   console.log(`
   ╔══════════════════════════════════════╗
-  ║           LLM OS v0.2.0             ║
+  ║           LLM OS v0.2.1             ║
   ║  http://localhost:${config.port}              ║
   ╚══════════════════════════════════════╝
 
