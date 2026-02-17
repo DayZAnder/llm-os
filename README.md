@@ -340,9 +340,11 @@ docker run --rm --privileged -v $(pwd)/build/output:/output llmos-buildroot
 - [x] Self-improvement scheduler (automated LLM tasks with guardrails)
 - [x] Smaller image via Buildroot (~50MB micro variant)
 
-### Phase 3: WASM Sandbox + Unikernel
+### Phase 3: WASM Sandbox + System Configuration
 - [ ] Replace iframes with WebAssembly (Wasmtime/Extism)
 - [ ] Cryptographic capability tokens (HMAC-SHA256)
+- [ ] LLM-driven system configuration from natural language (display, browser, boot, storage policies)
+- [ ] System capability gates: `system:display`, `system:browser`, `system:boot`, `system:storage`
 - [ ] Replace Linux with HermitOS (Rust unikernel)
 - [ ] Single address space, no syscalls, just our runtime
 
