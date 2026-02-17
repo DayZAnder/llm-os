@@ -10,13 +10,14 @@
 #   build/output/llmos-0.1.0.qcow2  (Proxmox)
 #   build/output/llmos-0.1.0.vhdx   (Hyper-V)
 #
-# Needs: --privileged (for loopback mount + grub-install)
+# Needs: --privileged (for loopback mount + bootloader install)
 
 FROM alpine:3.21
 
 RUN apk add --no-cache \
     e2fsprogs e2fsprogs-extra \
     grub grub-bios grub-efi \
+    syslinux \
     dosfstools mtools \
     parted util-linux losetup \
     qemu-img \
