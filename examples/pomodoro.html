@@ -1,0 +1,119 @@
+<!-- capabilities: ["ui:window", "timer:basic", "storage:local"] -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; padding: 40px 20px; background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; text-align: center; }
+  .timer { font-family: 'Cascadia Code', monospace; font-size: 72px; font-weight: 300; margin: 30px 0; color: #e0e0f0; }
+  .timer.break-time { color: #2ed573; }
+  .label { font-size: 14px; color: #6c63ff; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }
+  .controls { display: flex; gap: 12px; justify-content: center; margin: 24px 0; }
+  button { background: #2a2a4a; border: none; border-radius: 8px; padding: 12px 28px; color: #e0e0e0; font-size: 14px; cursor: pointer; transition: background 0.15s; }
+  button:hover { background: #3a3a5a; }
+  button.primary { background: #6c63ff; color: white; }
+  button.primary:hover { background: #7b73ff; }
+  button.danger { background: #ff4757; color: white; }
+  button.danger:hover { background: #ff6b7a; }
+  .stats { font-size: 12px; color: #555577; margin-top: 24px; }
+  .progress { width: 200px; height: 4px; background: #2a2a4a; border-radius: 2px; margin: 0 auto; overflow: hidden; }
+  .progress-bar { height: 100%; background: #6c63ff; transition: width 1s linear; border-radius: 2px; }
+</style>
+</head>
+<body>
+<div class="label" id="label">Focus Time</div>
+<div class="timer" id="timer">25:00</div>
+<div class="progress"><div class="progress-bar" id="progress"></div></div>
+<div class="controls">
+  <button class="primary" id="toggle">Start</button>
+  <button id="skip">Skip</button>
+  <button class="danger" id="reset">Reset</button>
+</div>
+<div class="stats" id="stats"></div>
+<script>
+  const WORK = 25 * 60;
+  const BREAK = 5 * 60;
+
+  let remaining = WORK;
+  let total = WORK;
+  let running = false;
+  let isBreak = false;
+  let interval = null;
+  let sessions = 0;
+
+  async function loadStats() {
+    const s = await LLMOS.storage.get('pomodoro-sessions');
+    if (s) sessions = s;
+    updateStats();
+  }
+
+  function updateStats() {
+    document.getElementById('stats').textContent = `${sessions} session${sessions !== 1 ? 's' : ''} completed today`;
+  }
+
+  function format(secs) {
+    const m = Math.floor(secs / 60);
+    const s = secs % 60;
+    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  function render() {
+    document.getElementById('timer').textContent = format(remaining);
+    document.getElementById('timer').className = 'timer' + (isBreak ? ' break-time' : '');
+    document.getElementById('label').textContent = isBreak ? 'Break Time' : 'Focus Time';
+    document.getElementById('toggle').textContent = running ? 'Pause' : 'Start';
+    const pct = ((total - remaining) / total) * 100;
+    document.getElementById('progress').style.width = pct + '%';
+  }
+
+  function tick() {
+    if (remaining <= 0) {
+      running = false;
+      clearInterval(interval);
+      if (!isBreak) {
+        sessions++;
+        LLMOS.storage.set('pomodoro-sessions', sessions);
+        updateStats();
+      }
+      isBreak = !isBreak;
+      total = isBreak ? BREAK : WORK;
+      remaining = total;
+    } else {
+      remaining--;
+    }
+    render();
+  }
+
+  document.getElementById('toggle').onclick = () => {
+    running = !running;
+    if (running) {
+      interval = LLMOS.timer.setInterval(tick, 1000);
+    } else {
+      LLMOS.timer.clearInterval(interval);
+    }
+    render();
+  };
+
+  document.getElementById('skip').onclick = () => {
+    LLMOS.timer.clearInterval(interval);
+    running = false;
+    isBreak = !isBreak;
+    total = isBreak ? BREAK : WORK;
+    remaining = total;
+    render();
+  };
+
+  document.getElementById('reset').onclick = () => {
+    LLMOS.timer.clearInterval(interval);
+    running = false;
+    isBreak = false;
+    total = WORK;
+    remaining = WORK;
+    render();
+  };
+
+  loadStats();
+  render();
+</script>
+</body>
+</html>

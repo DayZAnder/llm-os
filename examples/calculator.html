@@ -1,0 +1,92 @@
+<!-- capabilities: ["ui:window"] -->
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  body { margin: 0; padding: 20px; background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }
+  .calc { max-width: 280px; margin: 0 auto; }
+  .display { background: #0d0d1a; border: 1px solid #2a2a4a; border-radius: 8px; padding: 16px; text-align: right; font-size: 28px; font-family: monospace; margin-bottom: 12px; min-height: 48px; word-break: break-all; }
+  .buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
+  button { background: #2a2a4a; border: none; border-radius: 6px; padding: 16px; font-size: 18px; color: #e0e0e0; cursor: pointer; transition: background 0.1s; }
+  button:hover { background: #3a3a5a; }
+  button.op { background: #6c63ff; color: white; }
+  button.op:hover { background: #7b73ff; }
+  button.eq { background: #2ed573; color: #0d0d1a; }
+  button.eq:hover { background: #3ee583; }
+  button.clear { background: #ff4757; color: white; }
+  button.clear:hover { background: #ff6b7a; }
+</style>
+</head>
+<body>
+<div class="calc">
+  <div class="display" id="display">0</div>
+  <div class="buttons" id="buttons"></div>
+</div>
+<script>
+  const display = document.getElementById('display');
+  const buttons = document.getElementById('buttons');
+  let current = '0';
+  let operator = null;
+  let previous = null;
+  let reset = false;
+
+  const layout = [
+    ['C', 'clear'], ['\u00b1', ''], ['%', ''], ['\u00f7', 'op'],
+    ['7', ''], ['8', ''], ['9', ''], ['\u00d7', 'op'],
+    ['4', ''], ['5', ''], ['6', ''], ['-', 'op'],
+    ['1', ''], ['2', ''], ['3', ''], ['+', 'op'],
+    ['0', ''], ['.', ''], ['=', 'eq']
+  ];
+
+  function calculate(a, op, b) {
+    const na = parseFloat(a), nb = parseFloat(b);
+    switch(op) {
+      case '+': return na + nb;
+      case '-': return na - nb;
+      case '\u00d7': return na * nb;
+      case '\u00f7': return nb !== 0 ? na / nb : 'Error';
+      default: return nb;
+    }
+  }
+
+  function press(label) {
+    if (label === 'C') {
+      current = '0'; operator = null; previous = null; reset = false;
+    } else if (label === '\u00b1') {
+      current = String(-parseFloat(current));
+    } else if (label === '%') {
+      current = String(parseFloat(current) / 100);
+    } else if (['+', '-', '\u00d7', '\u00f7'].includes(label)) {
+      if (previous !== null && operator && !reset) {
+        current = String(calculate(previous, operator, current));
+      }
+      previous = current;
+      operator = label;
+      reset = true;
+    } else if (label === '=') {
+      if (previous !== null && operator) {
+        current = String(calculate(previous, operator, current));
+        operator = null;
+        previous = null;
+        reset = true;
+      }
+    } else {
+      if (reset) { current = ''; reset = false; }
+      if (label === '.' && current.includes('.')) return;
+      current = current === '0' && label !== '.' ? label : current + label;
+    }
+    display.textContent = current;
+  }
+
+  for (const [label, cls] of layout) {
+    const btn = document.createElement('button');
+    btn.textContent = label;
+    if (cls) btn.className = cls;
+    if (label === '0') btn.style.gridColumn = 'span 2';
+    btn.onclick = () => press(label);
+    buttons.appendChild(btn);
+  }
+</script>
+</body>
+</html>

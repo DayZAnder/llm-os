@@ -260,6 +260,52 @@ This should boot in QEMU with OVMF firmware.
 
 ---
 
+## Low-Token Contributions (Quick Wins)
+
+Have limited AI tokens? These focused tasks are small, self-contained, and valuable. Each takes 5–15 minutes.
+
+### Security Test Vectors
+
+```
+Read tests/security/injection-vectors.json and tests/security/analyzer-vectors.json.
+Add 5 NEW test vectors to each file. Focus on edge cases the existing vectors miss:
+- Unicode homoglyph attacks (Cyrillic а instead of Latin a)
+- Multi-line comment tricks (/* */ wrapping malicious code)
+- CSS @import data exfiltration
+- WebRTC-based fingerprinting
+Follow the existing JSON format exactly. Each vector needs: input, shouldFlag (boolean), category, description.
+```
+
+### Example App
+
+```
+Read the examples/ directory. Look at calculator.html and todo.html for the pattern.
+Build ONE new example app (pick one: unit converter, color picker, markdown previewer, habit tracker).
+Use the same style: self-contained HTML, dark theme (#1a1a2e bg, #6c63ff accent),
+capabilities comment on line 1, LLMOS.storage for persistence if needed.
+Keep it under 120 lines.
+```
+
+### Analyzer Rule
+
+```
+Read src/kernel/analyzer.js. Understand the rule format.
+Add ONE new detection rule for a pattern the analyzer currently misses.
+Ideas: WebRTC access, SharedArrayBuffer, Blob URL creation, CSS expression(),
+document.write, innerHTML with user input, importScripts in workers.
+Add a matching test vector to tests/security/analyzer-vectors.json.
+```
+
+### Documentation Fix
+
+```
+Read README.md and CONTRIBUTING.md. Find anything unclear, outdated, or missing.
+Fix it. Examples: broken links, unclear setup steps, missing prerequisites,
+typos, better explanations for non-native English speakers.
+```
+
+---
+
 ## Contributing Without Claude Code
 
 ### Using any AI assistant (ChatGPT, Gemini, Copilot, etc.)
