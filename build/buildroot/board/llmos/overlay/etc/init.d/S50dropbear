@@ -1,0 +1,32 @@
+#!/bin/sh
+# Dropbear SSH server
+
+DROPBEAR_DIR="/etc/dropbear"
+
+case "$1" in
+  start)
+    printf "Starting SSH: "
+    mkdir -p "${DROPBEAR_DIR}"
+    # Generate host keys on first boot
+    [ ! -f "${DROPBEAR_DIR}/dropbear_rsa_host_key" ] && \
+      dropbearkey -t rsa -f "${DROPBEAR_DIR}/dropbear_rsa_host_key" >/dev/null 2>&1
+    [ ! -f "${DROPBEAR_DIR}/dropbear_ed25519_host_key" ] && \
+      dropbearkey -t ed25519 -f "${DROPBEAR_DIR}/dropbear_ed25519_host_key" >/dev/null 2>&1
+    dropbear -R -B
+    echo "OK"
+    ;;
+  stop)
+    printf "Stopping SSH: "
+    killall dropbear 2>/dev/null
+    echo "OK"
+    ;;
+  restart)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac

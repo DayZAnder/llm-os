@@ -1,0 +1,37 @@
+#!/bin/sh
+# LLM OS Micro — auto-login status screen
+
+clear
+echo ""
+echo "  ╔══════════════════════════════════════╗"
+echo "  ║       LLM OS Micro v0.1.0            ║"
+echo "  ║       AI-native operating system      ║"
+echo "  ╚══════════════════════════════════════╝"
+echo ""
+
+# Wait briefly for network
+sleep 2
+
+IP=$(ifconfig eth0 2>/dev/null | grep 'inet addr' | sed 's/.*addr:\([^ ]*\).*/\1/')
+# Fallback for newer ifconfig format
+[ -z "$IP" ] && IP=$(ifconfig eth0 2>/dev/null | grep 'inet ' | awk '{print $2}' | sed 's/addr://')
+
+if [ -n "$IP" ]; then
+    echo "  Network:  eth0: $IP"
+    echo ""
+    echo "  Web UI:   http://$IP:3000"
+    echo "  SSH:      ssh root@$IP  (password: llmos)"
+else
+    echo "  Network:  waiting for DHCP..."
+    echo "  SSH:      will be available when network is ready"
+fi
+
+echo ""
+echo "  Config:   vi /opt/llm-os/.env"
+echo "  Logs:     tail -f /var/log/llmos.log"
+echo "  Services: /etc/init.d/S99llmos {start|stop|restart|status}"
+echo ""
+echo "  Note: This is the micro variant (no Docker, iframe apps only)"
+echo ""
+
+exec /bin/sh -l

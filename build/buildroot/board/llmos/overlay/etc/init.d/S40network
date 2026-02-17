@@ -1,0 +1,26 @@
+#!/bin/sh
+# Network — DHCP on eth0 via busybox udhcpc
+
+case "$1" in
+  start)
+    printf "Starting network: "
+    /sbin/ifconfig lo 127.0.0.1 up
+    /sbin/udhcpc -i eth0 -b -s /usr/share/udhcpc/default.script -q 2>/dev/null &
+    echo "OK"
+    ;;
+  stop)
+    printf "Stopping network: "
+    killall udhcpc 2>/dev/null
+    /sbin/ifconfig eth0 down 2>/dev/null
+    echo "OK"
+    ;;
+  restart)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart}"
+    exit 1
+    ;;
+esac

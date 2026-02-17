@@ -1,0 +1,46 @@
+#!/bin/sh
+# LLM OS kernel — Node.js web server
+
+LLMOS_DIR="/opt/llm-os"
+LLMOS_PID="/var/run/llmos.pid"
+LLMOS_LOG="/var/log/llmos.log"
+
+case "$1" in
+  start)
+    printf "Starting LLM OS: "
+    cd "${LLMOS_DIR}"
+    # Source environment
+    if [ -f .env ]; then
+      export $(grep -v '^#' .env | grep -v '^$' | xargs)
+    fi
+    export HOST=0.0.0.0
+    export PORT=${PORT:-3000}
+    /usr/local/bin/node src/server.js >> "${LLMOS_LOG}" 2>&1 &
+    echo $! > "${LLMOS_PID}"
+    echo "OK (port ${PORT})"
+    ;;
+  stop)
+    printf "Stopping LLM OS: "
+    if [ -f "${LLMOS_PID}" ]; then
+      kill "$(cat ${LLMOS_PID})" 2>/dev/null
+      rm -f "${LLMOS_PID}"
+    fi
+    echo "OK"
+    ;;
+  restart)
+    "$0" stop
+    sleep 1
+    "$0" start
+    ;;
+  status)
+    if [ -f "${LLMOS_PID}" ] && kill -0 "$(cat ${LLMOS_PID})" 2>/dev/null; then
+      echo "LLM OS is running (PID $(cat ${LLMOS_PID}))"
+    else
+      echo "LLM OS is not running"
+    fi
+    ;;
+  *)
+    echo "Usage: $0 {start|stop|restart|status}"
+    exit 1
+    ;;
+esac

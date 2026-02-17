@@ -278,6 +278,8 @@ These are genuinely unsolved and need community input:
 
 ## Quick Start
 
+### Run from source
+
 ```bash
 git clone https://github.com/DayZAnder/llm-os.git
 cd llm-os
@@ -287,6 +289,30 @@ node src/server.js         # Open http://localhost:3000
 ```
 
 Type a description in the prompt bar. The OS generates, analyzes, and sandboxes your app.
+
+### Download a VM image
+
+Three variants available from [Releases](https://github.com/DayZAnder/llm-os/releases):
+
+| Variant | Size | Includes | Use case |
+|---------|------|----------|----------|
+| **Server** | ~700MB | Alpine + Docker + Node.js + SSH | Full features, headless |
+| **Desktop** | ~1GB | Server + Chromium kiosk browser | Boots into full-screen UI |
+| **Micro** | ~50MB | Buildroot + Node.js + Dropbear SSH | Minimal, iframe apps only |
+
+Formats: QCOW2 (Proxmox/KVM), VHDX (Hyper-V), OVA (VirtualBox). Default login: `root` / `llmos`.
+
+### Build VM images from source
+
+```bash
+# Alpine server/desktop (4GB disk, full Docker support)
+docker build -f build/Dockerfile.iso -t llmos-builder .
+docker run --rm --privileged -e VARIANT=server -v $(pwd)/build/output:/output llmos-builder
+
+# Buildroot micro (~50MB, no Docker)
+docker build -f build/Dockerfile.buildroot -t llmos-buildroot .
+docker run --rm --privileged -v $(pwd)/build/output:/output llmos-buildroot
+```
 
 ## Roadmap
 
@@ -312,7 +338,7 @@ Type a description in the prompt bar. The OS generates, analyzes, and sandboxes 
 - [x] OVA format for VirtualBox
 - [x] Automated CI builds (GitHub Actions: tests + VM release pipeline)
 - [x] Self-improvement scheduler (automated LLM tasks with guardrails)
-- [ ] Smaller image via Buildroot (~50MB target)
+- [x] Smaller image via Buildroot (~50MB micro variant)
 
 ### Phase 3: WASM Sandbox + Unikernel
 - [ ] Replace iframes with WebAssembly (Wasmtime/Extism)

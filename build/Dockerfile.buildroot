@@ -1,0 +1,63 @@
+# LLM OS Micro — Buildroot-based minimal VM image builder
+#
+# Builds a ~50MB bootable image with Linux + Node.js + LLM OS kernel.
+# No Docker, no package manager — just the essentials.
+#
+#   docker build -f build/Dockerfile.buildroot -t llmos-buildroot .
+#   docker run --rm --privileged \
+#     -v $(pwd)/build/output:/output \
+#     llmos-buildroot
+#
+# First build: ~45-60 min (downloads + compiles toolchain + kernel)
+# Cached rebuilds: ~5-10 min
+#
+# Output: /output/llmos-0.1.0-micro.{qcow2,vhdx,ova}
+
+FROM debian:bookworm-slim
+
+# Buildroot build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    bash bc binutils bison build-essential bzip2 \
+    ca-certificates cpio diffutils \
+    file findutils flex \
+    gawk gcc g++ git gzip \
+    libncurses-dev libssl-dev \
+    make patch perl python3 python-is-python3 \
+    rsync sed tar unzip wget xz-utils \
+    # Image tools
+    qemu-utils dosfstools e2fsprogs e2tools \
+    syslinux syslinux-common syslinux-utils \
+    genimage \
+    && rm -rf /var/lib/apt/lists/*
+
+# Download Buildroot
+ARG BUILDROOT_VERSION=2024.02.9
+WORKDIR /buildroot
+RUN wget -q "https://buildroot.org/downloads/buildroot-${BUILDROOT_VERSION}.tar.gz" \
+    && tar xzf "buildroot-${BUILDROOT_VERSION}.tar.gz" --strip-components=1 \
+    && rm "buildroot-${BUILDROOT_VERSION}.tar.gz"
+
+# Copy Buildroot configs (board + defconfig + kernel config)
+COPY build/buildroot/board/ /buildroot-llmos/board/
+COPY build/buildroot/configs/ /buildroot-llmos/configs/
+
+# Copy LLM OS source (used by post-build.sh)
+COPY src/ /llmos-src/src/
+COPY examples/ /llmos-src/examples/
+COPY registry/ /llmos-src/registry/
+COPY package.json /llmos-src/package.json
+COPY .env.example /llmos-src/.env.example
+
+# Make scripts executable
+RUN chmod +x /buildroot-llmos/board/llmos/post-build.sh \
+             /buildroot-llmos/board/llmos/post-image.sh
+
+# Create output directory
+RUN mkdir -p /output
+
+# Build: load defconfig, then make
+# The defconfig paths use $(TOPDIR)/../ which resolves to /buildroot-llmos/
+WORKDIR /buildroot
+
+ENTRYPOINT ["/bin/bash", "-c"]
+CMD ["cp /buildroot-llmos/configs/llmos_micro_defconfig .config && make olddefconfig && make -j$(nproc)"]
