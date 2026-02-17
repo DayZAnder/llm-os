@@ -11,7 +11,7 @@
 # First build: ~45-60 min (downloads + compiles toolchain + kernel)
 # Cached rebuilds: ~5-10 min
 #
-# Output: /output/llmos-0.1.0-micro.{qcow2,vhdx,ova}
+# Output: /output/llmos-0.2.0-micro.{qcow2,vhdx,ova}
 
 FROM debian:bookworm-slim
 
@@ -38,8 +38,9 @@ RUN wget -q "https://buildroot.org/downloads/buildroot-${BUILDROOT_VERSION}.tar.
     && rm "buildroot-${BUILDROOT_VERSION}.tar.gz"
 
 # Copy Buildroot configs (board + defconfig + kernel config)
-COPY build/buildroot/board/ /buildroot-llmos/board/
-COPY build/buildroot/configs/ /buildroot-llmos/configs/
+# Defconfig uses $(TOPDIR)/../ paths — TOPDIR=/buildroot, so ..=/
+COPY build/buildroot/board/ /board/
+COPY build/buildroot/configs/ /configs/
 
 # Copy LLM OS source (used by post-build.sh)
 COPY src/ /llmos-src/src/
@@ -49,15 +50,14 @@ COPY package.json /llmos-src/package.json
 COPY .env.example /llmos-src/.env.example
 
 # Make scripts executable
-RUN chmod +x /buildroot-llmos/board/llmos/post-build.sh \
-             /buildroot-llmos/board/llmos/post-image.sh
+RUN chmod +x /board/llmos/post-build.sh \
+             /board/llmos/post-image.sh
 
 # Create output directory
 RUN mkdir -p /output
 
 # Build: load defconfig, then make
-# The defconfig paths use $(TOPDIR)/../ which resolves to /buildroot-llmos/
 WORKDIR /buildroot
 
 ENTRYPOINT ["/bin/bash", "-c"]
-CMD ["cp /buildroot-llmos/configs/llmos_micro_defconfig .config && make olddefconfig && make -j$(nproc)"]
+CMD ["cp /configs/llmos_micro_defconfig .config && make olddefconfig && make -j$(nproc)"]
