@@ -50,6 +50,10 @@ mkdir -p "${MOUNT_DIR}"
 mount "${LOOP_PART}" "${MOUNT_DIR}"
 
 # Bootstrap Alpine rootfs
+# Copy APK keys so signatures are trusted
+mkdir -p "${MOUNT_DIR}/etc/apk/keys"
+cp /etc/apk/keys/* "${MOUNT_DIR}/etc/apk/keys/"
+
 apk --arch x86_64 --root "${MOUNT_DIR}" --initdb \
     --repository "https://dl-cdn.alpinelinux.org/alpine/v3.21/main" \
     --repository "https://dl-cdn.alpinelinux.org/alpine/v3.21/community" \
