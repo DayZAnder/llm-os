@@ -187,6 +187,37 @@ const RULES = [
     description: 'MutationObserver can monitor and manipulate the sandbox DOM',
     pattern: /\bnew\s+MutationObserver\s*\(/g,
   },
+  // --- Phase 3 rules: found by LLM-generated adversarial vectors ---
+  {
+    id: 'IMAGE_EXFILTRATION',
+    severity: 'CRITICAL',
+    description: 'Image src can exfiltrate data to external server',
+    pattern: /new\s+Image\s*\(\s*\)\s*\.\s*src\s*=/g,
+  },
+  {
+    id: 'SEND_BEACON',
+    severity: 'CRITICAL',
+    description: 'navigator.sendBeacon sends data without visible network request',
+    pattern: /navigator\s*\.\s*sendBeacon\s*\(/g,
+  },
+  {
+    id: 'CONTENT_WINDOW',
+    severity: 'CRITICAL',
+    description: 'contentWindow/contentDocument access can escape iframe sandbox',
+    pattern: /\.(?:contentWindow|contentDocument|ownerDocument\s*\.\s*defaultView)\b/g,
+  },
+  {
+    id: 'FRAME_ELEMENT',
+    severity: 'CRITICAL',
+    description: 'frameElement access can traverse frame boundaries',
+    pattern: /\bframeElement\b/g,
+  },
+  {
+    id: 'DNS_PREFETCH_EXFIL',
+    severity: 'WARNING',
+    description: 'DNS prefetch/preconnect can leak data via domain names',
+    pattern: /(?:dns-prefetch|preconnect).*?href\s*=|rel\s*=\s*['"](?:dns-prefetch|preconnect)['"]/gi,
+  },
 ];
 
 // Dockerfile-specific rules (used by analyzeDockerfile)

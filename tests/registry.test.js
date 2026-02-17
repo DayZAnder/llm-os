@@ -16,6 +16,13 @@ function assert(condition, name) {
   }
 }
 
+// Baseline: registry may already have apps from community sync or previous runs
+const baseline = browseApps();
+const baselineTotal = baseline.total;
+const baselineIframe = browseApps({ type: 'iframe' }).total;
+const baselineProcess = browseApps({ type: 'process' }).total;
+const baselineLaunches = getStats().totalLaunches;
+
 // --- publishApp ---
 console.log('\npublishApp:');
 
@@ -93,7 +100,7 @@ const calcResults = searchApps('calculator');
 assert(calcResults.length >= 1, 'finds calculator app');
 assert(calcResults[0].hash === result1.hash, 'calculator is top result');
 
-const todoResults = searchApps('todo list');
+const todoResults = searchApps('todo list categories');
 assert(todoResults.length >= 1, 'finds todo app');
 assert(todoResults[0].hash === result2.hash, 'todo is top result');
 
@@ -109,21 +116,21 @@ assert(similar[0].similarity > 0.3, 'similarity above threshold');
 // --- browseApps ---
 console.log('\nbrowseApps:');
 const all = browseApps();
-assert(all.total === 3, 'total count is 3');
-assert(all.apps.length === 3, 'returns all 3 apps');
+assert(all.total === baselineTotal + 3, 'total count increased by 3');
+assert(all.apps.length >= 3, 'returns at least 3 apps');
 assert(all.apps[0].createdAt >= all.apps[1].createdAt, 'sorted newest first');
 
 const tagged = browseApps({ tag: 'productivity' });
-assert(tagged.total === 1, 'tag filter works');
-assert(tagged.apps[0].hash === result2.hash, 'correct tagged app');
+assert(tagged.total >= 1, 'tag filter returns results');
+assert(tagged.apps.some(a => a.hash === result2.hash), 'todo app found in productivity tag');
 
 const typed = browseApps({ type: 'process' });
-assert(typed.total === 1, 'type filter works');
-assert(typed.apps[0].type === 'process', 'correct type');
+assert(typed.total === baselineProcess + 1, 'process type count increased by 1');
+assert(typed.apps.some(a => a.type === 'process'), 'process type filter works');
 
 const paginated = browseApps({ offset: 1, limit: 1 });
 assert(paginated.apps.length === 1, 'pagination limit works');
-assert(paginated.total === 3, 'total unaffected by pagination');
+assert(paginated.total === baselineTotal + 3, 'total unaffected by pagination');
 
 // --- getTags ---
 console.log('\ngetTags:');
@@ -136,17 +143,17 @@ assert(utilityTag && utilityTag.count >= 1, 'utility tag exists');
 // --- getStats ---
 console.log('\ngetStats:');
 const stats = getStats();
-assert(stats.totalApps === 3, 'total apps correct');
-assert(stats.iframeApps === 2, 'iframe count correct');
-assert(stats.processApps === 1, 'process count correct');
-assert(stats.totalLaunches >= 3, 'total launches >= 3');
+assert(stats.totalApps === baselineTotal + 3, 'total apps correct');
+assert(stats.iframeApps === baselineIframe + 2, 'iframe count correct');
+assert(stats.processApps === baselineProcess + 1, 'process count correct');
+assert(stats.totalLaunches >= baselineLaunches + 3, 'total launches increased by at least 3');
 
 // --- deleteApp ---
 console.log('\ndeleteApp:');
 assert(deleteApp(result3.hash) === true, 'delete returns true for existing');
 assert(getApp(result3.hash) === null, 'deleted app is gone');
 assert(deleteApp(result3.hash) === false, 'delete returns false for missing');
-assert(browseApps().total === 2, 'total reduced after delete');
+assert(browseApps().total === baselineTotal + 2, 'total reduced after delete');
 
 // Cleanup remaining test data
 deleteApp(result1.hash);

