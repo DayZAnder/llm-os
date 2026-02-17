@@ -6,7 +6,7 @@ set -eu
 echo "  Installing packages..."
 apk update
 apk add --no-cache \
-    openrc busybox-initscripts \
+    openrc busybox-openrc \
     networkmanager networkmanager-cli dbus \
     openssh-server \
     docker docker-cli docker-compose \
