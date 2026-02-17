@@ -1,0 +1,66 @@
+name: Values Check
+
+on:
+  pull_request:
+    branches: [master, main]
+  push:
+    branches: [master, main]
+
+jobs:
+  # Layer 1: Fast deterministic checks (always runs, no API keys needed)
+  deterministic-check:
+    name: Core Values — Deterministic Scan
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for diff
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run values check
+        run: node scripts/values-check.js
+
+  # Layer 2: AI-powered review (runs on PRs only, needs ANTHROPIC_API_KEY secret)
+  ai-review:
+    name: Core Values — AI Review
+    runs-on: ubuntu-latest
+    if: github.event_name == 'pull_request' && github.event.pull_request.draft == false
+    permissions:
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get PR diff
+        id: diff
+        run: |
+          git diff origin/${{ github.base_ref }}...HEAD -- '*.js' '*.ts' '*.html' '*.css' '*.json' ':!package-lock.json' > /tmp/pr-diff.txt
+          echo "has_diff=$([ -s /tmp/pr-diff.txt ] && echo true || echo false)" >> $GITHUB_OUTPUT
+
+      - name: AI Values Review
+        if: steps.diff.outputs.has_diff == 'true' && env.ANTHROPIC_API_KEY != ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: node scripts/ai-values-review.js
+
+      - name: Skip notice
+        if: steps.diff.outputs.has_diff != 'true' || env.ANTHROPIC_API_KEY == ''
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+        run: |
+          if [ -z "$ANTHROPIC_API_KEY" ]; then
+            echo "AI review skipped: ANTHROPIC_API_KEY not configured"
+            echo "To enable AI review, add ANTHROPIC_API_KEY to repository secrets"
+          else
+            echo "AI review skipped: no code changes in diff"
+          fi

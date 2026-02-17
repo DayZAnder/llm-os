@@ -74,6 +74,26 @@ src/
 - The gateway (`gateway.js`) must sanitize ALL user input before passing to any LLM.
 - Generated apps must never be able to escape their sandbox. If you find an escape vector, fix it immediately and file an issue.
 
+## Before You Submit — Mandatory Verification
+
+IMPORTANT: After making any changes, you MUST run the values check before committing:
+
+```bash
+node scripts/values-check.js
+```
+
+This scans your changes for:
+- Telemetry/analytics/tracking code (violates Value 1)
+- Sandbox weakening patterns (violates Value 1)
+- Privacy violations like direct cookie/storage access (violates Value 1)
+- Artificial feature limitations (violates Value 2)
+- Destructive operations on core directories (violates Value 3)
+- Credential files or .env files (never commit secrets)
+
+If it reports CRITICAL findings, fix them before committing. No exceptions.
+
+On pull requests, a second layer runs: an AI-powered Values Guardian that reviews the full diff against the core values and posts its findings as a PR comment.
+
 ## Running the Prototype
 
 ```bash

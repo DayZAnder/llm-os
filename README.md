@@ -24,6 +24,49 @@ Every user may freely use this software on their own computer, network, or serve
 **4. Nothing is perfect.**
 These rules aren't perfect, but we can always improve — as long as the core intent isn't violated.
 
+### How the Values Are Enforced
+
+These aren't just words — they're enforced at every layer of the contribution pipeline:
+
+```
+Contributor writes code
+        │
+        ▼
+┌─ Local Check ─────────────────────────────────┐
+│ node scripts/values-check.js                   │
+│ Deterministic scan: telemetry, sandbox          │
+│ weakening, privacy violations, tracking         │
+│ CRITICAL = blocked, WARNING = flagged          │
+└────────────────────────────────────────────────┘
+        │
+        ▼
+┌─ PR Self-Certification ───────────────────────┐
+│ PR template: contributor checks each value     │
+│ "No telemetry added" ✓  "No sandbox weakened" ✓│
+└────────────────────────────────────────────────┘
+        │
+        ▼
+┌─ CI: Deterministic Scan ─────────────────────┐
+│ GitHub Actions runs values-check.js           │
+│ Blocks merge on CRITICAL findings             │
+└────────────────────────────────────────────────┘
+        │
+        ▼
+┌─ CI: AI Values Guardian ─────────────────────┐
+│ Claude reviews the diff against core values   │
+│ Posts findings as PR comment                   │
+│ Catches subtle violations regex can't see     │
+└────────────────────────────────────────────────┘
+        │
+        ▼
+┌─ Human Review ───────────────────────────────┐
+│ Maintainer reviews with full context          │
+│ Final authority on edge cases                 │
+└────────────────────────────────────────────────┘
+```
+
+Three layers: deterministic checks (fast, always runs), AI review (catches nuance), human review (final authority). No single layer is trusted alone — they reinforce each other.
+
 ## Why This Doesn't Exist Yet
 
 The "LLM OS" label has been claimed by dozens of projects — agent frameworks, chatbot UIs, automation tools. None of them are actually an OS. Here's what exists vs. what we're building:
