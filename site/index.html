@@ -685,22 +685,41 @@
 <!-- Download -->
 <section id="download">
   <h2>Download <span>LLM OS</span></h2>
-  <p class="subtitle">Boot a full LLM OS instance in your hypervisor. Alpine Linux + Docker + Node.js — ready to generate apps.</p>
+  <p class="subtitle">Boot a full LLM OS instance in your hypervisor. Three variants, three formats — pick what fits.</p>
 
   <div class="download-grid">
     <div class="dl-card">
-      <div class="dl-icon">Q</div>
-      <h3>QCOW2</h3>
-      <div class="dl-size">~389 MB (compressed)</div>
-      <p>For Proxmox, KVM, QEMU, and libvirt. Import as a VM disk image.</p>
-      <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0.qcow2" class="btn btn-primary">Download QCOW2</a>
+      <div class="dl-icon">S</div>
+      <h3>Server</h3>
+      <div class="dl-size">~700 MB &middot; Alpine + Docker + Node.js</div>
+      <p>Full features, headless. Docker support for process apps. SSH access.</p>
+      <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0-server.qcow2" class="btn btn-primary">QCOW2</a>
+      <div style="display:flex; gap:8px; margin-top:8px; width:100%">
+        <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0-server.vhdx" class="btn btn-secondary" style="flex:1; justify-content:center; padding:8px 12px; font-size:13px">VHDX</a>
+        <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0-server.ova" class="btn btn-secondary" style="flex:1; justify-content:center; padding:8px 12px; font-size:13px">OVA</a>
+      </div>
     </div>
     <div class="dl-card">
-      <div class="dl-icon">V</div>
-      <h3>VHDX</h3>
-      <div class="dl-size">~904 MB</div>
-      <p>For Hyper-V on Windows. Create a Gen 1 VM and attach as the primary disk.</p>
-      <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0.vhdx" class="btn btn-primary">Download VHDX</a>
+      <div class="dl-icon">D</div>
+      <h3>Desktop</h3>
+      <div class="dl-size">~1 GB &middot; Server + Chromium kiosk</div>
+      <p>Boots directly into full-screen LLM OS UI. Everything from Server plus kiosk browser.</p>
+      <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0-desktop.qcow2" class="btn btn-primary">QCOW2</a>
+      <div style="display:flex; gap:8px; margin-top:8px; width:100%">
+        <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0-desktop.vhdx" class="btn btn-secondary" style="flex:1; justify-content:center; padding:8px 12px; font-size:13px">VHDX</a>
+        <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0-desktop.ova" class="btn btn-secondary" style="flex:1; justify-content:center; padding:8px 12px; font-size:13px">OVA</a>
+      </div>
+    </div>
+    <div class="dl-card">
+      <div class="dl-icon">M</div>
+      <h3>Micro</h3>
+      <div class="dl-size">~50 MB &middot; Buildroot + Node.js + Dropbear</div>
+      <p>Minimal image, iframe apps only. No Docker. Fast boot, tiny footprint.</p>
+      <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0-micro.qcow2" class="btn btn-primary">QCOW2</a>
+      <div style="display:flex; gap:8px; margin-top:8px; width:100%">
+        <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0-micro.vhdx" class="btn btn-secondary" style="flex:1; justify-content:center; padding:8px 12px; font-size:13px">VHDX</a>
+        <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0-micro.ova" class="btn btn-secondary" style="flex:1; justify-content:center; padding:8px 12px; font-size:13px">OVA</a>
+      </div>
     </div>
   </div>
 
@@ -709,7 +728,9 @@
     Configure your LLM backend with <code>llmos-config set OLLAMA_URL http://your-ollama:11434</code>.
     Change the default password on first login!
     <br><br>
-    <a href="https://github.com/DayZAnder/llm-os/releases/tag/v0.1.0" style="color: var(--accent)">View release notes on GitHub</a>
+    <strong>Formats:</strong> QCOW2 (Proxmox/KVM/QEMU), VHDX (Hyper-V), OVA (VirtualBox/VMware).
+    <br><br>
+    <a href="https://github.com/DayZAnder/llm-os/releases/tag/v0.1.0" style="color: var(--accent)">View all releases on GitHub</a>
   </div>
 </section>
 
