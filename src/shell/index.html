@@ -426,6 +426,238 @@
   .process-body { display: flex; flex-direction: column; }
   .process-body iframe { flex: 1; border: none; min-height: 0; }
   .process-body .process-logs { flex-shrink: 0; }
+
+  /* Registry panel */
+  .registry-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 900;
+  }
+  .registry-overlay.hidden { display: none; }
+
+  .registry-panel {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 90%;
+    max-width: 800px;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .registry-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .registry-header h2 {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    color: var(--accent);
+    flex: 1;
+  }
+
+  .registry-search {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 12px;
+    color: var(--text-primary);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    outline: none;
+    width: 240px;
+  }
+  .registry-search:focus { border-color: var(--accent); }
+  .registry-search::placeholder { color: var(--text-dim); }
+
+  .registry-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 20px;
+    padding: 0 4px;
+  }
+  .registry-close:hover { color: var(--text-primary); }
+
+  .registry-tags {
+    padding: 8px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    gap: 6px;
+    flex-wrap: wrap;
+    flex-shrink: 0;
+  }
+
+  .registry-tag {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 3px 10px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .registry-tag:hover, .registry-tag.active {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: var(--accent-dim);
+  }
+
+  .registry-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 12px 20px;
+  }
+
+  .registry-empty {
+    text-align: center;
+    padding: 40px 20px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 13px;
+  }
+
+  .registry-stats {
+    text-align: center;
+    padding: 8px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+
+  .app-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 12px 16px;
+    margin-bottom: 8px;
+    cursor: pointer;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+  .app-card:hover {
+    border-color: var(--accent);
+    background: var(--bg-surface);
+  }
+
+  .app-card-info { flex: 1; min-width: 0; }
+
+  .app-card-title {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-primary);
+    margin-bottom: 4px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .app-card-prompt {
+    font-size: 11px;
+    color: var(--text-secondary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    margin-bottom: 6px;
+  }
+
+  .app-card-meta {
+    display: flex;
+    gap: 10px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+  }
+
+  .app-card-type {
+    font-size: 9px;
+    padding: 2px 8px;
+    border-radius: 3px;
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    flex-shrink: 0;
+  }
+  .app-card-type.iframe { background: var(--accent-dim); color: var(--text-primary); }
+  .app-card-type.process { background: rgba(46,213,115,0.2); color: var(--success); }
+
+  .app-card-launch {
+    background: var(--accent);
+    border: none;
+    border-radius: 4px;
+    padding: 6px 14px;
+    color: white;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: background 0.15s;
+  }
+  .app-card-launch:hover { background: var(--accent-hover); }
+
+  .browse-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 8px 16px;
+    color: var(--text-secondary);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .browse-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+
+  .community-badge {
+    font-size: 8px;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: rgba(46,213,115,0.15);
+    color: var(--success);
+    font-family: var(--font-mono);
+    text-transform: uppercase;
+    margin-left: 4px;
+  }
+
+  .sync-btn {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    color: var(--text-dim);
+    font-size: 10px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .sync-btn:hover { border-color: var(--accent); color: var(--text-primary); }
+
+  .share-hint {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    padding: 4px 20px 8px;
+    border-bottom: 1px solid var(--border);
+  }
+  .share-hint a { color: var(--accent); text-decoration: none; }
+  .share-hint a:hover { text-decoration: underline; }
 </style>
 </head>
 <body>
@@ -461,7 +693,26 @@
 <!-- Prompt bar -->
 <div class="prompt-bar">
   <input type="text" id="prompt-input" placeholder="Describe the app you want..." autofocus>
+  <button class="browse-btn" id="browse-btn">Browse Apps</button>
   <button id="generate-btn">Generate</button>
+</div>
+
+<!-- Registry panel -->
+<div class="registry-overlay hidden" id="registry-overlay">
+  <div class="registry-panel">
+    <div class="registry-header">
+      <h2>App Registry</h2>
+      <button class="sync-btn" id="registry-sync" title="Sync community apps from GitHub">Sync</button>
+      <input type="text" class="registry-search" id="registry-search" placeholder="Search apps...">
+      <button class="registry-close" id="registry-close">&times;</button>
+    </div>
+    <div class="share-hint">Share your apps: <a href="https://github.com/DayZAnder/llm-os/tree/master/registry" target="_blank">submit a PR</a> to the community registry</div>
+    <div class="registry-tags" id="registry-tags"></div>
+    <div class="registry-body" id="registry-body">
+      <div class="registry-empty">No apps yet. Generate some apps and they'll appear here.</div>
+    </div>
+    <div class="registry-stats" id="registry-stats"></div>
+  </div>
 </div>
 
 <!-- Capability approval modal -->
@@ -863,6 +1114,12 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
       const iframe = sandboxMgr.launch(appId, genData.code, approved, title);
       addAppWindow(appId, iframe, title, genData.model);
       log(`Launched ${appId} with capabilities: [${approved.join(', ')}]`, 'ok');
+
+      // Auto-publish to registry
+      publishToRegistry({
+        prompt, code: genData.code, type: 'iframe',
+        capabilities: approved, model: genData.model, provider: genData.provider,
+      });
     }
   };
 
@@ -949,12 +1206,263 @@ async function generateProcessApp(prompt) {
         log(`Container started on port ${processInfo.port}`, 'ok');
 
         addProcessWindow(appId, processInfo, title);
+
+        // Auto-publish to registry
+        publishToRegistry({
+          prompt, code: genData.code, dockerfile: genData.dockerfile,
+          type: 'process', capabilities: approved,
+          model: genData.model, provider: genData.provider,
+        });
       } catch (err) {
         log(`Process launch failed: ${err.message}`, 'error');
       }
     }
   );
 }
+
+// --- Registry ---
+const registryOverlay = document.getElementById('registry-overlay');
+const registryBody = document.getElementById('registry-body');
+const registryTags = document.getElementById('registry-tags');
+const registryStats = document.getElementById('registry-stats');
+const registrySearchInput = document.getElementById('registry-search');
+const browseBtn = document.getElementById('browse-btn');
+const registryClose = document.getElementById('registry-close');
+
+let registryActiveTag = null;
+
+async function openRegistry() {
+  registryOverlay.classList.remove('hidden');
+  registryActiveTag = null;
+  await loadRegistryTags();
+  await loadRegistryApps();
+}
+
+function closeRegistry() {
+  registryOverlay.classList.add('hidden');
+  registrySearchInput.value = '';
+  registryActiveTag = null;
+}
+
+async function loadRegistryTags() {
+  try {
+    const res = await fetch('/api/registry/tags');
+    const tags = await res.json();
+    registryTags.innerHTML = '';
+
+    const allTag = document.createElement('span');
+    allTag.className = 'registry-tag active';
+    allTag.textContent = 'all';
+    allTag.onclick = () => {
+      registryActiveTag = null;
+      document.querySelectorAll('.registry-tag').forEach(t => t.classList.remove('active'));
+      allTag.classList.add('active');
+      loadRegistryApps();
+    };
+    registryTags.appendChild(allTag);
+
+    for (const { tag, count } of tags) {
+      const el = document.createElement('span');
+      el.className = 'registry-tag';
+      el.textContent = `${tag} (${count})`;
+      el.onclick = () => {
+        registryActiveTag = tag;
+        document.querySelectorAll('.registry-tag').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        loadRegistryApps();
+      };
+      registryTags.appendChild(el);
+    }
+  } catch {}
+}
+
+async function loadRegistryApps(query = null) {
+  try {
+    let apps;
+    if (query && query.trim().length >= 2) {
+      const res = await fetch(`/api/registry/search?q=${encodeURIComponent(query)}`);
+      apps = await res.json();
+    } else {
+      const params = new URLSearchParams();
+      if (registryActiveTag) params.set('tag', registryActiveTag);
+      const res = await fetch(`/api/registry/browse?${params}`);
+      const data = await res.json();
+      apps = data.apps;
+    }
+
+    renderRegistryApps(apps);
+
+    // Update stats
+    const statsRes = await fetch('/api/registry/stats');
+    const stats = await statsRes.json();
+    registryStats.textContent = `${stats.totalApps} apps \u00b7 ${stats.totalLaunches} launches \u00b7 ${stats.iframeApps} iframe \u00b7 ${stats.processApps} process`;
+  } catch (err) {
+    registryBody.innerHTML = '<div class="registry-empty">Failed to load registry</div>';
+  }
+}
+
+function renderRegistryApps(apps) {
+  registryBody.innerHTML = '';
+
+  if (!apps || apps.length === 0) {
+    registryBody.innerHTML = '<div class="registry-empty">No apps found. Generate some apps and they\'ll appear here.</div>';
+    return;
+  }
+
+  for (const app of apps) {
+    const card = document.createElement('div');
+    card.className = 'app-card';
+
+    const info = document.createElement('div');
+    info.className = 'app-card-info';
+
+    const title = document.createElement('div');
+    title.className = 'app-card-title';
+    title.textContent = app.title;
+
+    const prompt = document.createElement('div');
+    prompt.className = 'app-card-prompt';
+    prompt.textContent = app.prompt;
+
+    const meta = document.createElement('div');
+    meta.className = 'app-card-meta';
+
+    const model = document.createElement('span');
+    model.textContent = app.model.split('/').pop().split(':')[0];
+
+    const launches = document.createElement('span');
+    launches.textContent = `${app.launches} launch${app.launches !== 1 ? 'es' : ''}`;
+
+    const age = document.createElement('span');
+    const mins = Math.floor((Date.now() - app.createdAt) / 60000);
+    age.textContent = mins < 60 ? `${mins}m ago` : mins < 1440 ? `${Math.floor(mins / 60)}h ago` : `${Math.floor(mins / 1440)}d ago`;
+
+    if (app.similarity !== undefined) {
+      const sim = document.createElement('span');
+      sim.textContent = `${Math.round(app.similarity * 100)}% match`;
+      sim.style.color = 'var(--accent)';
+      meta.appendChild(sim);
+    }
+
+    meta.append(model, launches, age);
+    info.append(title, prompt, meta);
+
+    const typeTag = document.createElement('span');
+    typeTag.className = `app-card-type ${app.type}`;
+    typeTag.textContent = app.type;
+
+    if (app.source === 'community' || app.provider === 'community') {
+      const badge = document.createElement('span');
+      badge.className = 'community-badge';
+      badge.textContent = 'community';
+      title.appendChild(badge);
+    }
+
+    const launchBtn = document.createElement('button');
+    launchBtn.className = 'app-card-launch';
+    launchBtn.textContent = 'Launch';
+    launchBtn.onclick = (e) => {
+      e.stopPropagation();
+      launchFromRegistry(app);
+    };
+
+    card.append(info, typeTag, launchBtn);
+    registryBody.appendChild(card);
+  }
+}
+
+async function launchFromRegistry(app) {
+  closeRegistry();
+
+  if (app.type === 'iframe') {
+    // Record launch
+    fetch(`/api/registry/launch/${app.hash}`, { method: 'POST' }).catch(() => {});
+
+    const appId = `app-${++appCounter}`;
+    const iframe = sandboxMgr.launch(appId, app.code, app.capabilities, app.title);
+    addAppWindow(appId, iframe, app.title, app.model);
+    log(`Launched from registry: "${app.title}" (${app.hash})`, 'ok');
+  } else if (app.type === 'process') {
+    log(`Launching process app from registry: "${app.title}"`, 'info');
+    // Show capability modal for process apps
+    showCapabilityModal(app.prompt, app, { passed: true, criticalCount: 0, warningCount: 0, findings: [] },
+      async (approved) => {
+        const appId = `proc-${++appCounter}`;
+        try {
+          log('Building Docker image...');
+          const buildRes = await fetch('/api/process/build', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appId, dockerfile: app.dockerfile, context: { 'index.js': app.code } }),
+          });
+          if (!buildRes.ok) { log('Build failed', 'error'); return; }
+          const { imageName } = await buildRes.json();
+
+          const launchRes = await fetch('/api/process/launch', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ appId, imageName, capabilities: approved, config: { port: 3001, title: app.title } }),
+          });
+          if (!launchRes.ok) throw new Error(await launchRes.text());
+          const processInfo = await launchRes.json();
+
+          addProcessWindow(appId, processInfo, app.title);
+          fetch(`/api/registry/launch/${app.hash}`, { method: 'POST' }).catch(() => {});
+          log(`Process launched from registry: "${app.title}"`, 'ok');
+        } catch (err) {
+          log(`Process launch failed: ${err.message}`, 'error');
+        }
+      }
+    );
+  }
+}
+
+async function publishToRegistry(data) {
+  try {
+    const res = await fetch('/api/registry/publish', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    const result = await res.json();
+    if (!result.existing) {
+      log(`Published to registry: "${result.entry.title}" (${result.hash})`, 'ok');
+    }
+    return result;
+  } catch (err) {
+    console.warn('[registry] Publish failed:', err.message);
+  }
+}
+
+browseBtn.addEventListener('click', openRegistry);
+registryClose.addEventListener('click', closeRegistry);
+
+document.getElementById('registry-sync').addEventListener('click', async () => {
+  const btn = document.getElementById('registry-sync');
+  btn.textContent = 'Syncing...';
+  btn.disabled = true;
+  try {
+    await fetch('/api/registry/sync', { method: 'POST' });
+    await loadRegistryTags();
+    await loadRegistryApps();
+    log('Community registry synced', 'ok');
+  } catch {
+    log('Community sync failed', 'warn');
+  }
+  btn.textContent = 'Sync';
+  btn.disabled = false;
+});
+registryOverlay.addEventListener('click', (e) => {
+  if (e.target === registryOverlay) closeRegistry();
+});
+
+let registrySearchTimeout;
+registrySearchInput.addEventListener('input', () => {
+  clearTimeout(registrySearchTimeout);
+  registrySearchTimeout = setTimeout(() => {
+    loadRegistryApps(registrySearchInput.value);
+  }, 300);
+});
 
 // --- Init ---
 async function init() {
@@ -989,6 +1497,13 @@ async function init() {
   initExamples();
   checkLLMStatus();
   setInterval(checkLLMStatus, 30000);
+
+  // Show registry count hint on browse button
+  try {
+    const statsRes = await fetch('/api/registry/stats');
+    const stats = await statsRes.json();
+    if (stats.totalApps > 0) browseBtn.textContent = `Browse Apps (${stats.totalApps})`;
+  } catch {}
 
   // Prompt input
   promptInput.addEventListener('keydown', (e) => {

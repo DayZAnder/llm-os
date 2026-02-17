@@ -1,0 +1,20 @@
+{
+  "hash": "234f8c4f02cc56da",
+  "prompt": "a todo list",
+  "normalizedPrompt": "todo list",
+  "title": "todo list",
+  "type": "iframe",
+  "code": "<!-- capabilities: [\"ui:window\", \"storage:local\"] -->\n<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<style>\n  body { margin: 0; padding: 20px; background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }\n  h2 { font-size: 18px; color: #6c63ff; margin-bottom: 16px; }\n  .input-row { display: flex; gap: 8px; margin-bottom: 16px; }\n  input[type=\"text\"] { flex: 1; background: #0d0d1a; border: 1px solid #2a2a4a; border-radius: 6px; padding: 10px 14px; color: #e0e0e0; font-size: 14px; outline: none; }\n  input[type=\"text\"]:focus { border-color: #6c63ff; }\n  button { background: #6c63ff; border: none; border-radius: 6px; padding: 10px 18px; color: white; font-size: 13px; cursor: pointer; }\n  button:hover { background: #7b73ff; }\n  .todo-list { list-style: none; }\n  .todo-item { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid #1e1e3a; }\n  .todo-item.done .text { text-decoration: line-through; color: #555577; }\n  .todo-item input[type=\"checkbox\"] { accent-color: #6c63ff; width: 18px; height: 18px; }\n  .todo-item .text { flex: 1; font-size: 14px; }\n  .todo-item .delete { background: none; border: none; color: #555577; cursor: pointer; font-size: 16px; padding: 0 4px; }\n  .todo-item .delete:hover { color: #ff4757; }\n  .count { font-size: 12px; color: #555577; margin-top: 12px; }\n</style>\n</head>\n<body>\n<h2>Todo List</h2>\n<div class=\"input-row\">\n  <input type=\"text\" id=\"input\" placeholder=\"What needs to be done?\">\n  <button id=\"add-btn\">Add</button>\n</div>\n<ul class=\"todo-list\" id=\"list\"></ul>\n<div class=\"count\" id=\"count\"></div>\n<script>\n  let todos = [];\n\n  async function load() {\n    const saved = await LLMOS.storage.get('todos');\n    if (saved) todos = saved;\n    render();\n  }\n\n  async function save() {\n    await LLMOS.storage.set('todos', todos);\n  }\n\n  function render() {\n    const list = document.getElementById('list');\n    const count = document.getElementById('count');\n    list.innerHTML = '';\n\n    for (let i = 0; i < todos.length; i++) {\n      const item = todos[i];\n      const li = document.createElement('li');\n      li.className = 'todo-item' + (item.done ? ' done' : '');\n\n      const cb = document.createElement('input');\n      cb.type = 'checkbox';\n      cb.checked = item.done;\n      cb.onchange = () => { todos[i].done = !todos[i].done; save(); render(); };\n\n      const text = document.createElement('span');\n      text.className = 'text';\n      text.textContent = item.text;\n\n      const del = document.createElement('button');\n      del.className = 'delete';\n      del.textContent = '\\u00d7';\n      del.onclick = () => { todos.splice(i, 1); save(); render(); };\n\n      li.append(cb, text, del);\n      list.appendChild(li);\n    }\n\n    const remaining = todos.filter(t => !t.done).length;\n    count.textContent = `${remaining} item${remaining !== 1 ? 's' : ''} remaining`;\n  }\n\n  function addTodo() {\n    const input = document.getElementById('input');\n    const text = input.value.trim();\n    if (!text) return;\n    todos.push({ text, done: false });\n    input.value = '';\n    save();\n    render();\n  }\n\n  document.getElementById('add-btn').onclick = addTodo;\n  document.getElementById('input').onkeydown = (e) => { if (e.key === 'Enter') addTodo(); };\n\n  load();\n</script>\n</body>\n</html>\n",
+  "dockerfile": null,
+  "capabilities": [
+    "ui:window",
+    "storage:local"
+  ],
+  "model": "hand-crafted",
+  "provider": "community",
+  "launches": 0,
+  "createdAt": 1771358067385,
+  "tags": [
+    "productivity"
+  ]
+}

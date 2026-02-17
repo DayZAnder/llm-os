@@ -1,0 +1,25 @@
+{
+  "hash": "54b8aba29e2743a3",
+  "prompt": "run nanoclaw — lightweight Claude AI assistant with WhatsApp integration",
+  "normalizedPrompt": "nanoclaw whatsapp claude ai assistant",
+  "title": "NanoClaw",
+  "type": "process",
+  "code": "// NanoClaw is a known app — launched from built-in template",
+  "dockerfile": "FROM node:22-slim\n\nRUN apt-get update && apt-get install -y --no-install-recommends \\\n    chromium libgbm1 libnss3 libatk-bridge2.0-0 libx11-xcb1 \\\n    && rm -rf /var/lib/apt/lists/*\n\nRUN groupadd -r nanoclaw && useradd -r -g nanoclaw -m nanoclaw\n\nWORKDIR /app\n\nRUN npm install -g @anthropic-ai/claude-code\n\nRUN git clone --depth 1 https://github.com/qwibitai/nanoclaw.git . \\\n    && npm ci --only=production\n\nRUN mkdir -p /app/groups /app/data && chown -R nanoclaw:nanoclaw /app\n\nUSER nanoclaw\n\nENV NODE_ENV=production\nENV PUPPETEER_EXECUTABLE_PATH=/usr/bin/chromium\nENV AGENT_BROWSER_EXECUTABLE_PATH=/usr/bin/chromium\n\nEXPOSE 3001\n\nCMD [\"npm\", \"start\"]",
+  "capabilities": [
+    "process:background",
+    "process:network",
+    "process:volume",
+    "api:anthropic"
+  ],
+  "model": "template",
+  "provider": "community",
+  "launches": 0,
+  "createdAt": 1771358067388,
+  "tags": [
+    "bot",
+    "communication",
+    "automation",
+    "ai"
+  ]
+}

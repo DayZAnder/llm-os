@@ -1,0 +1,22 @@
+{
+  "hash": "a1cfefdea85916bd",
+  "prompt": "a pomodoro timer with break reminders",
+  "normalizedPrompt": "pomodoro timer with break reminders",
+  "title": "pomodoro timer with break reminders",
+  "type": "iframe",
+  "code": "<!-- capabilities: [\"ui:window\", \"timer:basic\", \"storage:local\"] -->\n<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<style>\n  body { margin: 0; padding: 40px 20px; background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; text-align: center; }\n  .timer { font-family: 'Cascadia Code', monospace; font-size: 72px; font-weight: 300; margin: 30px 0; color: #e0e0f0; }\n  .timer.break-time { color: #2ed573; }\n  .label { font-size: 14px; color: #6c63ff; text-transform: uppercase; letter-spacing: 2px; margin-bottom: 8px; }\n  .controls { display: flex; gap: 12px; justify-content: center; margin: 24px 0; }\n  button { background: #2a2a4a; border: none; border-radius: 8px; padding: 12px 28px; color: #e0e0e0; font-size: 14px; cursor: pointer; transition: background 0.15s; }\n  button:hover { background: #3a3a5a; }\n  button.primary { background: #6c63ff; color: white; }\n  button.primary:hover { background: #7b73ff; }\n  button.danger { background: #ff4757; color: white; }\n  button.danger:hover { background: #ff6b7a; }\n  .stats { font-size: 12px; color: #555577; margin-top: 24px; }\n  .progress { width: 200px; height: 4px; background: #2a2a4a; border-radius: 2px; margin: 0 auto; overflow: hidden; }\n  .progress-bar { height: 100%; background: #6c63ff; transition: width 1s linear; border-radius: 2px; }\n</style>\n</head>\n<body>\n<div class=\"label\" id=\"label\">Focus Time</div>\n<div class=\"timer\" id=\"timer\">25:00</div>\n<div class=\"progress\"><div class=\"progress-bar\" id=\"progress\"></div></div>\n<div class=\"controls\">\n  <button class=\"primary\" id=\"toggle\">Start</button>\n  <button id=\"skip\">Skip</button>\n  <button class=\"danger\" id=\"reset\">Reset</button>\n</div>\n<div class=\"stats\" id=\"stats\"></div>\n<script>\n  const WORK = 25 * 60;\n  const BREAK = 5 * 60;\n\n  let remaining = WORK;\n  let total = WORK;\n  let running = false;\n  let isBreak = false;\n  let interval = null;\n  let sessions = 0;\n\n  async function loadStats() {\n    const s = await LLMOS.storage.get('pomodoro-sessions');\n    if (s) sessions = s;\n    updateStats();\n  }\n\n  function updateStats() {\n    document.getElementById('stats').textContent = `${sessions} session${sessions !== 1 ? 's' : ''} completed today`;\n  }\n\n  function format(secs) {\n    const m = Math.floor(secs / 60);\n    const s = secs % 60;\n    return `${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;\n  }\n\n  function render() {\n    document.getElementById('timer').textContent = format(remaining);\n    document.getElementById('timer').className = 'timer' + (isBreak ? ' break-time' : '');\n    document.getElementById('label').textContent = isBreak ? 'Break Time' : 'Focus Time';\n    document.getElementById('toggle').textContent = running ? 'Pause' : 'Start';\n    const pct = ((total - remaining) / total) * 100;\n    document.getElementById('progress').style.width = pct + '%';\n  }\n\n  function tick() {\n    if (remaining <= 0) {\n      running = false;\n      clearInterval(interval);\n      if (!isBreak) {\n        sessions++;\n        LLMOS.storage.set('pomodoro-sessions', sessions);\n        updateStats();\n      }\n      isBreak = !isBreak;\n      total = isBreak ? BREAK : WORK;\n      remaining = total;\n    } else {\n      remaining--;\n    }\n    render();\n  }\n\n  document.getElementById('toggle').onclick = () => {\n    running = !running;\n    if (running) {\n      interval = LLMOS.timer.setInterval(tick, 1000);\n    } else {\n      LLMOS.timer.clearInterval(interval);\n    }\n    render();\n  };\n\n  document.getElementById('skip').onclick = () => {\n    LLMOS.timer.clearInterval(interval);\n    running = false;\n    isBreak = !isBreak;\n    total = isBreak ? BREAK : WORK;\n    remaining = total;\n    render();\n  };\n\n  document.getElementById('reset').onclick = () => {\n    LLMOS.timer.clearInterval(interval);\n    running = false;\n    isBreak = false;\n    total = WORK;\n    remaining = WORK;\n    render();\n  };\n\n  loadStats();\n  render();\n</script>\n</body>\n</html>\n",
+  "dockerfile": null,
+  "capabilities": [
+    "ui:window",
+    "timer:basic",
+    "storage:local"
+  ],
+  "model": "hand-crafted",
+  "provider": "community",
+  "launches": 0,
+  "createdAt": 1771358067385,
+  "tags": [
+    "productivity",
+    "time"
+  ]
+}

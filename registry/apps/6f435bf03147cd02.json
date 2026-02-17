@@ -1,0 +1,20 @@
+{
+  "hash": "6f435bf03147cd02",
+  "prompt": "a simple calculator",
+  "normalizedPrompt": "simple calculator",
+  "title": "simple calculator",
+  "type": "iframe",
+  "code": "<!-- capabilities: [\"ui:window\"] -->\n<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\">\n<style>\n  body { margin: 0; padding: 20px; background: #1a1a2e; color: #e0e0e0; font-family: 'Segoe UI', sans-serif; }\n  .calc { max-width: 280px; margin: 0 auto; }\n  .display { background: #0d0d1a; border: 1px solid #2a2a4a; border-radius: 8px; padding: 16px; text-align: right; font-size: 28px; font-family: monospace; margin-bottom: 12px; min-height: 48px; word-break: break-all; }\n  .buttons { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }\n  button { background: #2a2a4a; border: none; border-radius: 6px; padding: 16px; font-size: 18px; color: #e0e0e0; cursor: pointer; transition: background 0.1s; }\n  button:hover { background: #3a3a5a; }\n  button.op { background: #6c63ff; color: white; }\n  button.op:hover { background: #7b73ff; }\n  button.eq { background: #2ed573; color: #0d0d1a; }\n  button.eq:hover { background: #3ee583; }\n  button.clear { background: #ff4757; color: white; }\n  button.clear:hover { background: #ff6b7a; }\n</style>\n</head>\n<body>\n<div class=\"calc\">\n  <div class=\"display\" id=\"display\">0</div>\n  <div class=\"buttons\" id=\"buttons\"></div>\n</div>\n<script>\n  const display = document.getElementById('display');\n  const buttons = document.getElementById('buttons');\n  let current = '0';\n  let operator = null;\n  let previous = null;\n  let reset = false;\n\n  const layout = [\n    ['C', 'clear'], ['\\u00b1', ''], ['%', ''], ['\\u00f7', 'op'],\n    ['7', ''], ['8', ''], ['9', ''], ['\\u00d7', 'op'],\n    ['4', ''], ['5', ''], ['6', ''], ['-', 'op'],\n    ['1', ''], ['2', ''], ['3', ''], ['+', 'op'],\n    ['0', ''], ['.', ''], ['=', 'eq']\n  ];\n\n  function calculate(a, op, b) {\n    const na = parseFloat(a), nb = parseFloat(b);\n    switch(op) {\n      case '+': return na + nb;\n      case '-': return na - nb;\n      case '\\u00d7': return na * nb;\n      case '\\u00f7': return nb !== 0 ? na / nb : 'Error';\n      default: return nb;\n    }\n  }\n\n  function press(label) {\n    if (label === 'C') {\n      current = '0'; operator = null; previous = null; reset = false;\n    } else if (label === '\\u00b1') {\n      current = String(-parseFloat(current));\n    } else if (label === '%') {\n      current = String(parseFloat(current) / 100);\n    } else if (['+', '-', '\\u00d7', '\\u00f7'].includes(label)) {\n      if (previous !== null && operator && !reset) {\n        current = String(calculate(previous, operator, current));\n      }\n      previous = current;\n      operator = label;\n      reset = true;\n    } else if (label === '=') {\n      if (previous !== null && operator) {\n        current = String(calculate(previous, operator, current));\n        operator = null;\n        previous = null;\n        reset = true;\n      }\n    } else {\n      if (reset) { current = ''; reset = false; }\n      if (label === '.' && current.includes('.')) return;\n      current = current === '0' && label !== '.' ? label : current + label;\n    }\n    display.textContent = current;\n  }\n\n  for (const [label, cls] of layout) {\n    const btn = document.createElement('button');\n    btn.textContent = label;\n    if (cls) btn.className = cls;\n    if (label === '0') btn.style.gridColumn = 'span 2';\n    btn.onclick = () => press(label);\n    buttons.appendChild(btn);\n  }\n</script>\n</body>\n</html>\n",
+  "dockerfile": null,
+  "capabilities": [
+    "ui:window"
+  ],
+  "model": "hand-crafted",
+  "provider": "community",
+  "launches": 0,
+  "createdAt": 1771358067383,
+  "tags": [
+    "math",
+    "utility"
+  ]
+}

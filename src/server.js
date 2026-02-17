@@ -8,6 +8,7 @@ import { analyze, analyzeDockerfile } from './kernel/analyzer.js';
 import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType } from './kernel/capabilities.js';
 import { dockerPing } from './kernel/docker/client.js';
 import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses } from './kernel/docker/process-manager.js';
+import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -197,6 +198,85 @@ async function handleAPI(method, url, body, res) {
       result.capabilities = [...new Set([...result.capabilities, ...proposed])];
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
+      return;
+    }
+
+    // --- Registry endpoints ---
+
+    // GET /api/registry/stats — registry overview
+    if (method === 'GET' && url === '/api/registry/stats') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(getStats()));
+      return;
+    }
+
+    // POST /api/registry/sync — trigger community sync
+    if (method === 'POST' && url === '/api/registry/sync') {
+      await syncCommunity();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(getStats()));
+      return;
+    }
+
+    // GET /api/registry/tags — all tags with counts
+    if (method === 'GET' && url === '/api/registry/tags') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(getTags()));
+      return;
+    }
+
+    // GET /api/registry/search?q=... — search by prompt similarity
+    const searchMatch = url.match(/^\/api\/registry\/search\?q=(.+)$/);
+    if (method === 'GET' && searchMatch) {
+      const query = decodeURIComponent(searchMatch[1]);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(searchApps(query)));
+      return;
+    }
+
+    // GET /api/registry/browse?offset=0&limit=20&tag=...&type=... — browse apps
+    if (method === 'GET' && url.startsWith('/api/registry/browse')) {
+      const params = new URL(`http://x${url}`).searchParams;
+      const result = browseApps({
+        offset: parseInt(params.get('offset') || '0', 10),
+        limit: parseInt(params.get('limit') || '20', 10),
+        tag: params.get('tag') || null,
+        type: params.get('type') || null,
+      });
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // POST /api/registry/publish — save app to registry
+    if (method === 'POST' && url === '/api/registry/publish') {
+      const data = JSON.parse(body);
+      const result = publishApp(data);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // POST /api/registry/launch/:hash — record a launch from registry
+    const launchMatch = url.match(/^\/api\/registry\/launch\/([a-f0-9]+)$/);
+    if (method === 'POST' && launchMatch) {
+      recordLaunch(launchMatch[1]);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    // GET /api/registry/:hash — get specific app
+    const appMatch = url.match(/^\/api\/registry\/([a-f0-9]{16})$/);
+    if (method === 'GET' && appMatch) {
+      const entry = getApp(appMatch[1]);
+      if (!entry) {
+        res.writeHead(404);
+        res.end('App not found');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(entry));
       return;
     }
 

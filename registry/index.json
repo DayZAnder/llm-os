@@ -1,0 +1,89 @@
+{
+  "version": 1,
+  "updatedAt": 1771358067449,
+  "count": 5,
+  "apps": [
+    {
+      "hash": "54b8aba29e2743a3",
+      "title": "NanoClaw",
+      "prompt": "run nanoclaw — lightweight Claude AI assistant with WhatsApp integration",
+      "type": "process",
+      "capabilities": [
+        "process:background",
+        "process:network",
+        "process:volume",
+        "api:anthropic"
+      ],
+      "model": "template",
+      "tags": [
+        "bot",
+        "communication",
+        "automation",
+        "ai"
+      ],
+      "createdAt": 1771358067388
+    },
+    {
+      "hash": "3c29817aa5109a1d",
+      "title": "password generator",
+      "prompt": "a password generator",
+      "type": "iframe",
+      "capabilities": [
+        "ui:window"
+      ],
+      "model": "hand-crafted",
+      "tags": [
+        "security",
+        "utility"
+      ],
+      "createdAt": 1771358067386
+    },
+    {
+      "hash": "234f8c4f02cc56da",
+      "title": "todo list",
+      "prompt": "a todo list",
+      "type": "iframe",
+      "capabilities": [
+        "ui:window",
+        "storage:local"
+      ],
+      "model": "hand-crafted",
+      "tags": [
+        "productivity"
+      ],
+      "createdAt": 1771358067385
+    },
+    {
+      "hash": "a1cfefdea85916bd",
+      "title": "pomodoro timer with break reminders",
+      "prompt": "a pomodoro timer with break reminders",
+      "type": "iframe",
+      "capabilities": [
+        "ui:window",
+        "timer:basic",
+        "storage:local"
+      ],
+      "model": "hand-crafted",
+      "tags": [
+        "productivity",
+        "time"
+      ],
+      "createdAt": 1771358067385
+    },
+    {
+      "hash": "6f435bf03147cd02",
+      "title": "simple calculator",
+      "prompt": "a simple calculator",
+      "type": "iframe",
+      "capabilities": [
+        "ui:window"
+      ],
+      "model": "hand-crafted",
+      "tags": [
+        "math",
+        "utility"
+      ],
+      "createdAt": 1771358067383
+    }
+  ]
+}
