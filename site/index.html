@@ -388,6 +388,58 @@
   .enforce-step h3 { font-size: 14px; margin-bottom: 2px; }
   .enforce-step p { font-size: 12px; color: var(--text2); }
 
+  /* Download */
+  .download-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 20px;
+  }
+
+  .dl-card {
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 28px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    text-align: center;
+    transition: border-color 0.2s;
+  }
+
+  .dl-card:hover { border-color: var(--accent); }
+
+  .dl-card .dl-icon {
+    font-size: 36px;
+    margin-bottom: 12px;
+  }
+
+  .dl-card h3 { font-size: 17px; margin-bottom: 6px; }
+  .dl-card .dl-size { font-family: var(--mono); font-size: 12px; color: var(--dim); margin-bottom: 12px; }
+  .dl-card p { font-size: 13px; color: var(--text2); margin-bottom: 16px; line-height: 1.5; }
+
+  .dl-card .btn { width: 100%; justify-content: center; }
+
+  .dl-note {
+    margin-top: 24px;
+    background: var(--bg2);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 20px 24px;
+    font-size: 13px;
+    color: var(--text2);
+    line-height: 1.6;
+  }
+
+  .dl-note code {
+    font-family: var(--mono);
+    background: var(--bg);
+    padding: 2px 6px;
+    border-radius: 4px;
+    font-size: 12px;
+    color: var(--text);
+  }
+
   /* Footer */
   footer {
     border-top: 1px solid var(--border);
@@ -417,6 +469,7 @@
     <div class="links">
       <a href="#how">How It Works</a>
       <a href="#start">Get Started</a>
+      <a href="#download">Download</a>
       <a href="#contribute">Contribute</a>
       <a href="https://github.com/DayZAnder/llm-os" class="gh-btn">GitHub</a>
     </div>
@@ -434,6 +487,7 @@
       View on GitHub
     </a>
     <a href="#start" class="btn btn-secondary">Get Started</a>
+    <a href="#download" class="btn btn-secondary">Download VM</a>
   </div>
 
   <div style="height: 60px"></div>
@@ -625,6 +679,37 @@
         <p>PR template requires values self-certification. Maintainer has final authority on edge cases. No automated system is trusted alone.</p>
       </div>
     </div>
+  </div>
+</section>
+
+<!-- Download -->
+<section id="download">
+  <h2>Download <span>LLM OS</span></h2>
+  <p class="subtitle">Boot a full LLM OS instance in your hypervisor. Alpine Linux + Docker + Node.js — ready to generate apps.</p>
+
+  <div class="download-grid">
+    <div class="dl-card">
+      <div class="dl-icon">Q</div>
+      <h3>QCOW2</h3>
+      <div class="dl-size">~389 MB (compressed)</div>
+      <p>For Proxmox, KVM, QEMU, and libvirt. Import as a VM disk image.</p>
+      <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0.qcow2" class="btn btn-primary">Download QCOW2</a>
+    </div>
+    <div class="dl-card">
+      <div class="dl-icon">V</div>
+      <h3>VHDX</h3>
+      <div class="dl-size">~904 MB</div>
+      <p>For Hyper-V on Windows. Create a Gen 1 VM and attach as the primary disk.</p>
+      <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.1.0/llmos-0.1.0.vhdx" class="btn btn-primary">Download VHDX</a>
+    </div>
+  </div>
+
+  <div class="dl-note">
+    <strong>Quick start:</strong> Boot the VM, log in as <code>root</code> / <code>llmos</code>, then open <code>http://&lt;vm-ip&gt;:3000</code> in your browser.
+    Configure your LLM backend with <code>llmos-config set OLLAMA_URL http://your-ollama:11434</code>.
+    Change the default password on first login!
+    <br><br>
+    <a href="https://github.com/DayZAnder/llm-os/releases/tag/v0.1.0" style="color: var(--accent)">View release notes on GitHub</a>
   </div>
 </section>
 
