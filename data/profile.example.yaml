@@ -8,6 +8,12 @@
 # Copy to profile.yaml and customize:
 #   cp data/profile.example.yaml data/profile.yaml
 
+# --- Boot Mode ---
+# ephemeral: regenerate shell + boot apps from scratch every boot (Phase 5 default)
+# solidified: reuse the last snapshot — skip generation, boot instantly
+# Use the API to switch: POST /api/profile/solidify or /api/profile/ephemeral
+mode: ephemeral
+
 # --- Identity ---
 # Who you are. This context is passed to the LLM when generating apps and UI.
 name: ""

@@ -5,7 +5,7 @@
 // Phase 5 prep: when the OS becomes ephemeral, this profile is the only
 // thing that persists. Everything else is regenerated from it on boot.
 
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 
@@ -13,6 +13,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = join(__dirname, '..', '..', 'data');
 const PROFILE_PATH = join(DATA_DIR, 'profile.yaml');
 const EXAMPLE_PATH = join(DATA_DIR, 'profile.example.yaml');
+const SNAPSHOT_DIR = join(DATA_DIR, 'snapshot');
 
 // Minimal YAML parser — handles the flat/nested structure of profile.yaml
 // without requiring a dependency. Supports strings, numbers, booleans, and arrays.
@@ -92,6 +93,7 @@ function parseValue(raw) {
 
 // Default profile values
 const DEFAULTS = {
+  mode: 'ephemeral',  // ephemeral | solidified
   name: '',
   locale: 'en',
   timezone: 'UTC',
@@ -181,4 +183,107 @@ export function getBootApps() {
 export function isServiceEnabled(name) {
   const services = loadProfile().services || {};
   return services[name] === true;
+}
+
+// --- Snapshot / Solidify ---
+// Solidify: freeze current generated state so it's reused on next boot.
+// Ephemeral: discard snapshot, regenerate everything on next boot.
+
+// Save an app's generated code to the snapshot
+export function snapshotApp(appId, code, prompt) {
+  mkdirSync(join(SNAPSHOT_DIR, 'apps'), { recursive: true });
+  writeFileSync(
+    join(SNAPSHOT_DIR, 'apps', `${appId}.json`),
+    JSON.stringify({ appId, prompt, code, snapshotAt: new Date().toISOString() }, null, 2),
+  );
+}
+
+// Save the shell UI to the snapshot
+export function snapshotShell(html) {
+  mkdirSync(SNAPSHOT_DIR, { recursive: true });
+  writeFileSync(join(SNAPSHOT_DIR, 'shell.html'), html);
+}
+
+// Load a snapshotted app (returns null if not solidified or no snapshot)
+export function loadSnapshotApp(appId) {
+  const profile = loadProfile();
+  if (profile.mode !== 'solidified') return null;
+  const path = join(SNAPSHOT_DIR, 'apps', `${appId}.json`);
+  if (!existsSync(path)) return null;
+  return JSON.parse(readFileSync(path, 'utf-8'));
+}
+
+// Load the snapshotted shell (returns null if not solidified or no snapshot)
+export function loadSnapshotShell() {
+  const profile = loadProfile();
+  if (profile.mode !== 'solidified') return null;
+  const path = join(SNAPSHOT_DIR, 'shell.html');
+  if (!existsSync(path)) return null;
+  return readFileSync(path, 'utf-8');
+}
+
+// Solidify: switch profile mode to solidified
+export function solidify() {
+  const profile = loadProfile();
+  if (!existsSync(SNAPSHOT_DIR)) {
+    mkdirSync(SNAPSHOT_DIR, { recursive: true });
+  }
+  // Write snapshot metadata
+  writeFileSync(
+    join(SNAPSHOT_DIR, 'meta.json'),
+    JSON.stringify({
+      solidifiedAt: new Date().toISOString(),
+      profile: { name: profile.name, locale: profile.locale, shell: profile.shell },
+      bootApps: profile.boot_apps || [],
+    }, null, 2),
+  );
+  // Update mode in profile
+  setProfileMode('solidified');
+  return { mode: 'solidified', snapshotDir: SNAPSHOT_DIR };
+}
+
+// Go ephemeral: switch back and optionally clear snapshot
+export function goEphemeral(clearSnapshot = false) {
+  if (clearSnapshot && existsSync(SNAPSHOT_DIR)) {
+    rmSync(SNAPSHOT_DIR, { recursive: true, force: true });
+  }
+  setProfileMode('ephemeral');
+  return { mode: 'ephemeral', snapshotCleared: clearSnapshot };
+}
+
+// Check if we're in solidified mode with a valid snapshot
+export function isSolidified() {
+  const profile = loadProfile();
+  return profile.mode === 'solidified' && existsSync(join(SNAPSHOT_DIR, 'meta.json'));
+}
+
+// Get snapshot metadata
+export function getSnapshotInfo() {
+  const metaPath = join(SNAPSHOT_DIR, 'meta.json');
+  if (!existsSync(metaPath)) return null;
+  return JSON.parse(readFileSync(metaPath, 'utf-8'));
+}
+
+// Internal: update the mode field in profile.yaml
+function setProfileMode(mode) {
+  if (existsSync(PROFILE_PATH)) {
+    let content = readFileSync(PROFILE_PATH, 'utf-8');
+    if (/^mode:\s*.+$/m.test(content)) {
+      content = content.replace(/^mode:\s*.+$/m, `mode: ${mode}`);
+    } else {
+      // Add mode at the top (after comments)
+      const lines = content.split('\n');
+      const firstNonComment = lines.findIndex(l => l.trim() && !l.trim().startsWith('#'));
+      if (firstNonComment >= 0) {
+        lines.splice(firstNonComment, 0, `mode: ${mode}`);
+      } else {
+        lines.push(`mode: ${mode}`);
+      }
+      content = lines.join('\n');
+    }
+    writeFileSync(PROFILE_PATH, content);
+  }
+  // Reload cached profile
+  _profile = null;
+  loadProfile();
 }

@@ -13,7 +13,7 @@ import { storageGet, storageSet, storageRemove, storageKeys, storageUsage, stora
 import * as scheduler from './kernel/scheduler.js';
 import { tasks as selfImproveTasks } from './kernel/self-improve/index.js';
 import { loadQueue, queueClaudeTask } from './kernel/self-improve/claude-agent.js';
-import { loadProfile, reloadProfile, getBootApps } from './kernel/profile.js';
+import { loadProfile, reloadProfile, getBootApps, solidify, goEphemeral, isSolidified, getSnapshotInfo } from './kernel/profile.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -172,6 +172,33 @@ async function handleAPI(method, fullUrl, body, res) {
       const profile = reloadProfile();
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(profile));
+      return;
+    }
+
+    // POST /api/profile/solidify — freeze current state for reuse across boots
+    if (method === 'POST' && url === '/api/profile/solidify') {
+      const result = solidify();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // POST /api/profile/ephemeral — switch back to regenerating on boot
+    if (method === 'POST' && url === '/api/profile/ephemeral') {
+      const { clearSnapshot } = body ? JSON.parse(body) : {};
+      const result = goEphemeral(clearSnapshot === true);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // GET /api/profile/snapshot — get snapshot info
+    if (method === 'GET' && url === '/api/profile/snapshot') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        solidified: isSolidified(),
+        snapshot: getSnapshotInfo(),
+      }));
       return;
     }
 
@@ -504,13 +531,17 @@ ${provLines}
   // Load OS profile
   const profile = loadProfile();
   const bootApps = getBootApps();
+  const solid = isSolidified();
+  const modeLabel = solid ? 'solidified (reusing snapshot)' : 'ephemeral';
   if (profile.name) {
-    console.log(`  [profile] User: ${profile.name} | Locale: ${profile.locale} | Theme: ${profile.shell?.theme}`);
+    console.log(`  [profile] User: ${profile.name} | Locale: ${profile.locale} | Mode: ${modeLabel}`);
   } else {
-    console.log(`  [profile] Default (create data/profile.yaml to customize)`);
+    console.log(`  [profile] Default | Mode: ${modeLabel} (create data/profile.yaml to customize)`);
   }
-  if (bootApps.length > 0) {
+  if (bootApps.length > 0 && !solid) {
     console.log(`  [profile] ${bootApps.length} boot app(s) queued for generation`);
+  } else if (bootApps.length > 0 && solid) {
+    console.log(`  [profile] ${bootApps.length} boot app(s) loaded from snapshot`);
   }
 
   // Register self-improvement tasks

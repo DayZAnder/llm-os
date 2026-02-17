@@ -362,7 +362,8 @@ docker run --rm --privileged -v $(pwd)/build/output:/output llmos-buildroot
 - [ ] The OS is the LLM. The LLM is the OS.
 
 ### Phase 5: Ephemeral OS — Fresh Instance Every Boot
-- [ ] OS Profile spec (`data/profile.yaml`) — user identity, preferences, always-on apps
+- [x] OS Profile spec (`data/profile.yaml`) — user identity, preferences, always-on apps
+- [x] Solidify / ephemeral toggle — happy with your OS? Freeze it. Want fresh? Go ephemeral.
 - [ ] Boot-time generation pipeline — kernel reads profile, generates shell UI + core apps on startup
 - [ ] Template caching — hash profile → cache generated output, skip re-generation when unchanged
 - [ ] Parallel generation — shell, core apps, and services generated concurrently
