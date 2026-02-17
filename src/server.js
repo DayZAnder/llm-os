@@ -12,6 +12,7 @@ import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLa
 import { storageGet, storageSet, storageRemove, storageKeys, storageUsage, storageClear, storageExport, storageImport, storageListApps, storageExportAll, storageFlushAll } from './kernel/storage.js';
 import * as scheduler from './kernel/scheduler.js';
 import { tasks as selfImproveTasks } from './kernel/self-improve/index.js';
+import { loadQueue, queueClaudeTask } from './kernel/self-improve/claude-agent.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -130,6 +131,29 @@ async function handleAPI(method, fullUrl, body, res) {
     if (method === 'GET' && url === '/api/self-improve/stats') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(scheduler.getAggregateStats()));
+      return;
+    }
+
+    // --- Claude Code agent task queue ---
+
+    // GET /api/claude-tasks — list all tasks
+    if (method === 'GET' && url === '/api/claude-tasks') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(loadQueue()));
+      return;
+    }
+
+    // POST /api/claude-tasks — queue a new task
+    if (method === 'POST' && url === '/api/claude-tasks') {
+      const { prompt } = JSON.parse(body);
+      if (!prompt) {
+        res.writeHead(400);
+        res.end('Missing prompt');
+        return;
+      }
+      const task = queueClaudeTask(prompt, 'api');
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(task));
       return;
     }
 

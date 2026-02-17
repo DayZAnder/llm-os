@@ -5,10 +5,12 @@ import { definition as generateApps } from './generate-apps.js';
 import { definition as testSecurity } from './test-security.js';
 import { definition as improveApps } from './improve-apps.js';
 import { definition as qcApps } from './qc-apps.js';
+import { definition as claudeAgent } from './claude-agent.js';
 
 export const tasks = [
   generateApps,
   testSecurity,
   improveApps,
   qcApps,
+  claudeAgent,
 ];

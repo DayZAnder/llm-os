@@ -4,6 +4,7 @@
 
 import { analyze } from '../analyzer.js';
 import { config } from '../config.js';
+import { queueClaudeTask } from './claude-agent.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
@@ -151,6 +152,21 @@ export const definition = {
     mkdirSync(REPORTS_DIR, { recursive: true });
     const filename = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19) + '.json';
     writeFileSync(join(REPORTS_DIR, filename), JSON.stringify(report, null, 2));
+
+    // Auto-queue Claude agent task when catch rate is low
+    const catchPct = stats.total > 0 ? (stats.caught / stats.total) * 100 : 100;
+    if (catchPct < 80 && stats.missed > 0 && config.claude.apiKey) {
+      const missedCats = report.categories
+        .filter(c => c.vectors?.some(v => !v.caught))
+        .map(c => c.name)
+        .join(', ');
+      queueClaudeTask(
+        `The security analyzer missed ${stats.missed}/${stats.total} attack vectors (${stats.catchRate} catch rate) in categories: ${missedCats}. ` +
+        `Review the latest report in data/security-reports/${filename}, examine the missed vectors, ` +
+        `and add new detection rules to src/kernel/analyzer.js to catch them. Run tests after.`,
+        'test-security',
+      );
+    }
 
     return { success: true, stats };
   },
