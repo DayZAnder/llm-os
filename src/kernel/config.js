@@ -33,4 +33,11 @@ export const config = {
     portEnd: parseInt(process.env.DOCKER_PORT_END || '5199', 10),
     maxContainers: parseInt(process.env.DOCKER_MAX_CONTAINERS || '5', 10),
   },
+  scheduler: {
+    enabled: process.env.SCHEDULER_ENABLED === 'true',
+    deferMs: parseInt(process.env.SCHEDULER_DEFER_MINUTES || '5', 10) * 60000,
+    provider: process.env.SCHEDULER_PROVIDER || 'ollama',
+    dailyBudget: parseInt(process.env.SCHEDULER_DAILY_BUDGET || '30', 10),
+    maxRegistryApps: parseInt(process.env.SCHEDULER_MAX_REGISTRY || '500', 10),
+  },
 };

@@ -10,6 +10,8 @@ import { dockerPing } from './kernel/docker/client.js';
 import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses } from './kernel/docker/process-manager.js';
 import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
 import { storageGet, storageSet, storageRemove, storageKeys, storageUsage, storageClear, storageExport, storageImport, storageListApps, storageExportAll, storageFlushAll } from './kernel/storage.js';
+import * as scheduler from './kernel/scheduler.js';
+import { tasks as selfImproveTasks } from './kernel/self-improve/index.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -49,7 +51,88 @@ function serveStatic(url, res) {
 
 async function handleAPI(method, fullUrl, body, res) {
   const url = fullUrl.split('?')[0]; // path only for exact matching
+
+  // Track user activity for scheduler defer
+  scheduler.recordActivity();
+
   try {
+    // --- Scheduler endpoints ---
+
+    // GET /api/scheduler/tasks — list all tasks with state
+    if (method === 'GET' && url === '/api/scheduler/tasks') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(scheduler.getAllTasks()));
+      return;
+    }
+
+    // POST /api/scheduler/enable/:taskId
+    const enableMatch = url.match(/^\/api\/scheduler\/enable\/([^/]+)$/);
+    if (method === 'POST' && enableMatch) {
+      const { interval } = body ? JSON.parse(body) : {};
+      const result = scheduler.enableTask(enableMatch[1], interval);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // POST /api/scheduler/disable/:taskId
+    const disableMatch = url.match(/^\/api\/scheduler\/disable\/([^/]+)$/);
+    if (method === 'POST' && disableMatch) {
+      const result = scheduler.disableTask(disableMatch[1]);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // POST /api/scheduler/run/:taskId — manual run
+    const runMatch = url.match(/^\/api\/scheduler\/run\/([^/]+)$/);
+    if (method === 'POST' && runMatch) {
+      const result = await scheduler.runNow(runMatch[1]);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // GET /api/scheduler/history/:taskId
+    const historyMatch = url.match(/^\/api\/scheduler\/history\/([^/]+)$/);
+    if (method === 'GET' && historyMatch) {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(scheduler.getHistory(historyMatch[1])));
+      return;
+    }
+
+    // POST /api/scheduler/pause — pause all tasks
+    if (method === 'POST' && url === '/api/scheduler/pause') {
+      scheduler.pause();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    // POST /api/scheduler/resume — resume all tasks
+    if (method === 'POST' && url === '/api/scheduler/resume') {
+      scheduler.resume();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
+    // POST /api/scheduler/reset/:taskId — reset circuit breaker
+    const resetMatch = url.match(/^\/api\/scheduler\/reset\/([^/]+)$/);
+    if (method === 'POST' && resetMatch) {
+      const result = scheduler.resetCircuitBreaker(resetMatch[1]);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // GET /api/self-improve/stats — aggregate stats
+    if (method === 'GET' && url === '/api/self-improve/stats') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(scheduler.getAggregateStats()));
+      return;
+    }
+
     // POST /api/generate — generate an app from prompt
     if (method === 'POST' && url === '/api/generate') {
       const { prompt } = JSON.parse(body);
@@ -372,4 +455,15 @@ server.listen(config.port, host, () => {
   ║  Claude: ${config.claude.apiKey ? 'configured' : 'not configured (add ANTHROPIC_API_KEY)'}       ║
   ╚══════════════════════════════════════╝
   `);
+
+  // Register self-improvement tasks
+  for (const taskDef of selfImproveTasks) {
+    scheduler.registerTask(taskDef);
+  }
+  if (config.scheduler.enabled) {
+    console.log(`  [scheduler] ${selfImproveTasks.length} self-improvement tasks registered`);
+    console.log(`  [scheduler] Provider: ${config.scheduler.provider} | Budget: ${config.scheduler.dailyBudget}/day`);
+  } else {
+    console.log(`  [scheduler] Disabled (set SCHEDULER_ENABLED=true to enable)`);
+  }
 });

@@ -27,6 +27,9 @@ jobs:
       - name: Run registry tests
         run: node tests/registry.test.js
 
+      - name: Run scheduler tests
+        run: node tests/scheduler.test.js
+
   build-vm:
     name: Build VM (${{ matrix.variant }})
     needs: test

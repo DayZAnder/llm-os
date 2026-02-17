@@ -658,6 +658,236 @@
   }
   .share-hint a { color: var(--accent); text-decoration: none; }
   .share-hint a:hover { text-decoration: underline; }
+
+  /* Settings / Self-Improve Panel */
+  .settings-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 950;
+  }
+  .settings-overlay.hidden { display: none; }
+
+  .settings-panel {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 90%;
+    max-width: 700px;
+    max-height: 85vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  .settings-header {
+    padding: 16px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+
+  .settings-header h2 {
+    font-family: var(--font-mono);
+    font-size: 16px;
+    color: var(--accent);
+    flex: 1;
+  }
+
+  .settings-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 20px;
+    cursor: pointer;
+    padding: 0 4px;
+  }
+  .settings-close:hover { color: var(--text-primary); }
+
+  .settings-body {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px 20px;
+  }
+
+  .settings-desc {
+    font-size: 12px;
+    color: var(--text-secondary);
+    margin-bottom: 16px;
+    line-height: 1.5;
+  }
+
+  .settings-global {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 12px;
+    border-bottom: 1px solid var(--border);
+  }
+
+  .settings-global button {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 14px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+  }
+  .settings-global button:hover { border-color: var(--accent); color: var(--text-primary); }
+
+  .task-card {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 14px 16px;
+    margin-bottom: 10px;
+  }
+  .task-card.tripped { border-color: var(--danger); }
+  .task-card.active { border-color: var(--success); }
+
+  .task-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+
+  .task-card-header h3 {
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--text-primary);
+    font-weight: 600;
+  }
+
+  .task-card-desc {
+    font-size: 11px;
+    color: var(--text-secondary);
+    margin-bottom: 8px;
+  }
+
+  .task-card-stats {
+    display: flex;
+    gap: 16px;
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    margin-bottom: 8px;
+  }
+  .task-card-stats strong { color: var(--text-secondary); }
+
+  .task-card-controls {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  .task-card-controls select,
+  .task-card-controls button {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 4px 10px;
+    color: var(--text-secondary);
+    font-size: 10px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+  }
+  .task-card-controls button:hover { border-color: var(--accent); color: var(--text-primary); }
+  .task-card-controls button.running { color: var(--warning); cursor: wait; }
+
+  .task-badge {
+    font-size: 9px;
+    font-family: var(--font-mono);
+    padding: 2px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+  }
+  .task-badge.tripped { background: rgba(255,71,87,0.2); color: var(--danger); }
+  .task-badge.running { background: rgba(255,165,2,0.2); color: var(--warning); }
+  .task-badge.idle { background: rgba(46,213,115,0.15); color: var(--success); }
+  .task-badge.off { background: var(--bg-surface); color: var(--text-dim); }
+
+  .toggle {
+    position: relative;
+    width: 36px;
+    height: 20px;
+    cursor: pointer;
+  }
+  .toggle input { opacity: 0; width: 0; height: 0; }
+  .toggle .slider {
+    position: absolute;
+    inset: 0;
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    transition: 0.2s;
+  }
+  .toggle .slider::before {
+    content: '';
+    position: absolute;
+    width: 14px;
+    height: 14px;
+    left: 2px;
+    top: 2px;
+    background: var(--text-dim);
+    border-radius: 50%;
+    transition: 0.2s;
+  }
+  .toggle input:checked + .slider { background: var(--accent-dim); border-color: var(--accent); }
+  .toggle input:checked + .slider::before { transform: translateX(16px); background: var(--accent); }
+
+  .task-history {
+    margin-top: 8px;
+  }
+  .task-history summary {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    cursor: pointer;
+    user-select: none;
+  }
+  .task-history ul {
+    list-style: none;
+    margin-top: 6px;
+  }
+  .task-history li {
+    font-size: 10px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    padding: 2px 0;
+  }
+  .task-history .ts { color: var(--text-dim); }
+  .task-history .ok { color: var(--success); }
+  .task-history .err { color: var(--danger); }
+
+  .settings-stats {
+    display: flex;
+    gap: 16px;
+    padding: 12px 20px;
+    border-top: 1px solid var(--border);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-dim);
+    flex-shrink: 0;
+  }
+  .settings-stats strong { color: var(--text-secondary); }
+
+  .topbar .settings-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 14px;
+    cursor: pointer;
+    padding: 2px 4px;
+  }
+  .topbar .settings-btn:hover { color: var(--text-primary); }
 </style>
 </head>
 <body>
@@ -669,6 +899,7 @@
   <span><span class="status-dot pending" id="claude-status"></span>Claude</span>
   <span><span class="status-dot pending" id="docker-status"></span>Docker</span>
   <span id="app-count" style="margin-left:auto">0 apps</span>
+  <button class="settings-btn" id="settings-btn" title="Self-Improvement Settings">&#9881;</button>
 </div>
 
 <!-- Main area -->
@@ -725,6 +956,28 @@
       <button class="btn-deny" id="modal-deny">Deny</button>
       <button class="btn-approve" id="modal-approve">Approve &amp; Launch</button>
     </div>
+  </div>
+</div>
+
+<!-- Settings / Self-Improvement Panel -->
+<div class="settings-overlay hidden" id="settings-overlay">
+  <div class="settings-panel">
+    <div class="settings-header">
+      <h2>Self-Improvement</h2>
+      <button class="settings-close" id="settings-close">&times;</button>
+    </div>
+    <div class="settings-body">
+      <p class="settings-desc">
+        Enable automated tasks that run in the background when you're not using the OS.
+        All tasks defer when you're actively working and use local Ollama by default (free).
+      </p>
+      <div class="settings-global">
+        <button id="si-pause-all">Pause All</button>
+        <button id="si-resume-all">Resume All</button>
+      </div>
+      <div id="si-tasks"></div>
+    </div>
+    <div class="settings-stats" id="si-stats"></div>
   </div>
 </div>
 
@@ -1462,6 +1715,148 @@ registrySearchInput.addEventListener('input', () => {
   registrySearchTimeout = setTimeout(() => {
     loadRegistryApps(registrySearchInput.value);
   }, 300);
+});
+
+// --- Self-Improvement Settings ---
+const settingsOverlay = document.getElementById('settings-overlay');
+const settingsBtn = document.getElementById('settings-btn');
+const settingsClose = document.getElementById('settings-close');
+const siTasks = document.getElementById('si-tasks');
+const siStats = document.getElementById('si-stats');
+
+function timeAgo(ts) {
+  if (!ts) return 'never';
+  const diff = Date.now() - ts;
+  if (diff < 60000) return 'just now';
+  if (diff < 3600000) return `${Math.round(diff / 60000)}m ago`;
+  if (diff < 86400000) return `${Math.round(diff / 3600000)}h ago`;
+  return `${Math.round(diff / 86400000)}d ago`;
+}
+
+const INTERVAL_OPTIONS = [
+  [3600000, '1 hour'],
+  [10800000, '3 hours'],
+  [21600000, '6 hours'],
+  [43200000, '12 hours'],
+  [86400000, '24 hours'],
+  [172800000, '48 hours'],
+];
+
+function renderTaskCard(task) {
+  const s = task.state;
+  const cardClass = s.disabledReason === 'circuit-breaker' ? 'tripped' : s.enabled ? 'active' : '';
+  const badgeClass = s.disabledReason === 'circuit-breaker' ? 'tripped'
+    : s.enabled ? 'idle' : 'off';
+  const badgeText = s.disabledReason === 'circuit-breaker' ? 'tripped'
+    : s.enabled ? 'active' : 'off';
+
+  const intervalOpts = INTERVAL_OPTIONS.map(([ms, label]) =>
+    `<option value="${ms}" ${s.interval === ms ? 'selected' : ''}>${label}</option>`
+  ).join('');
+
+  const historyHtml = (s.history || []).slice(0, 5).map(h => {
+    const cls = h.success ? 'ok' : 'err';
+    const detail = h.success
+      ? Object.entries(h.stats || {}).map(([k, v]) => `${k}: ${v}`).join(', ')
+      : h.error;
+    return `<li><span class="ts">${timeAgo(h.at)}</span> — <span class="${cls}">${detail || (h.success ? 'ok' : 'failed')}</span></li>`;
+  }).join('');
+
+  return `<div class="task-card ${cardClass}" data-task="${task.id}">
+    <div class="task-card-header">
+      <h3>${task.name} <span class="task-badge ${badgeClass}">${badgeText}</span></h3>
+      <label class="toggle">
+        <input type="checkbox" ${s.enabled ? 'checked' : ''} onchange="window._siToggle('${task.id}', this.checked)">
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="task-card-desc">${task.description}${task.requiresLLM ? '' : ' (no LLM needed)'}</div>
+    <div class="task-card-stats">
+      <span><strong>${s.runCount}</strong> runs</span>
+      <span><strong>${s.successCount}</strong> ok</span>
+      <span><strong>${s.errorCount}</strong> errors</span>
+      <span>Last: <strong>${timeAgo(s.lastRun)}</strong></span>
+      <span>Budget: <strong>${s.llmCallsToday || 0}</strong>/day</span>
+    </div>
+    <div class="task-card-controls">
+      <select onchange="window._siInterval('${task.id}', Number(this.value))">${intervalOpts}</select>
+      <button onclick="window._siRun('${task.id}', this)">Run Now</button>
+      ${s.disabledReason === 'circuit-breaker' ? `<button onclick="window._siReset('${task.id}')">Reset</button>` : ''}
+    </div>
+    ${historyHtml ? `<details class="task-history"><summary>Recent history</summary><ul>${historyHtml}</ul></details>` : ''}
+  </div>`;
+}
+
+async function loadSettings() {
+  try {
+    const [tasksRes, statsRes] = await Promise.all([
+      fetch('/api/scheduler/tasks').then(r => r.json()),
+      fetch('/api/self-improve/stats').then(r => r.json()),
+    ]);
+    siTasks.innerHTML = tasksRes.map(renderTaskCard).join('');
+    siStats.innerHTML = [
+      `Generated: <strong>${statsRes.totalGenerated}</strong>`,
+      `Improved: <strong>${statsRes.totalImproved}</strong>`,
+      statsRes.lastCatchRate != null ? `Catch rate: <strong>${statsRes.lastCatchRate}</strong>` : '',
+      statsRes.lastQcScore != null ? `QC score: <strong>${statsRes.lastQcScore}</strong>` : '',
+      statsRes.paused ? '<strong style="color:var(--warning)">PAUSED</strong>' : '',
+    ].filter(Boolean).join(' &nbsp;|&nbsp; ');
+  } catch (err) {
+    siTasks.innerHTML = `<p class="settings-desc">Failed to load tasks: ${err.message}</p>`;
+  }
+}
+
+function openSettings() {
+  settingsOverlay.classList.remove('hidden');
+  loadSettings();
+}
+function closeSettings() {
+  settingsOverlay.classList.add('hidden');
+}
+
+// Global handlers (called from inline onclick in rendered HTML)
+window._siToggle = async (id, enabled) => {
+  const endpoint = enabled ? `/api/scheduler/enable/${id}` : `/api/scheduler/disable/${id}`;
+  await fetch(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+  loadSettings();
+};
+window._siInterval = async (id, ms) => {
+  await fetch(`/api/scheduler/enable/${id}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ interval: ms }),
+  });
+  loadSettings();
+};
+window._siRun = async (id, btn) => {
+  btn.textContent = 'Running...';
+  btn.classList.add('running');
+  btn.disabled = true;
+  try {
+    await fetch(`/api/scheduler/run/${id}`, { method: 'POST' });
+  } catch {}
+  btn.textContent = 'Run Now';
+  btn.classList.remove('running');
+  btn.disabled = false;
+  loadSettings();
+};
+window._siReset = async (id) => {
+  await fetch(`/api/scheduler/reset/${id}`, { method: 'POST' });
+  loadSettings();
+};
+
+settingsBtn.addEventListener('click', openSettings);
+settingsClose.addEventListener('click', closeSettings);
+settingsOverlay.addEventListener('click', (e) => {
+  if (e.target === settingsOverlay) closeSettings();
+});
+document.getElementById('si-pause-all').addEventListener('click', async () => {
+  await fetch('/api/scheduler/pause', { method: 'POST' });
+  loadSettings();
+});
+document.getElementById('si-resume-all').addEventListener('click', async () => {
+  await fetch('/api/scheduler/resume', { method: 'POST' });
+  loadSettings();
 });
 
 // --- Init ---
