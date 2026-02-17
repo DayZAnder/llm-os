@@ -84,6 +84,18 @@ ttyS0::respawn:/sbin/getty -L ttyS0 115200 vt100
 ::shutdown:/sbin/openrc shutdown
 INITTAB
 
+# Desktop variant: install kiosk browser packages
+VARIANT="${VARIANT:-server}"
+if [ "${VARIANT}" = "desktop" ]; then
+    echo "  Installing kiosk browser (desktop variant)..."
+    apk add --no-cache \
+        chromium \
+        cage seatd eudev \
+        mesa-dri-gallium mesa-egl \
+        font-noto ttf-dejavu
+    rc-update add seatd default
+fi
+
 echo "  Generating initramfs..."
 # Ensure modules for VM environments
 echo 'virtio_blk' >> /etc/modules

@@ -9,11 +9,12 @@ DISK_SIZE_MB=4096
 IMAGE_RAW="/tmp/llmos.raw"
 MOUNT_DIR="/tmp/rootfs"
 VERSION="0.1.0"
+VARIANT="${VARIANT:-server}"  # server (headless) or desktop (kiosk Chromium)
 
 echo "
 ╔══════════════════════════════════════╗
 ║       LLM OS Image Builder          ║
-║       v${VERSION}                        ║
+║       v${VERSION} (${VARIANT})              ║
 ╚══════════════════════════════════════╝
 "
 
@@ -78,7 +79,7 @@ EOF
 
 # Copy setup script and run in chroot
 cp /build/setup-rootfs.sh "${MOUNT_DIR}/tmp/setup-rootfs.sh"
-chroot "${MOUNT_DIR}" /bin/sh /tmp/setup-rootfs.sh
+chroot "${MOUNT_DIR}" /bin/sh -c "VARIANT=${VARIANT} /tmp/setup-rootfs.sh"
 rm "${MOUNT_DIR}/tmp/setup-rootfs.sh"
 
 # --- Step 5: Install LLM OS ---
@@ -99,9 +100,19 @@ chmod +x "${MOUNT_DIR}/etc/init.d/llmos" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/etc/local.d/llmos-firstboot.start" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/usr/local/bin/llmos-login" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/usr/local/bin/llmos-config" 2>/dev/null || true
+chmod +x "${MOUNT_DIR}/usr/local/bin/llmos-kiosk" 2>/dev/null || true
+chmod +x "${MOUNT_DIR}/etc/init.d/llmos-kiosk" 2>/dev/null || true
 
 # Enable LLM OS service
 chroot "${MOUNT_DIR}" rc-update add llmos default
+
+# Enable kiosk mode for desktop variant
+if [ "${VARIANT}" = "desktop" ]; then
+    echo "  Enabling kiosk browser mode..."
+    chroot "${MOUNT_DIR}" rc-update add llmos-kiosk default
+    # Replace tty1 login with kiosk on desktop variant
+    sed -i 's|tty1::respawn:/sbin/getty -n -l /usr/local/bin/llmos-login 38400 tty1|tty1::respawn:/usr/local/bin/llmos-kiosk|' "${MOUNT_DIR}/etc/inittab"
+fi
 
 # --- Step 6: Install GRUB bootloader ---
 echo "[6/7] Installing GRUB bootloader..."
@@ -172,20 +183,141 @@ umount "${MOUNT_DIR}"
 losetup -d "${LOOP_PART}"
 losetup -d "${LOOP_DISK}"
 
-# Convert to QCOW2 (Proxmox)
+NAME="llmos-${VERSION}-${VARIANT}"
 mkdir -p /output
-qemu-img convert -f raw -O qcow2 -c "${IMAGE_RAW}" "/output/llmos-${VERSION}.qcow2"
-QCOW2_SIZE=$(du -h "/output/llmos-${VERSION}.qcow2" | cut -f1)
-echo "  QCOW2: llmos-${VERSION}.qcow2 (${QCOW2_SIZE})"
+
+# Convert to QCOW2 (Proxmox)
+qemu-img convert -f raw -O qcow2 -c "${IMAGE_RAW}" "/output/${NAME}.qcow2"
+QCOW2_SIZE=$(du -h "/output/${NAME}.qcow2" | cut -f1)
+echo "  QCOW2: ${NAME}.qcow2 (${QCOW2_SIZE})"
 
 # Convert to VHDX (Hyper-V)
-qemu-img convert -f raw -O vhdx "${IMAGE_RAW}" "/output/llmos-${VERSION}.vhdx"
-VHDX_SIZE=$(du -h "/output/llmos-${VERSION}.vhdx" | cut -f1)
-echo "  VHDX:  llmos-${VERSION}.vhdx (${VHDX_SIZE})"
+qemu-img convert -f raw -O vhdx "${IMAGE_RAW}" "/output/${NAME}.vhdx"
+VHDX_SIZE=$(du -h "/output/${NAME}.vhdx" | cut -f1)
+echo "  VHDX:  ${NAME}.vhdx (${VHDX_SIZE})"
+
+# Convert to OVA (VirtualBox)
+echo "  Building OVA..."
+OVA_DIR="/tmp/ova-${VARIANT}"
+mkdir -p "${OVA_DIR}"
+
+# Raw → VMDK (VirtualBox disk format)
+qemu-img convert -f raw -O vmdk "${IMAGE_RAW}" "${OVA_DIR}/${NAME}-disk1.vmdk"
+VMDK_SIZE=$(stat -c %s "${OVA_DIR}/${NAME}-disk1.vmdk")
+
+# Generate OVF descriptor
+cat > "${OVA_DIR}/${NAME}.ovf" << OVFEOF
+<?xml version="1.0"?>
+<Envelope ovf:version="1.0" xml:lang="en-US"
+  xmlns="http://schemas.dmtf.org/ovf/envelope/1"
+  xmlns:ovf="http://schemas.dmtf.org/ovf/envelope/1"
+  xmlns:rasd="http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_ResourceAllocationSettingData"
+  xmlns:vssd="http://schemas.dmtf.org/wbem/wscim/1/cim-schema/2/CIM_VirtualSystemSettingData"
+  xmlns:vbox="http://www.virtualbox.org/ovf/machine">
+
+  <References>
+    <File ovf:href="${NAME}-disk1.vmdk" ovf:id="file1" ovf:size="${VMDK_SIZE}"/>
+  </References>
+
+  <DiskSection>
+    <Info>Virtual disk information</Info>
+    <Disk ovf:capacity="${DISK_SIZE_MB}" ovf:capacityAllocationUnits="byte * 2^20"
+          ovf:diskId="vmdisk1" ovf:fileRef="file1" ovf:format="http://www.vmware.com/interfaces/specifications/vmdk.html#streamOptimized"/>
+  </DiskSection>
+
+  <NetworkSection>
+    <Info>Logical networks</Info>
+    <Network ovf:name="NAT">
+      <Description>NAT network</Description>
+    </Network>
+  </NetworkSection>
+
+  <VirtualSystem ovf:id="${NAME}">
+    <Info>LLM OS - AI-native operating system</Info>
+    <Name>${NAME}</Name>
+    <OperatingSystemSection ovf:id="101">
+      <Info>Linux 64-bit</Info>
+      <Description>Linux26_64</Description>
+    </OperatingSystemSection>
+
+    <VirtualHardwareSection>
+      <Info>Virtual hardware requirements</Info>
+      <System>
+        <vssd:ElementName>Virtual Hardware Family</vssd:ElementName>
+        <vssd:InstanceID>0</vssd:InstanceID>
+        <vssd:VirtualSystemIdentifier>${NAME}</vssd:VirtualSystemIdentifier>
+        <vssd:VirtualSystemType>virtualbox-2.2</vssd:VirtualSystemType>
+      </System>
+
+      <Item>
+        <rasd:Caption>2 virtual CPUs</rasd:Caption>
+        <rasd:Description>Number of virtual CPUs</rasd:Description>
+        <rasd:ElementName>2 virtual CPUs</rasd:ElementName>
+        <rasd:InstanceID>1</rasd:InstanceID>
+        <rasd:ResourceType>3</rasd:ResourceType>
+        <rasd:VirtualQuantity>2</rasd:VirtualQuantity>
+      </Item>
+
+      <Item>
+        <rasd:AllocationUnits>byte * 2^20</rasd:AllocationUnits>
+        <rasd:Caption>2048 MB of memory</rasd:Caption>
+        <rasd:Description>Memory Size</rasd:Description>
+        <rasd:ElementName>2048 MB of memory</rasd:ElementName>
+        <rasd:InstanceID>2</rasd:InstanceID>
+        <rasd:ResourceType>4</rasd:ResourceType>
+        <rasd:VirtualQuantity>2048</rasd:VirtualQuantity>
+      </Item>
+
+      <Item>
+        <rasd:Address>0</rasd:Address>
+        <rasd:Caption>ideController0</rasd:Caption>
+        <rasd:Description>IDE Controller</rasd:Description>
+        <rasd:ElementName>ideController0</rasd:ElementName>
+        <rasd:InstanceID>3</rasd:InstanceID>
+        <rasd:ResourceSubType>PIIX4</rasd:ResourceSubType>
+        <rasd:ResourceType>5</rasd:ResourceType>
+      </Item>
+
+      <Item>
+        <rasd:AddressOnParent>0</rasd:AddressOnParent>
+        <rasd:Caption>disk1</rasd:Caption>
+        <rasd:Description>Disk Image</rasd:Description>
+        <rasd:ElementName>disk1</rasd:ElementName>
+        <rasd:HostResource>/disk/vmdisk1</rasd:HostResource>
+        <rasd:InstanceID>4</rasd:InstanceID>
+        <rasd:Parent>3</rasd:Parent>
+        <rasd:ResourceType>17</rasd:ResourceType>
+      </Item>
+
+      <Item>
+        <rasd:AutomaticAllocation>true</rasd:AutomaticAllocation>
+        <rasd:Caption>Ethernet adapter on NAT</rasd:Caption>
+        <rasd:Connection>NAT</rasd:Connection>
+        <rasd:ElementName>Ethernet adapter on NAT</rasd:ElementName>
+        <rasd:InstanceID>5</rasd:InstanceID>
+        <rasd:ResourceSubType>E1000</rasd:ResourceSubType>
+        <rasd:ResourceType>10</rasd:ResourceType>
+      </Item>
+    </VirtualHardwareSection>
+  </VirtualSystem>
+</Envelope>
+OVFEOF
+
+# Generate manifest with SHA256 checksums
+cd "${OVA_DIR}"
+sha256sum "${NAME}.ovf" "${NAME}-disk1.vmdk" | sed 's/ / = SHA256(/' | sed 's/$/)/' > "${NAME}.mf"
+
+# Pack into OVA (tar, OVF first per spec)
+tar cf "/output/${NAME}.ova" "${NAME}.ovf" "${NAME}-disk1.vmdk" "${NAME}.mf"
+cd /
+rm -rf "${OVA_DIR}"
+
+OVA_SIZE=$(du -h "/output/${NAME}.ova" | cut -f1)
+echo "  OVA:   ${NAME}.ova (${OVA_SIZE})"
 
 echo "
 ╔══════════════════════════════════════╗
-║        Build complete!               ║
+║        Build complete! (${VARIANT})       ║
 ║                                      ║
 ║  Boot the VM, then open:             ║
 ║  http://<vm-ip>:3000                 ║

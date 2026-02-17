@@ -1,0 +1,16 @@
+#!/sbin/openrc-run
+# LLM OS Kiosk Service
+# Starts the kiosk browser after the LLM OS server is running.
+# Only used in the desktop image variant.
+
+description="LLM OS Kiosk Browser"
+command="/usr/local/bin/llmos-kiosk"
+command_background="yes"
+pidfile="/run/llmos-kiosk.pid"
+output_log="/var/log/llmos-kiosk.log"
+error_log="/var/log/llmos-kiosk.log"
+
+depend() {
+    need llmos seatd
+    after llmos
+}

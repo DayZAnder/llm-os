@@ -299,7 +299,7 @@ Type a description in the prompt bar. The OS generates, analyzes, and sandboxes 
 - [x] SDK for generated apps (ui, storage, timer, caps)
 - [x] App registry with content addressing and community sync
 - [x] Docker container runtime for process apps (NanoClaw support)
-- [ ] Persistent storage (currently in-memory)
+- [x] Persistent storage (per-app JSON files, 5MB quota, path traversal protection)
 
 ### Phase 2: Bootable Appliance (current)
 - [x] Alpine Linux VM image (kernel 6.12 + Docker + Node.js)
@@ -308,9 +308,9 @@ Type a description in the prompt bar. The OS generates, analyzes, and sandboxes 
 - [x] Networking (DHCP + SSH + serial console)
 - [x] First-boot setup (Docker pre-warm)
 - [x] Configuration helper (`llmos-config`)
-- [ ] Kiosk browser mode (boot straight into shell, no login)
-- [ ] OVA format for VirtualBox
-- [ ] Automated CI builds (GitHub Actions)
+- [x] Kiosk browser mode (desktop variant boots into Chromium kiosk)
+- [x] OVA format for VirtualBox
+- [x] Automated CI builds (GitHub Actions: tests + VM release pipeline)
 - [ ] Smaller image via Buildroot (~50MB target)
 
 ### Phase 3: WASM Sandbox + Unikernel

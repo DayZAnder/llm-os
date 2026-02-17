@@ -1,0 +1,38 @@
+#!/bin/sh
+# LLM OS Kiosk Mode
+# Launches Chromium in full-screen kiosk mode via cage Wayland compositor.
+# Used on tty1 in the desktop image variant.
+
+# Wait for LLM OS server to be ready (up to 60 seconds)
+echo "Waiting for LLM OS server..."
+ATTEMPTS=0
+until curl -sf http://localhost:3000 >/dev/null 2>&1; do
+    ATTEMPTS=$((ATTEMPTS + 1))
+    if [ $ATTEMPTS -ge 60 ]; then
+        echo "LLM OS server failed to start. Falling back to login shell."
+        exec /usr/local/bin/llmos-login
+    fi
+    sleep 1
+done
+
+echo "LLM OS ready — launching kiosk browser"
+
+# Set up Wayland runtime directory
+export XDG_RUNTIME_DIR=/tmp/runtime-root
+mkdir -p "$XDG_RUNTIME_DIR"
+chmod 0700 "$XDG_RUNTIME_DIR"
+
+# Launch Chromium via cage (minimal Wayland kiosk compositor)
+exec cage -- chromium-browser \
+    --no-sandbox \
+    --kiosk \
+    --disable-gpu \
+    --disable-software-rasterizer \
+    --disable-dev-shm-usage \
+    --no-first-run \
+    --disable-translate \
+    --disable-extensions \
+    --disable-background-networking \
+    --disable-sync \
+    --disable-default-apps \
+    http://localhost:3000
