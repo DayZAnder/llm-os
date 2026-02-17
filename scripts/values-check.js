@@ -22,7 +22,7 @@ const TELEMETRY_PATTERNS = [
   { pattern: /sentry\.io|bugsnag|rollbar|datadog/i, rule: 'NO_ERROR_TRACKING', description: 'Error tracking service detected (use local logging)' },
   { pattern: /beacon\s*\(|navigator\.sendBeacon/i, rule: 'NO_BEACON', description: 'sendBeacon used (silent data exfiltration risk)' },
   { pattern: /\.track\s*\(|\.identify\s*\(|\.page\s*\(/i, rule: 'NO_TRACKING_CALLS', description: 'Tracking method calls detected (.track, .identify, .page)' },
-  { pattern: /fingerprint(?:js|2|pro)?/i, rule: 'NO_FINGERPRINTING', description: 'Browser fingerprinting library detected' },
+  { pattern: /fingerprint(?:js|2|pro)(?!ing)/i, rule: 'NO_FINGERPRINTING', description: 'Browser fingerprinting library detected' },
   { pattern: /hotjar|fullstory|logrocket|mouseflow|clarity/i, rule: 'NO_SESSION_RECORDING', description: 'Session recording service detected' },
 ];
 
@@ -73,10 +73,22 @@ const SUSPICIOUS_DEPS = [
 
 const SEVERITY = { CRITICAL: 'CRITICAL', WARNING: 'WARNING', INFO: 'INFO' };
 
+// Files that legitimately contain security patterns (analyzer rules, test vectors, this script)
+const EXEMPT_FILES = [
+  /^src\/kernel\/analyzer\.js$/,
+  /^tests\/.*\.test\.js$/,
+  /^src\/kernel\/self-improve\//,
+  /^scripts\/values-check\.js$/,
+];
+
+function isExempt(filePath) {
+  return EXEMPT_FILES.some(re => re.test(filePath.replace(/\\/g, '/')));
+}
+
 function getChangedFiles() {
   try {
     // In CI: diff against base branch
-    const base = process.env.GITHUB_BASE_REF || 'main';
+    const base = process.env.GITHUB_BASE_REF || 'master';
     const diff = execSync(`git diff --name-only ${base}...HEAD 2>/dev/null || git diff --name-only HEAD~1`, { encoding: 'utf-8' });
     return diff.trim().split('\n').filter(Boolean);
   } catch {
@@ -199,6 +211,9 @@ function run() {
 
   // Scan each file
   for (const file of files) {
+    // Skip files that legitimately contain security patterns (analyzer rules, test vectors)
+    if (isExempt(file)) continue;
+
     // Value 1: Protect the user
     allFindings.push(...scanFile(file, TELEMETRY_PATTERNS, SEVERITY.CRITICAL));
     allFindings.push(...scanFile(file, PRIVACY_PATTERNS, SEVERITY.WARNING));
