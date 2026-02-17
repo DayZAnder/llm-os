@@ -233,34 +233,50 @@ These are genuinely unsolved and need community input:
 6. **Offline-first** — Should the OS work fully offline with local models, or require cloud?
 7. **Multi-language** — Should generated apps be restricted to one language (TS?) or support many?
 
+## Quick Start
+
+```bash
+git clone https://github.com/DayZAnder/llm-os.git
+cd llm-os
+cp .env.example .env      # Edit with your Ollama URL / API keys
+npm install
+node src/server.js         # Open http://localhost:3000
+```
+
+Type a description in the prompt bar. The OS generates, analyzes, and sandboxes your app.
+
 ## Roadmap
 
-### Phase 1: Proof of Concept
-- [ ] Tauri/Electron shell with basic window manager
-- [ ] iframe sandbox with strict CSP
-- [ ] LLM gateway (Ollama + one cloud API)
-- [ ] Simple capability system (network, storage, UI)
-- [ ] Generate and run a "hello world" app from a prompt
-
-### Phase 2: Core Kernel
-- [ ] WASM-based sandbox (replace iframes)
-- [ ] Cryptographic capability tokens
-- [ ] AST-based static analysis pipeline
+### Phase 1: Web Prototype (current)
+- [x] Browser-based shell with prompt bar and window manager
+- [x] iframe sandbox with strict CSP
+- [x] LLM gateway (Ollama + Claude API, routed by complexity)
+- [x] Static analysis pipeline (regex-based, blocks eval/injection)
+- [x] Capability system with user approval dialog
+- [x] SDK for generated apps (ui, storage, timer, caps)
 - [ ] App registry with content addressing
-- [ ] Inter-app message bus
+- [ ] Persistent storage (currently in-memory)
 
-### Phase 3: Ecosystem
-- [ ] Community app registry (GitHub-backed)
-- [ ] App rating and security auditing
-- [ ] Multi-model routing (local + cloud)
-- [ ] App composition protocol
-- [ ] State migration between app versions
+### Phase 2: Bootable Appliance
+- [ ] Minimal Linux image via Buildroot (~15MB, drivers + network only)
+- [ ] Boots directly into kiosk browser → LLM OS shell
+- [ ] No login screen, no desktop environment — just the OS
+- [ ] ISO/USB image for Hyper-V, VirtualBox, bare metal
 
-### Phase 4: Real OS
-- [ ] Custom bootloader or minimal Linux base
-- [ ] Hardware abstraction layer (LLM-generated drivers?)
-- [ ] Multi-user support
-- [ ] Resource scheduling
+### Phase 3: WASM Sandbox + Unikernel
+- [ ] Replace iframes with WebAssembly (Wasmtime/Extism)
+- [ ] Cryptographic capability tokens (HMAC-SHA256)
+- [ ] Replace Linux with HermitOS (Rust unikernel)
+- [ ] Single address space, no syscalls, just our runtime
+
+### Phase 4: Custom Kernel — Zero Linux
+- [ ] Rust `no_std` microkernel
+- [ ] UEFI boot → framebuffer → WASM runtime
+- [ ] LLM-generated device drivers (experimental)
+- [ ] Multi-user support, resource scheduling
+- [ ] The OS is the LLM. The LLM is the OS.
+
+> The goal is full kernel independence. We start with a web prototype because a working demo attracts contributors, and the core innovation — LLM generation + sandboxing + capabilities — is orthogonal to the kernel. Every layer gets replaced as we go.
 
 ## Contributing
 

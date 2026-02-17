@@ -1,0 +1,782 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM OS</title>
+<style>
+  :root {
+    --bg-primary: #0d0d1a;
+    --bg-secondary: #141428;
+    --bg-tertiary: #1a1a35;
+    --bg-surface: #1e1e3a;
+    --border: #2a2a4a;
+    --text-primary: #e0e0f0;
+    --text-secondary: #8888aa;
+    --text-dim: #555577;
+    --accent: #6c63ff;
+    --accent-hover: #7b73ff;
+    --accent-dim: #4a4499;
+    --danger: #ff4757;
+    --warning: #ffa502;
+    --success: #2ed573;
+    --font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', monospace;
+    --font-sans: 'Segoe UI', system-ui, -apple-system, sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    font-family: var(--font-sans);
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Top Bar */
+  .topbar {
+    height: 36px;
+    background: var(--bg-secondary);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 16px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    gap: 20px;
+    flex-shrink: 0;
+  }
+
+  .topbar .logo {
+    color: var(--accent);
+    font-weight: 700;
+    letter-spacing: 1px;
+  }
+
+  .topbar .status-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 6px;
+  }
+
+  .topbar .status-dot.ok { background: var(--success); }
+  .topbar .status-dot.err { background: var(--danger); }
+  .topbar .status-dot.pending { background: var(--warning); }
+
+  /* Main content area */
+  .main {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  /* Empty state — shown when no apps */
+  .empty-state {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 24px;
+    padding: 40px;
+  }
+
+  .empty-state h1 {
+    font-family: var(--font-mono);
+    font-size: 28px;
+    color: var(--accent);
+    font-weight: 300;
+  }
+
+  .empty-state p {
+    color: var(--text-secondary);
+    font-size: 14px;
+    max-width: 500px;
+    text-align: center;
+    line-height: 1.6;
+  }
+
+  .examples {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+    justify-content: center;
+    max-width: 600px;
+  }
+
+  .example-chip {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 6px 14px;
+    font-size: 12px;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: all 0.15s;
+    font-family: var(--font-mono);
+  }
+
+  .example-chip:hover {
+    border-color: var(--accent);
+    color: var(--text-primary);
+    background: var(--bg-surface);
+  }
+
+  /* Desktop — app windows */
+  .desktop {
+    flex: 1;
+    display: grid;
+    gap: 2px;
+    padding: 2px;
+    overflow: hidden;
+  }
+
+  .desktop.cols-1 { grid-template-columns: 1fr; }
+  .desktop.cols-2 { grid-template-columns: 1fr 1fr; }
+  .desktop.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
+  .desktop.cols-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
+
+  .app-window {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .app-titlebar {
+    height: 30px;
+    background: var(--bg-tertiary);
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    padding: 0 10px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    flex-shrink: 0;
+    gap: 8px;
+  }
+
+  .app-titlebar .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app-titlebar .model-tag {
+    font-size: 9px;
+    background: var(--accent-dim);
+    color: var(--text-primary);
+    padding: 1px 6px;
+    border-radius: 3px;
+  }
+
+  .app-titlebar .close-btn {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    cursor: pointer;
+    font-size: 14px;
+    padding: 0 4px;
+    line-height: 1;
+  }
+  .app-titlebar .close-btn:hover { color: var(--danger); }
+
+  .app-body {
+    flex: 1;
+    overflow: hidden;
+    min-height: 0;
+  }
+
+  .app-body iframe {
+    width: 100%;
+    height: 100%;
+    border: none;
+  }
+
+  /* Prompt bar */
+  .prompt-bar {
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    padding: 10px 16px;
+    display: flex;
+    gap: 10px;
+    align-items: center;
+    flex-shrink: 0;
+  }
+
+  .prompt-bar input {
+    flex: 1;
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 16px;
+    color: var(--text-primary);
+    font-size: 14px;
+    font-family: var(--font-mono);
+    outline: none;
+    transition: border-color 0.15s;
+  }
+
+  .prompt-bar input:focus { border-color: var(--accent); }
+  .prompt-bar input::placeholder { color: var(--text-dim); }
+
+  .prompt-bar button {
+    background: var(--accent);
+    border: none;
+    border-radius: 6px;
+    padding: 10px 20px;
+    color: white;
+    font-size: 13px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: background 0.15s;
+    white-space: nowrap;
+  }
+
+  .prompt-bar button:hover { background: var(--accent-hover); }
+  .prompt-bar button:disabled { background: var(--accent-dim); cursor: not-allowed; }
+
+  /* Modal overlay */
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+  }
+
+  .modal-overlay.hidden { display: none; }
+
+  .modal {
+    background: var(--bg-surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 24px;
+    max-width: 500px;
+    width: 90%;
+  }
+
+  .modal h3 {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    margin-bottom: 16px;
+    color: var(--accent);
+  }
+
+  .modal .cap-list {
+    list-style: none;
+    margin-bottom: 20px;
+  }
+
+  .modal .cap-list li {
+    padding: 6px 0;
+    font-size: 13px;
+    font-family: var(--font-mono);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .modal .cap-list li input[type="checkbox"] { accent-color: var(--accent); }
+
+  .modal .analysis-warn {
+    background: rgba(255,165,2,0.1);
+    border: 1px solid var(--warning);
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--warning);
+  }
+
+  .modal .analysis-block {
+    background: rgba(255,71,87,0.1);
+    border: 1px solid var(--danger);
+    border-radius: 4px;
+    padding: 10px;
+    margin-bottom: 16px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    color: var(--danger);
+  }
+
+  .modal .btn-row {
+    display: flex;
+    gap: 10px;
+    justify-content: flex-end;
+  }
+
+  .modal .btn-row button {
+    border: none;
+    border-radius: 4px;
+    padding: 8px 18px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+  }
+
+  .modal .btn-approve { background: var(--accent); color: white; }
+  .modal .btn-approve:hover { background: var(--accent-hover); }
+  .modal .btn-deny { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border) !important; }
+  .modal .btn-deny:hover { color: var(--text-primary); }
+
+  /* Generation progress */
+  .generating {
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text-secondary);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .spinner {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--border);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* Taskbar */
+  .taskbar {
+    background: var(--bg-secondary);
+    border-top: 1px solid var(--border);
+    height: 32px;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 4px;
+    flex-shrink: 0;
+  }
+
+  .taskbar.hidden { display: none; }
+
+  .taskbar-item {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 3px;
+    padding: 3px 10px;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    cursor: default;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+  }
+
+  /* Log */
+  .log-panel {
+    background: var(--bg-primary);
+    border-top: 1px solid var(--border);
+    max-height: 120px;
+    overflow-y: auto;
+    padding: 6px 16px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--text-dim);
+  }
+
+  .log-panel.hidden { display: none; }
+  .log-panel .log-line { padding: 1px 0; }
+  .log-panel .log-warn { color: var(--warning); }
+  .log-panel .log-err { color: var(--danger); }
+  .log-panel .log-ok { color: var(--success); }
+</style>
+</head>
+<body>
+
+<!-- Top Bar -->
+<div class="topbar">
+  <span class="logo">LLM OS</span>
+  <span><span class="status-dot pending" id="ollama-status"></span>Ollama</span>
+  <span><span class="status-dot pending" id="claude-status"></span>Claude</span>
+  <span id="app-count" style="margin-left:auto">0 apps</span>
+</div>
+
+<!-- Main area -->
+<div class="main">
+  <!-- Empty state -->
+  <div class="empty-state" id="empty-state">
+    <h1>&gt; describe your app</h1>
+    <p>Type what you need in the prompt bar below. The OS generates it, sandboxes it, and runs it.</p>
+    <div class="examples" id="examples"></div>
+  </div>
+
+  <!-- Desktop with app windows -->
+  <div class="desktop cols-1" id="desktop" style="display:none"></div>
+</div>
+
+<!-- Taskbar -->
+<div class="taskbar hidden" id="taskbar"></div>
+
+<!-- Log panel -->
+<div class="log-panel hidden" id="log-panel"></div>
+
+<!-- Prompt bar -->
+<div class="prompt-bar">
+  <input type="text" id="prompt-input" placeholder="Describe the app you want..." autofocus>
+  <button id="generate-btn">Generate</button>
+</div>
+
+<!-- Capability approval modal -->
+<div class="modal-overlay hidden" id="cap-modal">
+  <div class="modal">
+    <h3 id="modal-title">Approve Capabilities</h3>
+    <div id="modal-analysis"></div>
+    <ul class="cap-list" id="modal-caps"></ul>
+    <div class="btn-row">
+      <button class="btn-deny" id="modal-deny">Deny</button>
+      <button class="btn-approve" id="modal-approve">Approve &amp; Launch</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { SandboxManager } from './sandbox.js';
+
+// --- State ---
+let appCounter = 0;
+let sdkCode = '';
+let generating = false;
+let sandboxMgr;
+
+// --- DOM refs ---
+const promptInput = document.getElementById('prompt-input');
+const generateBtn = document.getElementById('generate-btn');
+const emptyState = document.getElementById('empty-state');
+const desktop = document.getElementById('desktop');
+const taskbar = document.getElementById('taskbar');
+const logPanel = document.getElementById('log-panel');
+const capModal = document.getElementById('cap-modal');
+const modalTitle = document.getElementById('modal-title');
+const modalAnalysis = document.getElementById('modal-analysis');
+const modalCaps = document.getElementById('modal-caps');
+const modalApprove = document.getElementById('modal-approve');
+const modalDeny = document.getElementById('modal-deny');
+const ollamaStatus = document.getElementById('ollama-status');
+const claudeStatus = document.getElementById('claude-status');
+const appCountEl = document.getElementById('app-count');
+
+// --- Examples ---
+const EXAMPLES = [
+  'a simple calculator',
+  'a todo list with categories',
+  'a pomodoro timer',
+  'a color palette generator',
+  'a markdown previewer',
+  'a unit converter',
+  'a digital clock with stopwatch',
+  'a password generator',
+];
+
+function initExamples() {
+  const container = document.getElementById('examples');
+  for (const ex of EXAMPLES) {
+    const chip = document.createElement('div');
+    chip.className = 'example-chip';
+    chip.textContent = ex;
+    chip.onclick = () => { promptInput.value = ex; promptInput.focus(); };
+    container.appendChild(chip);
+  }
+}
+
+// --- Logging ---
+function log(msg, level = 'info') {
+  logPanel.classList.remove('hidden');
+  const line = document.createElement('div');
+  line.className = 'log-line' + (level === 'warn' ? ' log-warn' : level === 'error' ? ' log-err' : level === 'ok' ? ' log-ok' : '');
+  const time = new Date().toLocaleTimeString('en-US', { hour12: false });
+  line.textContent = `[${time}] ${msg}`;
+  logPanel.appendChild(line);
+  logPanel.scrollTop = logPanel.scrollHeight;
+}
+
+// --- LLM Status Check ---
+async function checkLLMStatus() {
+  try {
+    const res = await fetch('/api/status');
+    const data = await res.json();
+    ollamaStatus.className = 'status-dot ' + (data.ollama ? 'ok' : 'err');
+    claudeStatus.className = 'status-dot ' + (data.claude ? 'ok' : 'err');
+  } catch {
+    ollamaStatus.className = 'status-dot err';
+    claudeStatus.className = 'status-dot err';
+  }
+}
+
+// --- App Window Management ---
+function updateDesktopLayout() {
+  const count = sandboxMgr.listApps().length;
+  appCountEl.textContent = `${count} app${count !== 1 ? 's' : ''}`;
+
+  if (count === 0) {
+    desktop.style.display = 'none';
+    emptyState.style.display = '';
+    taskbar.classList.add('hidden');
+    desktop.className = 'desktop cols-1';
+    return;
+  }
+
+  emptyState.style.display = 'none';
+  desktop.style.display = '';
+  taskbar.classList.remove('hidden');
+
+  if (count === 1) desktop.className = 'desktop cols-1';
+  else if (count === 2) desktop.className = 'desktop cols-2';
+  else if (count === 3) desktop.className = 'desktop cols-3';
+  else desktop.className = 'desktop cols-4';
+}
+
+function addAppWindow(appId, iframe, title, model) {
+  const win = document.createElement('div');
+  win.className = 'app-window';
+  win.id = `window-${appId}`;
+
+  const titlebar = document.createElement('div');
+  titlebar.className = 'app-titlebar';
+
+  const titleEl = document.createElement('span');
+  titleEl.className = 'title';
+  titleEl.textContent = title;
+
+  const modelTag = document.createElement('span');
+  modelTag.className = 'model-tag';
+  modelTag.textContent = model.split('/').pop().split(':')[0];
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'close-btn';
+  closeBtn.textContent = '\u00d7';
+  closeBtn.onclick = () => closeApp(appId);
+
+  titlebar.append(titleEl, modelTag, closeBtn);
+
+  const body = document.createElement('div');
+  body.className = 'app-body';
+  body.appendChild(iframe);
+
+  win.append(titlebar, body);
+  desktop.appendChild(win);
+
+  // Taskbar entry
+  const tbItem = document.createElement('div');
+  tbItem.className = 'taskbar-item';
+  tbItem.id = `taskbar-${appId}`;
+  tbItem.textContent = title;
+  taskbar.appendChild(tbItem);
+
+  updateDesktopLayout();
+}
+
+function closeApp(appId) {
+  sandboxMgr.kill(appId);
+  document.getElementById(`window-${appId}`)?.remove();
+  document.getElementById(`taskbar-${appId}`)?.remove();
+  updateDesktopLayout();
+  log(`Closed app: ${appId}`, 'info');
+}
+
+// --- Generation Flow ---
+async function generateApp(prompt) {
+  if (generating) return;
+  generating = true;
+  generateBtn.disabled = true;
+  generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
+  log(`Generating: "${prompt}"`);
+
+  try {
+    // 1. Call LLM gateway
+    const genRes = await fetch('/api/generate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt }),
+    });
+
+    if (!genRes.ok) {
+      const err = await genRes.text();
+      throw new Error(`Generation failed: ${err}`);
+    }
+
+    const genData = await genRes.json();
+    log(`Generated with ${genData.provider} (${genData.model}) in ${genData.generationTime}ms`, 'ok');
+
+    if (genData.sanitization?.flagged) {
+      log(`Injection patterns stripped: ${genData.sanitization.flags.join(', ')}`, 'warn');
+    }
+
+    // 2. Run static analysis
+    const anaRes = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: genData.code }),
+    });
+
+    const analysis = await anaRes.json();
+
+    if (analysis.criticalCount > 0) {
+      log(`BLOCKED: ${analysis.criticalCount} critical security issue(s) found`, 'error');
+      for (const f of analysis.findings.filter(f => f.severity === 'CRITICAL')) {
+        log(`  ${f.rule}: ${f.description} (line ${f.line})`, 'error');
+      }
+    }
+
+    if (analysis.warningCount > 0) {
+      log(`${analysis.warningCount} warning(s) in generated code`, 'warn');
+    }
+
+    // 3. Show capability approval modal
+    showCapabilityModal(prompt, genData, analysis);
+
+  } catch (err) {
+    log(`Error: ${err.message}`, 'error');
+  } finally {
+    generating = false;
+    generateBtn.disabled = false;
+    generateBtn.textContent = 'Generate';
+  }
+}
+
+function showCapabilityModal(prompt, genData, analysis) {
+  modalTitle.textContent = `Launch: "${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}"`;
+
+  // Show analysis results
+  modalAnalysis.innerHTML = '';
+  if (analysis.criticalCount > 0) {
+    const block = document.createElement('div');
+    block.className = 'analysis-block';
+    block.innerHTML = `<strong>BLOCKED:</strong> ${analysis.criticalCount} critical issue(s) found.<br>` +
+      analysis.findings.filter(f => f.severity === 'CRITICAL')
+        .map(f => `Line ${f.line}: ${f.description}`).join('<br>');
+    modalAnalysis.appendChild(block);
+    modalApprove.disabled = true;
+    modalApprove.textContent = 'Blocked';
+  } else {
+    modalApprove.disabled = false;
+    modalApprove.textContent = 'Approve & Launch';
+  }
+
+  if (analysis.warningCount > 0) {
+    const warn = document.createElement('div');
+    warn.className = 'analysis-warn';
+    warn.innerHTML = `${analysis.warningCount} warning(s):<br>` +
+      analysis.findings.filter(f => f.severity === 'WARNING')
+        .map(f => `Line ${f.line}: ${f.description}`).join('<br>');
+    modalAnalysis.appendChild(warn);
+  }
+
+  // Show capability checkboxes
+  modalCaps.innerHTML = '';
+  for (const cap of genData.capabilities) {
+    const li = document.createElement('li');
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = true;
+    cb.value = cap;
+    cb.id = `cap-${cap}`;
+    const label = document.createElement('label');
+    label.htmlFor = `cap-${cap}`;
+    label.textContent = cap;
+    li.append(cb, label);
+    modalCaps.appendChild(li);
+  }
+
+  capModal.classList.remove('hidden');
+
+  // Wire up buttons
+  const approveHandler = () => {
+    capModal.classList.add('hidden');
+    modalApprove.removeEventListener('click', approveHandler);
+    modalDeny.removeEventListener('click', denyHandler);
+
+    // Get approved capabilities
+    const approved = [...modalCaps.querySelectorAll('input:checked')].map(cb => cb.value);
+
+    // Launch the app
+    const appId = `app-${++appCounter}`;
+    const title = prompt.slice(0, 40);
+    const iframe = sandboxMgr.launch(appId, genData.code, approved, title);
+    addAppWindow(appId, iframe, title, genData.model);
+    log(`Launched ${appId} with capabilities: [${approved.join(', ')}]`, 'ok');
+  };
+
+  const denyHandler = () => {
+    capModal.classList.add('hidden');
+    modalApprove.removeEventListener('click', approveHandler);
+    modalDeny.removeEventListener('click', denyHandler);
+    log('App launch denied by user', 'warn');
+  };
+
+  modalApprove.addEventListener('click', approveHandler);
+  modalDeny.addEventListener('click', denyHandler);
+}
+
+// --- Init ---
+async function init() {
+  // Load SDK code for injection into sandboxes
+  const sdkRes = await fetch('/sdk/sdk.js');
+  sdkCode = await sdkRes.text();
+
+  // Create sandbox manager
+  sandboxMgr = new SandboxManager(desktop, sdkCode, {
+    onStorageGet(appId, key) {
+      // Per-app storage via server
+      return fetch(`/api/storage/${appId}/${encodeURIComponent(key)}`)
+        .then(r => r.json())
+        .then(d => d.value)
+        .catch(() => null);
+    },
+    onStorageSet(appId, key, value) {
+      return fetch(`/api/storage/${appId}/${encodeURIComponent(key)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value }),
+      }).catch(() => {});
+    },
+    onNotify(appId, message) {
+      log(`[${appId}] ${message}`);
+    },
+    async onConfirm(appId, message) {
+      return window.confirm(`[${appId}]: ${message}`);
+    },
+  });
+
+  initExamples();
+  checkLLMStatus();
+  setInterval(checkLLMStatus, 30000);
+
+  // Prompt input
+  promptInput.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && promptInput.value.trim()) {
+      generateApp(promptInput.value.trim());
+      promptInput.value = '';
+    }
+  });
+
+  generateBtn.addEventListener('click', () => {
+    if (promptInput.value.trim()) {
+      generateApp(promptInput.value.trim());
+      promptInput.value = '';
+    }
+  });
+
+  log('LLM OS v0.1.0 ready', 'ok');
+}
+
+init();
+</script>
+</body>
+</html>
