@@ -13,6 +13,7 @@ import { storageGet, storageSet, storageRemove, storageKeys, storageUsage, stora
 import * as scheduler from './kernel/scheduler.js';
 import { tasks as selfImproveTasks } from './kernel/self-improve/index.js';
 import { loadQueue, queueClaudeTask } from './kernel/self-improve/claude-agent.js';
+import { loadProfile, reloadProfile, getBootApps } from './kernel/profile.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -154,6 +155,23 @@ async function handleAPI(method, fullUrl, body, res) {
       const task = queueClaudeTask(prompt, 'api');
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(task));
+      return;
+    }
+
+    // --- OS Profile ---
+
+    // GET /api/profile — current profile
+    if (method === 'GET' && url === '/api/profile') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(loadProfile()));
+      return;
+    }
+
+    // POST /api/profile/reload — reload profile from disk
+    if (method === 'POST' && url === '/api/profile/reload') {
+      const profile = reloadProfile();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(profile));
       return;
     }
 
@@ -482,6 +500,18 @@ server.listen(config.port, host, () => {
   Providers:
 ${provLines}
   `);
+
+  // Load OS profile
+  const profile = loadProfile();
+  const bootApps = getBootApps();
+  if (profile.name) {
+    console.log(`  [profile] User: ${profile.name} | Locale: ${profile.locale} | Theme: ${profile.shell?.theme}`);
+  } else {
+    console.log(`  [profile] Default (create data/profile.yaml to customize)`);
+  }
+  if (bootApps.length > 0) {
+    console.log(`  [profile] ${bootApps.length} boot app(s) queued for generation`);
+  }
 
   // Register self-improvement tasks
   for (const taskDef of selfImproveTasks) {

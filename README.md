@@ -361,7 +361,17 @@ docker run --rm --privileged -v $(pwd)/build/output:/output llmos-buildroot
 - [ ] Multi-user support, resource scheduling
 - [ ] The OS is the LLM. The LLM is the OS.
 
-> The goal is full kernel independence. We start with a web prototype because a working demo attracts contributors, and the core innovation — LLM generation + sandboxing + capabilities — is orthogonal to the kernel. Every layer gets replaced as we go.
+### Phase 5: Ephemeral OS — Fresh Instance Every Boot
+- [ ] OS Profile spec (`data/profile.yaml`) — user identity, preferences, always-on apps
+- [ ] Boot-time generation pipeline — kernel reads profile, generates shell UI + core apps on startup
+- [ ] Template caching — hash profile → cache generated output, skip re-generation when unchanged
+- [ ] Parallel generation — shell, core apps, and services generated concurrently
+- [ ] Immutable/persistent partition split — read-only root (regenerated) + persistent `/data` (user state)
+- [ ] Profile sync — export/import profiles, carry your OS identity to any machine
+- [ ] Local-first generation — boot completes without network, cloud LLMs optional enhancement
+- [ ] **Every boot is a fresh OS. Only the user persists.**
+
+> The goal is full kernel independence. We start with a web prototype because a working demo attracts contributors, and the core innovation — LLM generation + sandboxing + capabilities — is orthogonal to the kernel. Every layer gets replaced as we go. Phase 5 takes this further: the OS itself becomes ephemeral. Only the user's identity and data persist — everything else is regenerated from a profile on every boot.
 
 ## Self-Improvement
 

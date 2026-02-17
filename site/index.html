@@ -589,21 +589,21 @@
 <!-- Architecture -->
 <section>
   <h2>Architecture</h2>
-  <p class="subtitle">Layered design — every layer gets replaced as we move toward a custom kernel.</p>
+  <p class="subtitle">Layered design — every layer gets replaced as we move toward an ephemeral OS.</p>
 
-  <div class="arch-block"><span class="layer">Phase 1 (current)</span>     <span class="layer">Phase 4 (goal)</span>
+  <div class="arch-block"><span class="layer">Phase 1 (current)</span>     <span class="layer">Phase 4</span>              <span class="layer">Phase 5 (vision)</span>
 
-<span class="accent">Generated Apps</span>            <span class="accent">Generated Apps</span>
-   iframe sandbox             WASM sandbox
-       |                          |
-<span class="accent">Shell UI</span>                    <span class="accent">Shell UI</span>
-   browser DOM                framebuffer
-       |                          |
-<span class="accent">Kernel</span>                      <span class="accent">Kernel</span>
-   Node.js                    Rust no_std
-       |                          |
-<span class="accent">Host OS</span>                     <span class="accent">Custom Microkernel</span>
-   Windows/Linux/macOS        UEFI boot, zero Linux</div>
+<span class="accent">Generated Apps</span>            <span class="accent">Generated Apps</span>         <span class="accent">Generated Apps</span>
+   iframe sandbox             WASM sandbox            WASM sandbox
+       |                          |                       |
+<span class="accent">Shell UI</span>                    <span class="accent">Shell UI</span>                <span class="accent">Generated Shell</span>
+   browser DOM                framebuffer             regenerated at boot
+       |                          |                       |
+<span class="accent">Kernel</span>                      <span class="accent">Kernel</span>                  <span class="accent">Kernel + Profile</span>
+   Node.js                    Rust no_std             reads user identity
+       |                          |                       |
+<span class="accent">Host OS</span>                     <span class="accent">Custom Microkernel</span>      <span class="accent">Ephemeral Root</span>
+   Windows/Linux/macOS        UEFI boot               fresh every boot</div>
 </section>
 
 <!-- Quick Start -->

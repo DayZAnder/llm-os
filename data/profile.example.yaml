@@ -1,0 +1,60 @@
+# LLM OS Profile
+# This file defines your OS identity. On boot, the kernel reads this profile
+# and generates the shell UI, core apps, and services from it.
+#
+# In Phase 5, the OS becomes ephemeral — everything except this profile
+# and your /data directory is regenerated fresh on every boot.
+#
+# Copy to profile.yaml and customize:
+#   cp data/profile.example.yaml data/profile.yaml
+
+# --- Identity ---
+# Who you are. This context is passed to the LLM when generating apps and UI.
+name: ""
+locale: en
+timezone: UTC
+
+# --- Shell ---
+# How the OS looks and feels. The shell UI is generated from these preferences.
+shell:
+  theme: dark            # dark | light | auto
+  font: monospace        # monospace | sans | serif
+  layout: single         # single | tiled | stacked
+  greeting: "What would you like to build?"
+
+# --- Always-on Apps ---
+# Apps generated and launched automatically on every boot.
+# Each entry is a natural language prompt — the kernel generates the app from it.
+boot_apps: []
+  # - "a minimal clock showing the current time"
+  # - "a pomodoro timer with 25min work / 5min break"
+  # - "a sticky notes app with local storage"
+
+# --- Services ---
+# System services to enable on boot.
+services:
+  ssh: true
+  ollama: true           # Start local Ollama if available
+  scheduler: false       # Self-improvement scheduler
+
+# --- Security ---
+# Default security posture for generated apps.
+security:
+  sandbox: strict        # strict | permissive
+  network: deny          # deny | prompt | allow — default network access for apps
+  max_capabilities: 5    # Max capabilities per app before requiring explicit approval
+
+# --- LLM Preferences ---
+# Which provider to prefer for generation tasks.
+llm:
+  prefer: local          # local | cloud | fastest
+  temperature: 0.7       # Default temperature for generation
+  # provider: ollama     # Force a specific provider (overrides prefer)
+
+# --- Data Persistence ---
+# What survives across boots. Everything else is regenerated.
+persist:
+  - data/apps/           # Generated app storage
+  - data/registry.json   # App registry
+  - data/profile.yaml    # This file
+  - data/claude-tasks.json
