@@ -323,9 +323,36 @@ Type a description in the prompt bar. The OS generates, analyzes, and sandboxes 
 
 ## Contributing
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) for detailed instructions, including **ready-to-use AI prompts** you can paste into Claude, GPT, or your preferred coding assistant to generate contributions.
+### With Claude Code (fastest way)
 
-We've designed this project so that **AI-assisted contributions are first-class citizens**. Every component has a corresponding prompt that describes exactly what to build.
+```bash
+gh repo fork DayZAnder/llm-os --clone
+cd llm-os
+code .
+```
+
+Claude Code reads `CLAUDE.md` automatically — it knows the architecture, the values, and what needs building. Just tell it what to work on:
+
+- *"Build a WASM sandbox to replace the iframe approach"*
+- *"Add cryptographic capability tokens using Web Crypto"*
+- *"Improve the shell UI — add drag-to-resize windows"*
+- *"Audit the security — try to escape the sandbox"*
+
+Or pick a ready-made prompt from [CONTRIBUTING.md](CONTRIBUTING.md) — they include full specs.
+
+When done: `node scripts/values-check.js` then `gh pr create`.
+
+### With any other AI tool
+
+Copy a prompt from [CONTRIBUTING.md](CONTRIBUTING.md) into ChatGPT, Copilot, Cursor, or Gemini. There's a context block to prepend that gives any AI the project values and architecture.
+
+### Without AI
+
+Fork, read the README, run `node src/server.js`, pick an [issue](https://github.com/DayZAnder/llm-os/issues).
+
+### The only rule
+
+Run `node scripts/values-check.js` before you PR. It checks your code against the core values. An AI bot also reviews every PR automatically.
 
 ## Prior Art & Inspiration
 
