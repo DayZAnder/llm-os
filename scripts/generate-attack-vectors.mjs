@@ -11,7 +11,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://192.168.2.183:11434';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:14b';
 const OUTPUT = join(__dirname, '..', 'tests', 'security', 'generated-vectors.json');
 

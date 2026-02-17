@@ -8,7 +8,7 @@
 import { analyze } from '../src/kernel/analyzer.js';
 import { publishApp } from '../src/kernel/registry/store.js';
 
-const OLLAMA_URL = process.env.OLLAMA_URL || 'http://192.168.2.183:11434';
+const OLLAMA_URL = process.env.OLLAMA_URL || 'http://localhost:11434';
 const MODEL = process.env.OLLAMA_MODEL || 'qwen2.5:14b';
 
 const SYSTEM_PROMPT = `You are the app generator for LLM OS. Generate a SINGLE self-contained app.

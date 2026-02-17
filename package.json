@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node tests/analyzer.test.js && node tests/storage.test.js && node tests/registry.test.js && node tests/scheduler.test.js"
+    "test": "node tests/analyzer.test.js && node tests/storage.test.js && node tests/registry.test.js && node tests/scheduler.test.js && node tests/gateway.test.js"
   },
   "license": "MIT",
   "repository": {

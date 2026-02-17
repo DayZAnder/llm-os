@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './kernel/config.js';
-import { generate, generateProcess } from './kernel/gateway.js';
+import { generate, generateProcess, getProviders } from './kernel/gateway.js';
 import { analyze, analyzeDockerfile } from './kernel/analyzer.js';
 import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType } from './kernel/capabilities.js';
 import { dockerPing } from './kernel/docker/client.js';
@@ -166,21 +166,21 @@ async function handleAPI(method, fullUrl, body, res) {
 
     // GET /api/status — check LLM + Docker connectivity
     if (method === 'GET' && url === '/api/status') {
-      let ollama = false;
-      let claude = !!config.claude.apiKey;
+      const providerStatus = getProviders();
       let docker = false;
-
-      try {
-        const r = await fetch(`${config.ollama.url}/api/tags`, { signal: AbortSignal.timeout(3000) });
-        ollama = r.ok;
-      } catch {}
 
       if (config.docker.enabled) {
         try { docker = await dockerPing(); } catch {}
       }
 
+      // Backward compat: include top-level ollama/claude booleans
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ ollama, claude, docker }));
+      res.end(JSON.stringify({
+        providers: providerStatus,
+        ollama: providerStatus.ollama?.available || false,
+        claude: providerStatus.claude?.available || false,
+        docker,
+      }));
       return;
     }
 
@@ -445,15 +445,18 @@ const server = createServer((req, res) => {
 
 const host = process.env.HOST || 'localhost';
 server.listen(config.port, host, () => {
+  const provs = getProviders();
+  const provLines = Object.entries(provs)
+    .map(([name, info]) => `  ${name}: ${info.available ? `${info.model}` : 'not configured'}`)
+    .join('\n');
   console.log(`
   ╔══════════════════════════════════════╗
-  ║           LLM OS v0.1.0             ║
-  ║                                      ║
+  ║           LLM OS v0.2.0             ║
   ║  http://localhost:${config.port}              ║
-  ║                                      ║
-  ║  Ollama: ${config.ollama.url}  ║
-  ║  Claude: ${config.claude.apiKey ? 'configured' : 'not configured (add ANTHROPIC_API_KEY)'}       ║
   ╚══════════════════════════════════════╝
+
+  Providers:
+${provLines}
   `);
 
   // Register self-improvement tasks

@@ -1,4 +1,39 @@
 import { config } from './config.js';
+import { provider as ollamaProvider } from './providers/ollama.js';
+import { provider as claudeProvider } from './providers/claude.js';
+import { provider as openaiProvider } from './providers/openai-compatible.js';
+
+// Provider registry — add new providers here
+const providers = new Map();
+providers.set('ollama', ollamaProvider);
+providers.set('claude', claudeProvider);
+providers.set('openai', openaiProvider);
+
+function getProviderConfig(name) {
+  return config.providers[name] || {};
+}
+
+function getAvailableProviders() {
+  const available = [];
+  for (const [name, prov] of providers) {
+    if (prov.isAvailable(getProviderConfig(name))) {
+      available.push(name);
+    }
+  }
+  return available;
+}
+
+export function getProviders() {
+  const result = {};
+  for (const [name, prov] of providers) {
+    const cfg = getProviderConfig(name);
+    result[name] = {
+      available: prov.isAvailable(cfg),
+      model: cfg.model || null,
+    };
+  }
+  return result;
+}
 
 const SYSTEM_PROMPT = `You are the app generator for LLM OS. Generate a SINGLE self-contained app.
 
@@ -24,7 +59,7 @@ Rules:
 - Keep the app simple, functional, and visually clean
 - Use a dark color scheme (dark background, light text)`;
 
-// Keywords that suggest a complex app needing Claude
+// Keywords that suggest a complex app needing a capable model
 const COMPLEX_KEYWORDS = [
   'database', 'api', 'auth', 'websocket', 'real-time', 'chart', 'graph',
   'machine learning', 'encrypt', 'oauth', 'multi-page', 'routing',
@@ -47,7 +82,7 @@ const INJECTION_PATTERNS = [
   /<\/?(?:system|prompt|instruction)>/gi,
 ];
 
-function sanitizePrompt(input) {
+export function sanitizePrompt(input) {
   let clean = input;
   const flags = [];
 
@@ -69,60 +104,53 @@ function sanitizePrompt(input) {
   return { clean: clean.trim(), flagged: flags.length > 0, flags };
 }
 
-function estimateComplexity(prompt) {
+export function estimateComplexity(prompt) {
   const lower = prompt.toLowerCase();
   const matchCount = COMPLEX_KEYWORDS.filter(kw => lower.includes(kw)).length;
   const wordCount = prompt.split(/\s+/).length;
 
-  // Complex if: multiple complex keywords, or very long prompt, or explicit complexity
   if (matchCount >= 2 || wordCount > 80) return 'complex';
   if (matchCount >= 1 || wordCount > 40) return 'medium';
   return 'simple';
 }
 
-function selectProvider(complexity) {
-  // Use Claude for complex apps if API key is available
-  if (complexity === 'complex' && config.claude.apiKey) return 'claude';
-  if (complexity === 'medium' && config.claude.apiKey) return 'claude';
+export function selectProvider(complexity) {
+  // Explicit routing overrides auto-detection
+  const primary = config.routing.primary;
+  if (primary && providers.has(primary)) {
+    const prov = providers.get(primary);
+    if (prov.isAvailable(getProviderConfig(primary))) return primary;
+  }
+
+  // Auto-detect: use Claude/OpenAI for complex, Ollama for simple
+  if (complexity !== 'simple') {
+    if (providers.get('claude').isAvailable(getProviderConfig('claude'))) return 'claude';
+    if (providers.get('openai').isAvailable(getProviderConfig('openai'))) return 'openai';
+  }
   return 'ollama';
 }
 
-async function generateWithOllama(prompt) {
-  const res = await fetch(`${config.ollama.url}/api/generate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      model: config.ollama.model,
-      prompt: `${SYSTEM_PROMPT}\n\nUser request: ${prompt}`,
-      stream: false,
-      options: { temperature: 0.4, num_predict: 4096 },
-    }),
-  });
+function getFallbackProvider(failedProvider) {
+  // Explicit fallback
+  const fallback = config.routing.fallback;
+  if (fallback && fallback !== failedProvider && providers.has(fallback)) {
+    const prov = providers.get(fallback);
+    if (prov.isAvailable(getProviderConfig(fallback))) return fallback;
+  }
 
-  if (!res.ok) throw new Error(`Ollama error: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  return data.response;
+  // Auto-detect fallback: try anything that's available and not the failed one
+  for (const [name, prov] of providers) {
+    if (name !== failedProvider && prov.isAvailable(getProviderConfig(name))) {
+      return name;
+    }
+  }
+  return null;
 }
 
-async function generateWithClaude(prompt) {
-  const res = await fetch('https://api.anthropic.com/v1/messages', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'x-api-key': config.claude.apiKey,
-      'anthropic-version': '2023-06-01',
-    },
-    body: JSON.stringify({
-      model: config.claude.model,
-      max_tokens: 4096,
-      system: SYSTEM_PROMPT,
-      messages: [{ role: 'user', content: prompt }],
-    }),
-  });
-
-  if (!res.ok) throw new Error(`Claude error: ${res.status} ${await res.text()}`);
-  const data = await res.json();
-  return data.content[0].text;
+async function generateWithProvider(name, messages, options = {}) {
+  const prov = providers.get(name);
+  if (!prov) throw new Error(`Unknown provider: ${name}`);
+  return prov.generate(messages, getProviderConfig(name), options);
 }
 
 function extractCapabilities(code) {
@@ -204,56 +232,40 @@ export async function generateProcess(prompt) {
   if (flagged) console.warn('[gateway] Injection patterns detected:', flags);
 
   const complexity = estimateComplexity(clean);
-  // Process apps always use Claude if available (more complex)
-  const provider = config.claude.apiKey ? 'claude' : 'ollama';
+  // Process apps prefer capable models
+  const providerName = selectProvider('complex');
 
-  console.log(`[gateway] Generating process app: provider=${provider}`);
+  console.log(`[gateway] Generating process app: provider=${providerName}`);
+
+  const messages = [
+    { role: 'system', content: PROCESS_SYSTEM_PROMPT },
+    { role: 'user', content: clean },
+  ];
 
   let raw;
-  if (provider === 'claude') {
-    const res = await fetch('https://api.anthropic.com/v1/messages', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'x-api-key': config.claude.apiKey,
-        'anthropic-version': '2023-06-01',
-      },
-      body: JSON.stringify({
-        model: config.claude.model,
-        max_tokens: 4096,
-        system: PROCESS_SYSTEM_PROMPT,
-        messages: [{ role: 'user', content: clean }],
-      }),
-    });
-    if (!res.ok) throw new Error(`Claude error: ${res.status} ${await res.text()}`);
-    const data = await res.json();
-    raw = data.content[0].text;
-  } else {
-    const res = await fetch(`${config.ollama.url}/api/generate`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        model: config.ollama.model,
-        prompt: `${PROCESS_SYSTEM_PROMPT}\n\nUser request: ${clean}`,
-        stream: false,
-        options: { temperature: 0.4, num_predict: 4096 },
-      }),
-    });
-    if (!res.ok) throw new Error(`Ollama error: ${res.status} ${await res.text()}`);
-    const data = await res.json();
-    raw = data.response;
+  try {
+    raw = await generateWithProvider(providerName, messages);
+  } catch (err) {
+    const fb = getFallbackProvider(providerName);
+    if (fb) {
+      console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
+      raw = await generateWithProvider(fb, messages);
+    } else {
+      throw err;
+    }
   }
 
   const { dockerfile, code } = parseProcessResponse(raw);
   const capabilities = extractProcessCapabilities(raw);
+  const cfg = getProviderConfig(providerName);
 
   return {
     type: 'process',
     dockerfile,
     code,
     capabilities,
-    model: provider === 'claude' ? config.claude.model : config.ollama.model,
-    provider,
+    model: cfg.model,
+    provider: providerName,
     complexity,
     generationTime: Date.now() - start,
     sanitization: { flagged, flags },
@@ -271,34 +283,38 @@ export async function generate(prompt) {
 
   // Route to provider
   const complexity = estimateComplexity(clean);
-  const provider = selectProvider(complexity);
+  const providerName = selectProvider(complexity);
 
-  console.log(`[gateway] Generating: complexity=${complexity} provider=${provider}`);
+  console.log(`[gateway] Generating: complexity=${complexity} provider=${providerName}`);
+
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'user', content: clean },
+  ];
 
   let raw;
   try {
-    raw = provider === 'claude'
-      ? await generateWithClaude(clean)
-      : await generateWithOllama(clean);
+    raw = await generateWithProvider(providerName, messages);
   } catch (err) {
-    // Fallback: if Claude fails, try Ollama (and vice versa)
-    console.warn(`[gateway] ${provider} failed, trying fallback:`, err.message);
-    raw = provider === 'claude'
-      ? await generateWithOllama(clean)
-      : config.claude.apiKey
-        ? await generateWithClaude(clean)
-        : null;
-    if (!raw) throw err;
+    // Fallback: try another available provider
+    const fb = getFallbackProvider(providerName);
+    if (fb) {
+      console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
+      raw = await generateWithProvider(fb, messages);
+    } else {
+      throw err;
+    }
   }
 
   const code = cleanResponse(raw);
   const capabilities = extractCapabilities(code);
+  const cfg = getProviderConfig(providerName);
 
   return {
     code,
     capabilities,
-    model: provider === 'claude' ? config.claude.model : config.ollama.model,
-    provider,
+    model: cfg.model,
+    provider: providerName,
     complexity,
     generationTime: Date.now() - start,
     sanitization: { flagged, flags },

@@ -104,12 +104,14 @@ The "LLM OS" label has been claimed by dozens of projects — agent frameworks, 
 ### Core Components
 
 #### 1. LLM Gateway
-The single chokepoint for all AI generation. Routes requests to the best available model:
+The single chokepoint for all AI generation. Pluggable provider registry routes requests to the best available model:
 
-- **Local models** (Ollama, llama.cpp) — simple UI tools, text processing
-- **Cloud APIs** (Claude, GPT, Gemini) — complex applications, multi-file apps
-- Enforces rate limits, cost budgets, audit logging
+- **Local models** (Ollama) — simple UI tools, text processing
+- **Cloud APIs** (Claude, OpenAI, OpenRouter, Together, Groq) — complex applications
+- **Any OpenAI-compatible API** — vLLM, LM Studio, and custom endpoints via `OPENAI_BASE_URL`
+- Configurable routing: set `PRIMARY_PROVIDER` / `FALLBACK_PROVIDER` or let auto-detection choose
 - Sanitizes all inputs/outputs against prompt injection
+- Adding a new provider is ~30 lines of code (see [CONTRIBUTING.md](CONTRIBUTING.md#adding-a-provider))
 
 #### 2. Sandbox Manager
 Every generated app runs in complete isolation:
@@ -259,7 +261,7 @@ Prompt injection is the #1 threat when LLMs generate executable code.
 | App Sandboxing (Phase 1) | iframe + strict CSP | Fast to prototype, well-understood |
 | App Sandboxing (Phase 2) | WebAssembly (Extism/Wasmtime) | Memory-safe, near-native, portable |
 | Local LLM | Ollama / llama.cpp | Free, private, fast for simple apps |
-| Cloud LLM | Claude API, OpenAI API | Complex app generation |
+| Cloud LLM | Claude, OpenAI, OpenRouter, Groq, Together | Complex app generation (pluggable) |
 | Registry Backend | SQLite + Git (content-addressed) | Simple, proven, works offline |
 | Inter-Process Comm | postMessage → shared-nothing message bus | Secure by default |
 | Static Analysis | tree-sitter + custom rules | Fast AST parsing, language-agnostic |
@@ -283,7 +285,7 @@ These are genuinely unsolved and need community input:
 ```bash
 git clone https://github.com/DayZAnder/llm-os.git
 cd llm-os
-cp .env.example .env      # Edit with your Ollama URL / API keys
+cp .env.example .env      # Edit with your LLM provider settings
 npm install
 node src/server.js         # Open http://localhost:3000
 ```

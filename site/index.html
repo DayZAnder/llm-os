@@ -559,7 +559,7 @@
       <div class="step-num">2</div>
       <div>
         <h3>The kernel generates the app</h3>
-        <p>Routes to the best LLM — local Ollama for simple apps, Claude API for complex ones. Prompt injection is stripped before generation.</p>
+        <p>Pluggable provider gateway routes to the best LLM — local Ollama, Claude, OpenAI, OpenRouter, Groq, or any compatible API. Prompt injection is stripped before generation.</p>
       </div>
     </div>
     <div class="flow-step">
@@ -647,7 +647,8 @@
 <span class="cmd">node src/server.js</span>
 
 <span class="comment"># Open http://localhost:3000</span>
-<span class="comment"># Pick an issue from GitHub</span></pre>
+<span class="comment"># Supports Ollama, Claude, OpenAI,</span>
+<span class="comment"># OpenRouter, Groq, Together, vLLM</span></pre>
     </div>
   </div>
 </section>
@@ -725,7 +726,8 @@
 
   <div class="dl-note">
     <strong>Quick start:</strong> Boot the VM, log in as <code>root</code> / <code>llmos</code>, then open <code>http://&lt;vm-ip&gt;:3000</code> in your browser.
-    Configure your LLM backend with <code>llmos-config set OLLAMA_URL http://your-ollama:11434</code>.
+    Configure your LLM provider: <code>llmos-config set OLLAMA_URL http://your-ollama:11434</code> or set <code>ANTHROPIC_API_KEY</code>, <code>OPENAI_API_KEY</code>, etc.
+    Supports Ollama, Claude, OpenAI, OpenRouter, Together, Groq, vLLM, and LM Studio.
     Change the default password on first login!
     <br><br>
     <strong>Formats:</strong> QCOW2 (Proxmox/KVM/QEMU), VHDX (Hyper-V), OVA (VirtualBox/VMware).

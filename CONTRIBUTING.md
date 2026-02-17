@@ -360,7 +360,7 @@ Key files:
 - src/kernel/analyzer.js — static security analysis (35 regex rules)
 - src/kernel/storage.js — per-app persistent storage (JSON files, 5MB quota)
 - src/kernel/capabilities.js — capability-based access control
-- src/kernel/gateway.js — LLM integration (Ollama + Claude)
+- src/kernel/gateway.js — LLM integration (pluggable: Ollama, Claude, OpenAI, and more)
 - src/kernel/registry/store.js — app registry with search
 - src/server.js — HTTP API server
 - src/shell/index.html — desktop UI (vanilla JS, single file)
@@ -396,6 +396,72 @@ Human contributions are equally valuable — some of the most impactful work doe
 - **Documentation** — Explain the architecture, write tutorials
 - **Translations** — Localize the shell UI
 - **Testing** — Run `node tests/*.test.js`, try edge cases, report failures
+
+## Adding a Provider
+
+The LLM gateway supports pluggable providers. To add a new one (e.g., Gemini, Mistral, a custom API):
+
+**1. Create `src/kernel/providers/your-provider.js`:**
+
+```javascript
+export const provider = {
+  name: 'your-provider',
+
+  isAvailable(providerConfig) {
+    return !!providerConfig.apiKey;
+  },
+
+  async checkHealth(providerConfig) {
+    return !!providerConfig.apiKey;
+  },
+
+  async generate(messages, providerConfig, options = {}) {
+    // messages: [{ role: 'system'|'user', content: string }]
+    // options: { temperature, maxTokens }
+    const res = await fetch('https://api.example.com/v1/generate', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${providerConfig.apiKey}`,
+      },
+      body: JSON.stringify({
+        model: providerConfig.model,
+        messages,
+        temperature: options.temperature ?? 0.4,
+        max_tokens: options.maxTokens ?? 4096,
+      }),
+    });
+    if (!res.ok) throw new Error(`Provider error: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    return data.output; // Return the generated text string
+  },
+};
+```
+
+**2. Register it in `src/kernel/gateway.js`:**
+
+```javascript
+import { provider as yourProvider } from './providers/your-provider.js';
+providers.set('your-provider', yourProvider);
+```
+
+**3. Add config in `src/kernel/config.js`:**
+
+```javascript
+providers: {
+  // ... existing providers
+  'your-provider': {
+    apiKey: process.env.YOUR_PROVIDER_API_KEY || '',
+    model: process.env.YOUR_PROVIDER_MODEL || 'default-model',
+  },
+},
+```
+
+**4. Add env vars to `.env.example`** and test with `node tests/gateway.test.js`.
+
+If your provider uses the OpenAI-compatible `/v1/chat/completions` format (OpenRouter, Together, Groq, vLLM, LM Studio), you don't need a new provider at all — just set `OPENAI_BASE_URL` and `OPENAI_API_KEY`.
+
+---
 
 ## Code Guidelines
 

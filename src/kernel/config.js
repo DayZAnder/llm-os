@@ -16,14 +16,30 @@ if (existsSync(envPath)) {
   }
 }
 
-export const config = {
+const providers = {
   ollama: {
-    url: process.env.OLLAMA_URL || 'http://192.168.2.183:11434',
+    url: process.env.OLLAMA_URL || 'http://localhost:11434',
     model: process.env.OLLAMA_MODEL || 'qwen2.5:14b',
   },
   claude: {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
     model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250929',
+  },
+  openai: {
+    apiKey: process.env.OPENAI_API_KEY || '',
+    baseUrl: process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1',
+    model: process.env.OPENAI_MODEL || 'gpt-4o',
+  },
+};
+
+export const config = {
+  providers,
+  // Backward compat: config.ollama / config.claude still work
+  ollama: providers.ollama,
+  claude: providers.claude,
+  routing: {
+    primary: process.env.PRIMARY_PROVIDER || '',
+    fallback: process.env.FALLBACK_PROVIDER || '',
   },
   port: parseInt(process.env.PORT || '3000', 10),
   docker: {
