@@ -396,6 +396,36 @@
   .log-panel .log-warn { color: var(--warning); }
   .log-panel .log-err { color: var(--danger); }
   .log-panel .log-ok { color: var(--success); }
+
+  /* Process app styles */
+  .process-status {
+    font-size: 9px;
+    padding: 1px 6px;
+    border-radius: 3px;
+    text-transform: uppercase;
+    font-family: var(--font-mono);
+  }
+  .process-status.building { background: var(--warning); color: #0d0d1a; }
+  .process-status.running { background: var(--success); color: #0d0d1a; }
+  .process-status.stopped { background: var(--danger); color: white; }
+  .process-status.starting { background: var(--accent-dim); color: var(--text-primary); }
+
+  .process-logs {
+    background: var(--bg-primary);
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    font-size: 10px;
+    padding: 8px;
+    height: 180px;
+    overflow-y: auto;
+    border-top: 1px solid var(--border);
+    white-space: pre-wrap;
+    word-break: break-all;
+  }
+
+  .process-body { display: flex; flex-direction: column; }
+  .process-body iframe { flex: 1; border: none; min-height: 0; }
+  .process-body .process-logs { flex-shrink: 0; }
 </style>
 </head>
 <body>
@@ -405,6 +435,7 @@
   <span class="logo">LLM OS</span>
   <span><span class="status-dot pending" id="ollama-status"></span>Ollama</span>
   <span><span class="status-dot pending" id="claude-status"></span>Claude</span>
+  <span><span class="status-dot pending" id="docker-status"></span>Docker</span>
   <span id="app-count" style="margin-left:auto">0 apps</span>
 </div>
 
@@ -454,6 +485,7 @@ let appCounter = 0;
 let sdkCode = '';
 let generating = false;
 let sandboxMgr;
+const processApps = new Map(); // appId → { port, status, pollInterval }
 
 // --- DOM refs ---
 const promptInput = document.getElementById('prompt-input');
@@ -470,6 +502,7 @@ const modalApprove = document.getElementById('modal-approve');
 const modalDeny = document.getElementById('modal-deny');
 const ollamaStatus = document.getElementById('ollama-status');
 const claudeStatus = document.getElementById('claude-status');
+const dockerStatus = document.getElementById('docker-status');
 const appCountEl = document.getElementById('app-count');
 
 // --- Examples ---
@@ -513,15 +546,18 @@ async function checkLLMStatus() {
     const data = await res.json();
     ollamaStatus.className = 'status-dot ' + (data.ollama ? 'ok' : 'err');
     claudeStatus.className = 'status-dot ' + (data.claude ? 'ok' : 'err');
+    dockerStatus.className = 'status-dot ' + (data.docker ? 'ok' : 'err');
   } catch {
     ollamaStatus.className = 'status-dot err';
     claudeStatus.className = 'status-dot err';
+    dockerStatus.className = 'status-dot err';
   }
 }
 
 // --- App Window Management ---
 function updateDesktopLayout() {
-  const count = sandboxMgr.listApps().length;
+  const iframeCount = sandboxMgr ? sandboxMgr.listApps().length : 0;
+  const count = iframeCount + processApps.size;
   appCountEl.textContent = `${count} app${count !== 1 ? 's' : ''}`;
 
   if (count === 0) {
@@ -590,6 +626,110 @@ function closeApp(appId) {
   log(`Closed app: ${appId}`, 'info');
 }
 
+// --- Process App Window Management ---
+function addProcessWindow(appId, processInfo, title) {
+  const win = document.createElement('div');
+  win.className = 'app-window';
+  win.id = `window-${appId}`;
+
+  const titlebar = document.createElement('div');
+  titlebar.className = 'app-titlebar';
+
+  const titleEl = document.createElement('span');
+  titleEl.className = 'title';
+  titleEl.textContent = title;
+
+  const modelTag = document.createElement('span');
+  modelTag.className = 'model-tag';
+  modelTag.textContent = 'PROCESS';
+
+  const statusEl = document.createElement('span');
+  statusEl.className = `process-status ${processInfo.status}`;
+  statusEl.id = `status-${appId}`;
+  statusEl.textContent = processInfo.status;
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'close-btn';
+  closeBtn.textContent = '\u00d7';
+  closeBtn.onclick = () => closeProcessApp(appId);
+
+  titlebar.append(titleEl, modelTag, statusEl, closeBtn);
+
+  const body = document.createElement('div');
+  body.className = 'app-body process-body';
+
+  // If the process has a web UI, embed it
+  if (processInfo.hasWebUI && processInfo.port) {
+    const iframe = document.createElement('iframe');
+    iframe.src = `http://localhost:${processInfo.port}`;
+    body.appendChild(iframe);
+  }
+
+  // Log viewer
+  const logViewer = document.createElement('div');
+  logViewer.className = 'process-logs';
+  logViewer.id = `logs-${appId}`;
+  logViewer.textContent = 'Waiting for logs...';
+  body.appendChild(logViewer);
+
+  win.append(titlebar, body);
+  desktop.appendChild(win);
+
+  // Taskbar
+  const tbItem = document.createElement('div');
+  tbItem.className = 'taskbar-item';
+  tbItem.id = `taskbar-${appId}`;
+  tbItem.textContent = `\u25cf ${title}`;
+  taskbar.appendChild(tbItem);
+
+  // Poll status + logs
+  const pollInterval = setInterval(() => pollProcess(appId), 5000);
+  processApps.set(appId, { port: processInfo.port, status: processInfo.status, pollInterval });
+
+  // Initial log fetch after 3s
+  setTimeout(() => fetchProcessLogs(appId), 3000);
+
+  updateDesktopLayout();
+}
+
+async function fetchProcessLogs(appId) {
+  const logEl = document.getElementById(`logs-${appId}`);
+  if (!logEl) return;
+  try {
+    const res = await fetch(`/api/process/logs/${appId}`);
+    if (res.ok) logEl.textContent = await res.text();
+  } catch {}
+  logEl.scrollTop = logEl.scrollHeight;
+}
+
+async function pollProcess(appId) {
+  const statusEl = document.getElementById(`status-${appId}`);
+  if (!statusEl) return;
+  try {
+    const res = await fetch(`/api/process/status/${appId}`);
+    const data = await res.json();
+    const status = data.running ? 'running' : 'stopped';
+    statusEl.textContent = status;
+    statusEl.className = `process-status ${status}`;
+
+    const proc = processApps.get(appId);
+    if (proc) proc.status = status;
+  } catch {}
+  fetchProcessLogs(appId);
+}
+
+async function closeProcessApp(appId) {
+  const proc = processApps.get(appId);
+  if (proc?.pollInterval) clearInterval(proc.pollInterval);
+  processApps.delete(appId);
+
+  try { await fetch(`/api/process/stop/${appId}`, { method: 'POST' }); } catch {}
+  document.getElementById(`window-${appId}`)?.remove();
+  document.getElementById(`taskbar-${appId}`)?.remove();
+  updateDesktopLayout();
+  log(`Stopped process: ${appId}`, 'info');
+}
+
 // --- Generation Flow ---
 async function generateApp(prompt) {
   if (generating) return;
@@ -599,7 +739,16 @@ async function generateApp(prompt) {
   log(`Generating: "${prompt}"`);
 
   try {
-    // 1. Call LLM gateway
+    // Detect app type from prompt
+    const isProcess = detectProcessApp(prompt);
+
+    if (isProcess) {
+      log('Detected process app request, using Docker runtime');
+      await generateProcessApp(prompt);
+      return;
+    }
+
+    // 1. Call LLM gateway (iframe app)
     const genRes = await fetch('/api/generate', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -650,7 +799,7 @@ async function generateApp(prompt) {
   }
 }
 
-function showCapabilityModal(prompt, genData, analysis) {
+function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
   modalTitle.textContent = `Launch: "${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}"`;
 
   // Show analysis results
@@ -702,15 +851,19 @@ function showCapabilityModal(prompt, genData, analysis) {
     modalApprove.removeEventListener('click', approveHandler);
     modalDeny.removeEventListener('click', denyHandler);
 
-    // Get approved capabilities
     const approved = [...modalCaps.querySelectorAll('input:checked')].map(cb => cb.value);
 
-    // Launch the app
-    const appId = `app-${++appCounter}`;
-    const title = prompt.slice(0, 40);
-    const iframe = sandboxMgr.launch(appId, genData.code, approved, title);
-    addAppWindow(appId, iframe, title, genData.model);
-    log(`Launched ${appId} with capabilities: [${approved.join(', ')}]`, 'ok');
+    if (onApprove) {
+      // Process app — caller handles launch
+      onApprove(approved);
+    } else {
+      // Iframe app — standard launch
+      const appId = `app-${++appCounter}`;
+      const title = prompt.slice(0, 40);
+      const iframe = sandboxMgr.launch(appId, genData.code, approved, title);
+      addAppWindow(appId, iframe, title, genData.model);
+      log(`Launched ${appId} with capabilities: [${approved.join(', ')}]`, 'ok');
+    }
   };
 
   const denyHandler = () => {
@@ -722,6 +875,85 @@ function showCapabilityModal(prompt, genData, analysis) {
 
   modalApprove.addEventListener('click', approveHandler);
   modalDeny.addEventListener('click', denyHandler);
+}
+
+// --- Process App Detection & Generation ---
+const PROCESS_KEYWORDS = [
+  'nanoclaw', 'run nanoclaw',
+  'whatsapp bot', 'telegram bot', 'discord bot',
+  'background service', 'daemon', 'long-running',
+  'docker', 'container', 'node.js server', 'api server',
+];
+
+function detectProcessApp(prompt) {
+  const lower = prompt.toLowerCase();
+  return PROCESS_KEYWORDS.some(kw => lower.includes(kw));
+}
+
+async function generateProcessApp(prompt) {
+  log('Generating process app...');
+
+  const genRes = await fetch('/api/generate-process', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt }),
+  });
+
+  if (!genRes.ok) throw new Error(`Process generation failed: ${await genRes.text()}`);
+  const genData = await genRes.json();
+  log(`Process app generated with ${genData.provider} in ${genData.generationTime}ms`, 'ok');
+
+  // Show capability modal
+  showCapabilityModal(prompt, genData, { passed: true, criticalCount: 0, warningCount: 0, findings: [] },
+    async (approved) => {
+      const appId = `proc-${++appCounter}`;
+      const title = prompt.slice(0, 40);
+
+      try {
+        // Build image
+        log('Building Docker image...');
+        const buildRes = await fetch('/api/process/build', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            appId,
+            dockerfile: genData.dockerfile,
+            context: { 'index.js': genData.code },
+          }),
+        });
+
+        if (!buildRes.ok) {
+          const err = await buildRes.json();
+          log(`Build failed: ${err.error || 'unknown error'}`, 'error');
+          return;
+        }
+
+        const { imageName } = await buildRes.json();
+        log(`Image built: ${imageName}`, 'ok');
+
+        // Launch container
+        log('Starting container...');
+        const launchRes = await fetch('/api/process/launch', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            appId,
+            imageName,
+            capabilities: approved,
+            config: { port: 3001, title },
+          }),
+        });
+
+        if (!launchRes.ok) throw new Error(await launchRes.text());
+        const processInfo = await launchRes.json();
+        log(`Container started on port ${processInfo.port}`, 'ok');
+
+        addProcessWindow(appId, processInfo, title);
+      } catch (err) {
+        log(`Process launch failed: ${err.message}`, 'error');
+      }
+    }
+  );
 }
 
 // --- Init ---

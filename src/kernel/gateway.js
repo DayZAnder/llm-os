@@ -151,6 +151,115 @@ function cleanResponse(raw) {
   return code.trim();
 }
 
+const PROCESS_SYSTEM_PROMPT = `You are the app generator for LLM OS. Generate a PROCESS APP that runs in a Docker container.
+
+Output TWO sections separated by markers:
+
+---DOCKERFILE---
+Write a complete Dockerfile. Use official base images (node:22-slim, python:3.12-slim, etc.).
+Include all dependencies. Expose a port if the app has a web UI.
+Do NOT use --privileged. Do NOT use host network mode. Use a non-root user.
+
+---CODE---
+Write the application code (e.g., index.js, app.py). Keep it self-contained.
+The app receives these environment variables from the kernel:
+  LLMOS_APP_ID — unique app identifier
+  LLMOS_CAPABILITIES — comma-separated capability list
+  ANTHROPIC_API_KEY — (if api:anthropic capability granted)
+
+---END---
+
+Declare capabilities as a comment on line 1:
+# capabilities: ["process:background", "process:network"]
+
+Available: process:background, process:network, process:volume, api:anthropic
+
+Keep the app minimal and functional.`;
+
+function parseProcessResponse(raw) {
+  const dockerfileMatch = raw.match(/---DOCKERFILE---([\s\S]*?)---CODE---/);
+  const codeMatch = raw.match(/---CODE---([\s\S]*?)---END---/);
+
+  if (!dockerfileMatch || !codeMatch) {
+    throw new Error('LLM did not produce valid process app format');
+  }
+
+  return {
+    dockerfile: dockerfileMatch[1].trim(),
+    code: codeMatch[1].trim(),
+  };
+}
+
+function extractProcessCapabilities(text) {
+  const match = text.match(/^#\s*capabilities\s*:\s*(\[.*?\])/m);
+  if (match) {
+    try { return JSON.parse(match[1]); } catch {}
+  }
+  return ['process:background'];
+}
+
+export async function generateProcess(prompt) {
+  const start = Date.now();
+  const { clean, flagged, flags } = sanitizePrompt(prompt);
+  if (flagged) console.warn('[gateway] Injection patterns detected:', flags);
+
+  const complexity = estimateComplexity(clean);
+  // Process apps always use Claude if available (more complex)
+  const provider = config.claude.apiKey ? 'claude' : 'ollama';
+
+  console.log(`[gateway] Generating process app: provider=${provider}`);
+
+  let raw;
+  if (provider === 'claude') {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': config.claude.apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body: JSON.stringify({
+        model: config.claude.model,
+        max_tokens: 4096,
+        system: PROCESS_SYSTEM_PROMPT,
+        messages: [{ role: 'user', content: clean }],
+      }),
+    });
+    if (!res.ok) throw new Error(`Claude error: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    raw = data.content[0].text;
+  } else {
+    const res = await fetch(`${config.ollama.url}/api/generate`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        model: config.ollama.model,
+        prompt: `${PROCESS_SYSTEM_PROMPT}\n\nUser request: ${clean}`,
+        stream: false,
+        options: { temperature: 0.4, num_predict: 4096 },
+      }),
+    });
+    if (!res.ok) throw new Error(`Ollama error: ${res.status} ${await res.text()}`);
+    const data = await res.json();
+    raw = data.response;
+  }
+
+  const { dockerfile, code } = parseProcessResponse(raw);
+  const capabilities = extractProcessCapabilities(raw);
+
+  return {
+    type: 'process',
+    dockerfile,
+    code,
+    capabilities,
+    model: provider === 'claude' ? config.claude.model : config.ollama.model,
+    provider,
+    complexity,
+    generationTime: Date.now() - start,
+    sanitization: { flagged, flags },
+  };
+}
+
 export async function generate(prompt) {
   const start = Date.now();
 

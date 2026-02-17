@@ -26,4 +26,11 @@ export const config = {
     model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250929',
   },
   port: parseInt(process.env.PORT || '3000', 10),
+  docker: {
+    enabled: process.env.DOCKER_ENABLED !== 'false',
+    host: process.env.DOCKER_HOST || '',
+    portStart: parseInt(process.env.DOCKER_PORT_START || '5100', 10),
+    portEnd: parseInt(process.env.DOCKER_PORT_END || '5199', 10),
+    maxContainers: parseInt(process.env.DOCKER_MAX_CONTAINERS || '5', 10),
+  },
 };

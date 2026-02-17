@@ -106,45 +106,76 @@ const RULES = [
   },
 ];
 
-export function analyze(code) {
+// Dockerfile-specific rules (used by analyzeDockerfile)
+const DOCKERFILE_RULES = [
+  {
+    id: 'DOCKERFILE_PRIVILEGED',
+    severity: 'CRITICAL',
+    description: 'Privileged container grants full host access',
+    pattern: /--privileged/g,
+  },
+  {
+    id: 'DOCKERFILE_HOST_NETWORK',
+    severity: 'CRITICAL',
+    description: 'Host network mode bypasses container isolation',
+    pattern: /--network[= ]host/g,
+  },
+  {
+    id: 'DOCKERFILE_VOLUME_ROOT',
+    severity: 'CRITICAL',
+    description: 'Mounting root filesystem exposes entire host',
+    pattern: /(?:VOLUME|--volume|-v)\s+[^\s]*:?\s*\/(?:\s|$)/g,
+  },
+  {
+    id: 'DOCKERFILE_LATEST_TAG',
+    severity: 'WARNING',
+    description: 'Unpinned :latest tag may introduce breaking changes',
+    pattern: /FROM\s+\S+:latest/gi,
+  },
+];
+
+function runRules(code, rules, skipLine = () => false) {
   const findings = [];
   const lines = code.split('\n');
 
-  for (const rule of RULES) {
-    // Reset regex state
+  for (const rule of rules) {
     rule.pattern.lastIndex = 0;
-
     let match;
     while ((match = rule.pattern.exec(code)) !== null) {
-      // Find line number
       const beforeMatch = code.slice(0, match.index);
       const lineNum = beforeMatch.split('\n').length;
       const lineContent = lines[lineNum - 1] || '';
+      const trimmed = lineContent.trim();
 
-      // Skip if it's inside the capabilities comment
-      if (lineContent.trim().startsWith('<!--') && lineContent.includes('capabilities')) continue;
-
-      // Skip if it's inside the SDK script itself (we inject it)
-      if (lineContent.includes('// LLM-OS SDK')) continue;
+      if (skipLine(trimmed)) continue;
 
       findings.push({
         rule: rule.id,
         severity: rule.severity,
         description: rule.description,
         line: lineNum,
-        snippet: lineContent.trim().slice(0, 120),
+        snippet: trimmed.slice(0, 120),
       });
     }
-
     rule.pattern.lastIndex = 0;
   }
 
   const criticalCount = findings.filter(f => f.severity === 'CRITICAL').length;
-
   return {
     passed: criticalCount === 0,
     criticalCount,
     warningCount: findings.filter(f => f.severity === 'WARNING').length,
     findings,
   };
+}
+
+export function analyze(code) {
+  return runRules(code, RULES, line =>
+    (line.startsWith('<!--') && line.includes('capabilities')) ||
+    line.includes('// LLM-OS SDK')
+  );
+}
+
+export function analyzeDockerfile(content) {
+  return runRules(content, DOCKERFILE_RULES, line => line.startsWith('#'));
 }
