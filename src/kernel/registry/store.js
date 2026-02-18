@@ -225,6 +225,19 @@ export function getStats() {
 }
 
 /**
+ * Rate an app (thumbs up/down). rating: 1 or -1.
+ */
+export function rateApp(hash, rating) {
+  const entry = apps.get(hash);
+  if (!entry) return null;
+  if (!entry.rating) entry.rating = { up: 0, down: 0 };
+  if (rating > 0) entry.rating.up++;
+  else entry.rating.down++;
+  save();
+  return entry.rating;
+}
+
+/**
  * Delete an app by hash.
  */
 export function deleteApp(hash) {

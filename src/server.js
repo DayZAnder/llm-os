@@ -8,7 +8,7 @@ import { analyze, analyzeDockerfile } from './kernel/analyzer.js';
 import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType, initTokenKey, verifyToken } from './kernel/capabilities.js';
 import { dockerPing } from './kernel/docker/client.js';
 import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses } from './kernel/docker/process-manager.js';
-import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
+import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, rateApp, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
 import { storageGet, storageSet, storageRemove, storageKeys, storageUsage, storageClear, storageExport, storageImport, storageListApps, storageExportAll, storageFlushAll } from './kernel/storage.js';
 import * as scheduler from './kernel/scheduler.js';
 import { tasks as selfImproveTasks } from './kernel/self-improve/index.js';
@@ -17,6 +17,8 @@ import { loadProfile, reloadProfile, getBootApps, solidify, goEphemeral, isSolid
 import * as knowledgeBase from './kernel/knowledge.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
+const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
+const VERSION = pkg.version;
 
 const MIME_TYPES = {
   '.html': 'text/html',
@@ -59,6 +61,13 @@ async function handleAPI(method, fullUrl, body, res) {
   scheduler.recordActivity();
 
   try {
+    // GET /api/version — returns current version
+    if (method === 'GET' && url === '/api/version') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ version: VERSION }));
+      return;
+    }
+
     // --- Scheduler endpoints ---
 
     // GET /api/scheduler/tasks — list all tasks with state
@@ -548,6 +557,21 @@ async function handleAPI(method, fullUrl, body, res) {
       return;
     }
 
+    // POST /api/registry/rate/:hash — rate an app (thumbs up/down)
+    const rateMatch = url.match(/^\/api\/registry\/rate\/([a-f0-9]+)$/);
+    if (method === 'POST' && rateMatch) {
+      const { rating } = JSON.parse(body);
+      const result = rateApp(rateMatch[1], rating);
+      if (!result) {
+        res.writeHead(404);
+        res.end('App not found');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
     // DELETE /api/registry/:hash — delete an app from registry
     const deleteMatch = url.match(/^\/api\/registry\/([a-f0-9]{16})$/);
     if (method === 'DELETE' && deleteMatch) {
@@ -613,7 +637,7 @@ server.listen(config.port, host, () => {
     .join('\n');
   console.log(`
   ╔══════════════════════════════════════╗
-  ║           LLM OS v0.2.3             ║
+  ║           LLM OS v${VERSION.padEnd(18)}║
   ║  http://localhost:${config.port}              ║
   ╚══════════════════════════════════════╝
 
