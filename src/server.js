@@ -548,6 +548,20 @@ async function handleAPI(method, fullUrl, body, res) {
       return;
     }
 
+    // DELETE /api/registry/:hash — delete an app from registry
+    const deleteMatch = url.match(/^\/api\/registry\/([a-f0-9]{16})$/);
+    if (method === 'DELETE' && deleteMatch) {
+      const existed = deleteApp(deleteMatch[1]);
+      if (!existed) {
+        res.writeHead(404);
+        res.end('App not found');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, hash: deleteMatch[1] }));
+      return;
+    }
+
     // GET /api/registry/:hash — get specific app
     const appMatch = url.match(/^\/api\/registry\/([a-f0-9]{16})$/);
     if (method === 'GET' && appMatch) {

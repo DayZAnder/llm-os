@@ -612,6 +612,19 @@
   }
   .app-card-launch:hover { background: var(--accent-hover); }
 
+  .app-card-delete {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 8px;
+    color: var(--text-dim);
+    font-size: 11px;
+    cursor: pointer;
+    flex-shrink: 0;
+    transition: all 0.15s;
+  }
+  .app-card-delete:hover { border-color: var(--error); color: var(--error); }
+
   .browse-btn {
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
@@ -1652,7 +1665,27 @@ function renderRegistryApps(apps) {
       launchFromRegistry(app);
     };
 
-    card.append(info, typeTag, launchBtn);
+    const deleteBtn = document.createElement('button');
+    deleteBtn.className = 'app-card-delete';
+    deleteBtn.textContent = '\u2715';
+    deleteBtn.title = 'Delete app';
+    deleteBtn.onclick = async (e) => {
+      e.stopPropagation();
+      if (!confirm(`Delete "${app.title}" from registry?`)) return;
+      try {
+        const res = await fetch(`/api/registry/${app.hash}`, { method: 'DELETE' });
+        if (res.ok) {
+          card.remove();
+          log(`Deleted: "${app.title}" (${app.hash})`, 'info');
+        } else {
+          log(`Delete failed: ${await res.text()}`, 'error');
+        }
+      } catch (err) {
+        log(`Delete failed: ${err.message}`, 'error');
+      }
+    };
+
+    card.append(info, typeTag, launchBtn, deleteBtn);
     registryBody.appendChild(card);
   }
 }

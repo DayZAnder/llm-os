@@ -120,11 +120,17 @@ export async function launchContainer(appId, imageName, capabilities = [], conta
       PortBindings: portBindings,
       Binds: binds,
       Memory: 512 * 1024 * 1024,
+      MemorySwap: 512 * 1024 * 1024,  // no swap
       NanoCpus: 1_000_000_000,
+      PidsLimit: 64,
+      ReadonlyRootfs: true,
       NetworkMode: hasNetwork ? 'bridge' : 'none',
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
       Tmpfs: { '/tmp': 'rw,noexec,nosuid,size=64m' },
+      Ulimits: [
+        { Name: 'nofile', Soft: 1024, Hard: 2048 },
+      ],
     },
   };
 
@@ -170,6 +176,15 @@ export async function launchContainer(appId, imageName, capabilities = [], conta
       processInfo.status = 'failed';
     }
   }, 3000);
+
+  // Wall clock timeout — kill after 30 minutes
+  const CONTAINER_TIMEOUT_MS = 30 * 60 * 1000;
+  setTimeout(async () => {
+    if (processes.has(appId)) {
+      console.log(`[process-mgr] Timeout: killing ${appId} after 30 minutes`);
+      try { await stopContainer(appId); } catch {}
+    }
+  }, CONTAINER_TIMEOUT_MS);
 
   return processInfo;
 }
