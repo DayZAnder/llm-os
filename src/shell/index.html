@@ -1111,6 +1111,17 @@
         <button id="si-resume-all">Resume All</button>
       </div>
       <div id="si-tasks"></div>
+
+      <h3 style="margin-top:20px;color:var(--text-primary);font-size:14px;">Shell Versions</h3>
+      <p class="settings-desc">
+        AI can improve the shell UI itself. Request a specific change or let it improve autonomously.
+      </p>
+      <div style="display:flex;gap:8px;margin-bottom:12px;">
+        <input id="shell-improve-input" type="text" placeholder="Improvement request (optional)..."
+          style="flex:1;background:var(--bg-tertiary, #1a1a2e);border:1px solid var(--border, #2a2a4a);border-radius:4px;padding:6px 10px;color:var(--text-primary, #e0e0f0);font-size:12px;">
+        <button id="shell-improve-btn" style="white-space:nowrap;">Improve Shell</button>
+      </div>
+      <div id="shell-versions-list"></div>
     </div>
     <div class="settings-stats" id="si-stats"></div>
   </div>
@@ -2095,6 +2106,7 @@ async function loadSettings() {
 function openSettings() {
   settingsOverlay.classList.remove('hidden');
   loadSettings();
+  loadShellVersions();
 }
 function closeSettings() {
   settingsOverlay.classList.add('hidden');
@@ -2145,6 +2157,92 @@ document.getElementById('si-resume-all').addEventListener('click', async () => {
   loadSettings();
 });
 
+// --- Shell Versions UI ---
+
+async function loadShellVersions() {
+  try {
+    const res = await fetch('/api/shell/versions');
+    const versions = await res.json();
+    const currentRes = await fetch('/api/shell/current');
+    const { id: currentId } = await currentRes.json();
+    const list = document.getElementById('shell-versions-list');
+    if (versions.length === 0) {
+      list.innerHTML = '<p class="settings-desc" style="opacity:0.6">No AI versions yet. Click "Improve Shell" to generate one.</p>';
+      return;
+    }
+    list.innerHTML = versions.map(v => {
+      const isCurrent = v.id === currentId;
+      const age = Math.round((Date.now() - v.createdAt) / 60000);
+      const timeStr = age < 60 ? `${age}m ago` : age < 1440 ? `${Math.round(age / 60)}h ago` : `${Math.round(age / 1440)}d ago`;
+      return `<div style="background:var(--bg-tertiary, #1a1a2e);border:1px solid ${isCurrent ? 'var(--accent, #6c63ff)' : 'var(--border, #2a2a4a)'};border-radius:6px;padding:10px;margin-bottom:8px;">
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
+          <span style="font-size:12px;color:var(--text-primary, #e0e0f0);">${isCurrent ? '● ' : ''}${v.id.slice(0, 16)}</span>
+          <span style="font-size:11px;background:${v.source === 'user' ? '#6c63ff33' : '#4caf5033'};color:${v.source === 'user' ? '#6c63ff' : '#4caf50'};padding:2px 6px;border-radius:3px;">${v.source}</span>
+        </div>
+        <div style="font-size:11px;color:var(--text-secondary, #8888aa);margin-bottom:6px;">${v.prompt || '(autonomous improvement)'} — diff: ${v.diff}%</div>
+        <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-secondary, #8888aa);">
+          <span>${timeStr} · ${(v.byteSize / 1024).toFixed(1)} KB</span>
+          ${!isCurrent ? `<button onclick="window._shellRollback('${v.id}')" style="font-size:11px;padding:2px 8px;">Rollback</button>` : '<span style="color:var(--accent, #6c63ff);">current</span>'}
+        </div>
+      </div>`;
+    }).join('');
+  } catch {}
+}
+
+document.getElementById('shell-improve-btn').addEventListener('click', async () => {
+  const btn = document.getElementById('shell-improve-btn');
+  const prompt = document.getElementById('shell-improve-input').value.trim();
+  btn.textContent = 'Improving...';
+  btn.disabled = true;
+  try {
+    const res = await fetch('/api/shell/improve', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ prompt: prompt || null }),
+    });
+    const data = await res.json();
+    if (data.error) {
+      log(`Shell improvement rejected: ${data.error}`, 'error');
+    } else {
+      log(`Shell improved: diff=${data.diff}%, version=${data.id}`, 'ok');
+      loadShellVersions();
+    }
+  } catch (err) {
+    log(`Shell improvement error: ${err.message}`, 'error');
+  }
+  btn.textContent = 'Improve Shell';
+  btn.disabled = false;
+});
+
+window._shellRollback = async (id) => {
+  if (!confirm(`Roll back to shell version ${id}?`)) return;
+  try {
+    await fetch(`/api/shell/rollback/${id}`, { method: 'POST' });
+    log(`Rolled back to shell version ${id}`, 'ok');
+    loadShellVersions();
+  } catch (err) {
+    log(`Rollback failed: ${err.message}`, 'error');
+  }
+};
+
+// --- SSE Hot-Reload ---
+function connectShellReload() {
+  const es = new EventSource('/api/shell/events');
+  es.onmessage = (e) => {
+    try {
+      const msg = JSON.parse(e.data);
+      if (msg.type === 'reload') {
+        log(`New shell version ${msg.versionId} — reloading...`, 'ok');
+        setTimeout(() => location.reload(), 800);
+      }
+    } catch {}
+  };
+  es.onerror = () => {
+    es.close();
+    setTimeout(connectShellReload, 10000);
+  };
+}
+
 // --- Init ---
 async function init() {
   // Load SDK code for injection into sandboxes
@@ -2189,6 +2287,7 @@ async function init() {
   initExamples();
   checkLLMStatus();
   setInterval(checkLLMStatus, 30000);
+  connectShellReload();
 
   // Show registry count hint on browse button
   try {

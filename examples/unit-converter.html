@@ -1,0 +1,84 @@
+<!-- capabilities: ["ui:window"] -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Unit Converter</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1a1a2e; color: #e0e0e0; font-family: sans-serif; padding: 20px; }
+h2 { color: #6c63ff; margin-bottom: 16px; font-size: 1.1rem; }
+select, input { background: #16213e; color: #e0e0e0; border: 1px solid #333; border-radius: 6px; padding: 8px 10px; font-size: 1rem; width: 100%; }
+select:focus, input:focus { outline: none; border-color: #6c63ff; }
+.cats { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; }
+.cat { background: #16213e; border: 1px solid #333; border-radius: 6px; padding: 6px 12px; cursor: pointer; font-size: 0.85rem; }
+.cat.active { background: #6c63ff; border-color: #6c63ff; color: #fff; }
+.row { display: flex; gap: 10px; align-items: center; margin-bottom: 12px; }
+.row select { flex: 1; }
+.row input { flex: 1; }
+.eq { color: #6c63ff; font-size: 1.2rem; flex-shrink: 0; }
+</style>
+</head>
+<body>
+<h2>Unit Converter</h2>
+<div class="cats" id="cats"></div>
+<div class="row">
+  <input id="v1" type="number" placeholder="Value" />
+  <select id="u1"></select>
+</div>
+<div class="row">
+  <input id="v2" type="number" placeholder="Result" />
+  <select id="u2"></select>
+</div>
+<script>
+const CATS = {
+  Length: { m:1, km:1e3, mi:1609.344, ft:0.3048, 'in':0.0254, cm:0.01 },
+  Weight: { kg:1, lb:0.453592, oz:0.028349, g:0.001 },
+  Temperature: null,
+  'Data Size': { B:1, KB:1024, MB:1048576, GB:1073741824, TB:1099511627776 }
+};
+let cat = 'Length';
+const cats = document.getElementById('cats');
+const u1 = document.getElementById('u1'), u2 = document.getElementById('u2');
+const v1 = document.getElementById('v1'), v2 = document.getElementById('v2');
+
+function toBase(v, u) {
+  if (cat === 'Temperature') {
+    if (u==='C') return v; if (u==='F') return (v-32)*5/9; return v-273.15;
+  }
+  return v * CATS[cat][u];
+}
+function fromBase(v, u) {
+  if (cat === 'Temperature') {
+    if (u==='C') return v; if (u==='F') return v*9/5+32; return v+273.15;
+  }
+  return v / CATS[cat][u];
+}
+
+function buildUnits() {
+  const units = cat === 'Temperature' ? ['C','F','K'] : Object.keys(CATS[cat]);
+  [u1,u2].forEach((s,i) => {
+    s.innerHTML = units.map(u => `<option>${u}</option>`).join('');
+    if (i===1 && units.length>1) s.selectedIndex = 1;
+  });
+}
+function conv(src) {
+  const a = parseFloat(src===v1 ? v1.value : v2.value);
+  if (isNaN(a)) { (src===v1?v2:v1).value=''; return; }
+  const res = fromBase(toBase(a, src===v1?u1.value:u2.value), src===v1?u2.value:u1.value);
+  (src===v1?v2:v1).value = parseFloat(res.toPrecision(8));
+}
+Object.keys(CATS).forEach(c => {
+  const b = document.createElement('button');
+  b.className = 'cat' + (c===cat?' active':'');
+  b.textContent = c;
+  b.onclick = () => { cat=c; document.querySelectorAll('.cat').forEach(x=>x.classList.remove('active')); b.classList.add('active'); buildUnits(); v1.value=''; v2.value=''; };
+  cats.appendChild(b);
+});
+u1.onchange = u2.onchange = () => conv(v1);
+v1.oninput = () => conv(v1);
+v2.oninput = () => conv(v2);
+buildUnits();
+</script>
+</body>
+</html>

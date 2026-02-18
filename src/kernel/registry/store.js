@@ -2,7 +2,7 @@
 // Apps are saved after generation and can be browsed, searched, and launched.
 
 import { createHash } from 'crypto';
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { normalizePrompt, trigramSimilarity } from '../utils/normalize.js';
@@ -10,6 +10,7 @@ import { normalizePrompt, trigramSimilarity } from '../utils/normalize.js';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = join(__dirname, '..', '..', '..', 'data');
 const REGISTRY_FILE = join(DATA_DIR, 'registry.json');
+const EXAMPLES_DIR = join(__dirname, '..', '..', '..', 'examples');
 
 // Community registry URL (GitHub raw)
 const COMMUNITY_URL = 'https://raw.githubusercontent.com/DayZAnder/llm-os/master/registry';
@@ -77,13 +78,44 @@ function extractTags(prompt) {
 // --- Persistence ---
 
 function load() {
-  if (!existsSync(REGISTRY_FILE)) return;
+  if (!existsSync(REGISTRY_FILE)) {
+    seedFromExamples();
+    return;
+  }
   try {
     const data = JSON.parse(readFileSync(REGISTRY_FILE, 'utf-8'));
     apps = new Map(data.map(entry => [entry.hash, entry]));
     console.log(`[registry] Loaded ${apps.size} apps`);
   } catch (err) {
     console.warn('[registry] Failed to load:', err.message);
+  }
+}
+
+// Auto-seed registry from examples/ on first boot
+function seedFromExamples() {
+  if (!existsSync(EXAMPLES_DIR)) return;
+  try {
+    const files = readdirSync(EXAMPLES_DIR).filter(f => f.endsWith('.html'));
+    if (files.length === 0) return;
+
+    for (const file of files) {
+      const code = readFileSync(join(EXAMPLES_DIR, file), 'utf-8');
+      const name = file.replace(/\.html$/, '').replace(/[-_]/g, ' ');
+      // Extract capabilities from HTML comment
+      const capMatch = code.match(/<!--\s*capabilities:\s*(\[.*?\])\s*-->/);
+      const capabilities = capMatch ? JSON.parse(capMatch[1]) : ['ui:window'];
+      publishApp({
+        prompt: `a ${name}`,
+        code,
+        type: 'iframe',
+        capabilities,
+        model: 'built-in',
+        provider: 'built-in',
+      });
+    }
+    console.log(`[registry] Seeded ${files.length} app(s) from examples/`);
+  } catch (err) {
+    console.warn('[registry] Failed to seed from examples:', err.message);
   }
 }
 

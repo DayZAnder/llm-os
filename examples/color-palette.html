@@ -1,0 +1,124 @@
+<!-- capabilities: ["ui:window", "storage:local", "clipboard:rw"] -->
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Color Palette</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#1a1a2e;color:#e0e0e0;font-family:sans-serif;font-size:13px;padding:16px;min-height:100vh}
+h1{color:#6c63ff;font-size:15px;margin-bottom:14px}
+.row{display:flex;align-items:center;gap:12px;margin-bottom:16px}
+input[type=color]{width:60px;height:60px;border:none;border-radius:8px;cursor:pointer;background:none;padding:0}
+.swatch{width:80px;height:60px;border-radius:8px;border:1px solid #333;flex-shrink:0}
+.vals{display:flex;flex-direction:column;gap:6px}
+.val-row{display:flex;align-items:center;gap:6px}
+.val-label{color:#888;width:32px}
+.val-box{background:#0d0d1a;border:1px solid #333;border-radius:4px;padding:4px 8px;font-family:monospace;cursor:pointer;transition:background 0.15s;color:#e0e0e0}
+.val-box:hover{background:#6c63ff22}
+.val-box.copied{background:#4caf5033;border-color:#4caf50}
+.copied-msg{font-size:11px;color:#4caf50;opacity:0;transition:opacity 0.4s}
+button{background:#6c63ff;color:#fff;border:none;border-radius:5px;padding:6px 14px;cursor:pointer;font-size:13px}
+button:hover{background:#7c73ff}
+button.sm{padding:4px 10px;font-size:12px;background:#333}
+button.sm:hover{background:#444}
+section{margin-bottom:16px}
+section h2{font-size:12px;color:#888;margin-bottom:8px;text-transform:uppercase;letter-spacing:1px}
+#palette-strip{display:flex;flex-wrap:wrap;gap:6px;min-height:32px}
+.pal-swatch{width:36px;height:36px;border-radius:5px;border:1px solid #333;cursor:pointer;position:relative;title:''}
+.pal-swatch:hover::after{content:attr(data-hex);position:absolute;bottom:40px;left:50%;transform:translateX(-50%);background:#0d0d1a;border:1px solid #444;padding:2px 6px;border-radius:3px;white-space:nowrap;font-size:11px;pointer-events:none}
+.contrast{display:flex;gap:10px;margin-top:4px}
+.contrast-box{flex:1;border-radius:6px;padding:8px 10px;font-size:13px;border:1px solid #333}
+.ratio{font-size:11px;margin-top:3px;opacity:0.7}
+.pass{color:#4caf50}.fail{color:#e57373}
+#no-palette{color:#555;font-size:12px;padding:6px 0}
+</style></head><body>
+<h1>Color Palette</h1>
+<div class="row">
+  <input type="color" id="picker" value="#6c63ff">
+  <div class="swatch" id="swatch"></div>
+  <div class="vals">
+    <div class="val-row"><span class="val-label">HEX</span><span class="val-box" id="hex-val"></span><span class="copied-msg" id="c0">Copied!</span></div>
+    <div class="val-row"><span class="val-label">RGB</span><span class="val-box" id="rgb-val"></span><span class="copied-msg" id="c1">Copied!</span></div>
+    <div class="val-row"><span class="val-label">HSL</span><span class="val-box" id="hsl-val"></span><span class="copied-msg" id="c2">Copied!</span></div>
+  </div>
+</div>
+<div class="row">
+  <button onclick="addToPalette()">+ Add to palette</button>
+  <button class="sm" onclick="clearPalette()">Clear palette</button>
+</div>
+<section>
+  <h2>Saved Palette</h2>
+  <div id="palette-strip"><span id="no-palette">No colors yet.</span></div>
+</section>
+<section>
+  <h2>Contrast Check</h2>
+  <div class="contrast">
+    <div class="contrast-box" id="on-white"><span id="ow-text">Text on white</span><div class="ratio" id="ow-ratio"></div></div>
+    <div class="contrast-box" id="on-black"><span id="ob-text">Text on black</span><div class="ratio" id="ob-ratio"></div></div>
+  </div>
+</section>
+<script>
+const SKEY = 'llmos_palette';
+let palette = [];
+try { palette = JSON.parse((LLMOS.storage.getItem(SKEY)||'[]')); } catch(e) { try { palette = JSON.parse(localStorage.getItem(SKEY)||'[]'); } catch(e2){} }
+
+function hexToRgb(h){const r=parseInt(h.slice(1,3),16),g=parseInt(h.slice(3,5),16),b=parseInt(h.slice(5,7),16);return{r,g,b};}
+function rgbToHsl({r,g,b}){r/=255;g/=255;b/=255;const max=Math.max(r,g,b),min=Math.min(r,g,b);let h,s,l=(max+min)/2;if(max===min){h=s=0;}else{const d=max-min;s=l>0.5?d/(2-max-min):d/(max+min);switch(max){case r:h=(g-b)/d+(g<b?6:0);break;case g:h=(b-r)/d+2;break;case b:h=(r-g)/d+4;}h/=6;}return{h:Math.round(h*360),s:Math.round(s*100),l:Math.round(l*100)};}
+function luminance({r,g,b}){const c=[r,g,b].map(v=>{v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4);});return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2];}
+function contrast(l1,l2){const hi=Math.max(l1,l2),lo=Math.min(l1,l2);return ((hi+0.05)/(lo+0.05)).toFixed(2);}
+function wcag(ratio){return ratio>=7?'AAA':ratio>=4.5?'AA':ratio>=3?'AA Large':'Fail';}
+
+function copy(text, idx){
+  try { LLMOS.clipboard.writeText(text); } catch(e) { navigator.clipboard && navigator.clipboard.writeText(text); }
+  const el=document.getElementById('c'+idx);
+  el.style.opacity=1; setTimeout(()=>el.style.opacity=0,1200);
+}
+
+function update(){
+  const hex=document.getElementById('picker').value;
+  const rgb=hexToRgb(hex);
+  const hsl=rgbToHsl(rgb);
+  document.getElementById('swatch').style.background=hex;
+  document.getElementById('hex-val').textContent=hex.toUpperCase();
+  document.getElementById('rgb-val').textContent=`rgb(${rgb.r}, ${rgb.g}, ${rgb.b})`;
+  document.getElementById('hsl-val').textContent=`hsl(${hsl.h}, ${hsl.s}%, ${hsl.l}%)`;
+  // contrast
+  const lum=luminance(rgb), wLum=1, bLum=0;
+  const rW=contrast(lum,wLum), rB=contrast(lum,bLum);
+  const ow=document.getElementById('on-white'),ob=document.getElementById('on-black');
+  ow.style.background='#fff'; ow.style.color=hex;
+  document.getElementById('ow-text').textContent='Text on white';
+  document.getElementById('ow-ratio').innerHTML=`${rW}:1 — <span class="${rW>=4.5?'pass':'fail'}">${wcag(parseFloat(rW))}</span>`;
+  ob.style.background='#000'; ob.style.color=hex;
+  document.getElementById('ob-text').textContent='Text on black';
+  document.getElementById('ob-ratio').innerHTML=`${rB}:1 — <span class="${rB>=4.5?'pass':'fail'}">${wcag(parseFloat(rB))}</span>`;
+}
+
+function renderPalette(){
+  const strip=document.getElementById('palette-strip');
+  const np=document.getElementById('no-palette');
+  if(palette.length===0){strip.innerHTML='';strip.appendChild(np);return;}
+  strip.innerHTML='';
+  palette.forEach(hex=>{
+    const sw=document.createElement('div');
+    sw.className='pal-swatch'; sw.style.background=hex; sw.title=hex;
+    sw.setAttribute('data-hex',hex);
+    sw.onclick=()=>{document.getElementById('picker').value=hex;update();
+      try{LLMOS.clipboard.writeText(hex);}catch(e){navigator.clipboard&&navigator.clipboard.writeText(hex);}};
+    strip.appendChild(sw);
+  });
+}
+
+function savePalette(){
+  try{LLMOS.storage.setItem(SKEY,JSON.stringify(palette));}catch(e){localStorage.setItem(SKEY,JSON.stringify(palette));}
+}
+
+function addToPalette(){
+  const hex=document.getElementById('picker').value.toUpperCase();
+  if(!palette.includes(hex)){palette.push(hex);savePalette();renderPalette();}
+}
+function clearPalette(){palette=[];savePalette();renderPalette();}
+
+document.getElementById('hex-val').onclick=()=>copy(document.getElementById('hex-val').textContent,0);
+document.getElementById('rgb-val').onclick=()=>copy(document.getElementById('rgb-val').textContent,1);
+document.getElementById('hsl-val').onclick=()=>copy(document.getElementById('hsl-val').textContent,2);
+document.getElementById('picker').addEventListener('input',update);
+update(); renderPalette();
+</script></body></html>

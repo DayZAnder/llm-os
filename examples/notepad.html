@@ -1,0 +1,599 @@
+<!-- capabilities: ["ui:window", "storage:local", "clipboard:rw"] -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Notepad</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body {
+    background: #0d0d1a;
+    color: #e0e0f0;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    height: 100%;
+    width: 100%;
+    overflow: hidden;
+  }
+
+  /* Menu bar */
+  .menubar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 32px;
+    background: #141428;
+    border-bottom: 1px solid #2a2a4a;
+    display: flex;
+    align-items: center;
+    padding: 0 4px;
+    gap: 2px;
+    font-size: 13px;
+    z-index: 50;
+  }
+  .menu-item {
+    padding: 4px 10px;
+    border-radius: 4px;
+    cursor: pointer;
+    color: #b0b0cc;
+    position: relative;
+    user-select: none;
+  }
+  .menu-item:hover { background: #1e1e3a; color: #e0e0f0; }
+  .menu-item.active { background: #2a2a4a; color: #e0e0f0; }
+
+  /* Dropdown */
+  .dropdown {
+    display: none;
+    position: absolute;
+    top: 100%;
+    left: 0;
+    background: #1a1a2e;
+    border: 1px solid #2a2a4a;
+    border-radius: 6px;
+    min-width: 200px;
+    padding: 4px 0;
+    z-index: 100;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.5);
+  }
+  .dropdown.open { display: block; }
+  .dropdown-item {
+    padding: 7px 16px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    color: #c0c0dd;
+  }
+  .dropdown-item:hover { background: #6c63ff33; color: #e0e0f0; }
+  .dropdown-item .shortcut { color: #555577; font-size: 11px; font-family: monospace; }
+  .dropdown-sep { height: 1px; background: #2a2a4a; margin: 4px 0; }
+
+  /* Toolbar */
+  .toolbar {
+    position: fixed;
+    top: 32px;
+    left: 0;
+    right: 0;
+    height: 36px;
+    background: #121225;
+    border-bottom: 1px solid #2a2a4a;
+    display: flex;
+    align-items: center;
+    padding: 0 8px;
+    gap: 6px;
+    z-index: 40;
+  }
+  .tool-btn {
+    background: none;
+    border: 1px solid transparent;
+    border-radius: 4px;
+    color: #8888aa;
+    font-size: 12px;
+    padding: 4px 8px;
+    cursor: pointer;
+    font-family: monospace;
+  }
+  .tool-btn:hover { background: #1e1e3a; border-color: #2a2a4a; color: #c0c0dd; }
+  .tool-sep { width: 1px; height: 20px; background: #2a2a4a; }
+  .font-select {
+    background: #0f0f1e;
+    border: 1px solid #2a2a4a;
+    border-radius: 4px;
+    color: #c0c0dd;
+    font-size: 12px;
+    padding: 3px 6px;
+    outline: none;
+  }
+  .font-select:focus { border-color: #6c63ff; }
+  .size-input {
+    background: #0f0f1e;
+    border: 1px solid #2a2a4a;
+    border-radius: 4px;
+    color: #c0c0dd;
+    font-size: 12px;
+    padding: 3px 6px;
+    width: 44px;
+    outline: none;
+    text-align: center;
+  }
+  .size-input:focus { border-color: #6c63ff; }
+
+  /* Editor */
+  .editor-wrap {
+    position: fixed;
+    top: 68px;
+    left: 0;
+    right: 0;
+    bottom: 26px;
+    display: flex;
+    overflow: hidden;
+  }
+  .line-numbers {
+    width: 48px;
+    background: #0f0f1e;
+    border-right: 1px solid #2a2a4a;
+    padding: 12px 0;
+    text-align: right;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    color: #444466;
+    overflow: hidden;
+    flex-shrink: 0;
+    user-select: none;
+  }
+  .line-numbers div { padding-right: 10px; }
+  #editor {
+    flex: 1;
+    background: #0d0d1a;
+    color: #e0e0f0;
+    border: none;
+    outline: none;
+    resize: none;
+    padding: 12px 16px;
+    font-family: 'Cascadia Code', 'Fira Code', monospace;
+    font-size: 14px;
+    line-height: 1.6;
+    tab-size: 4;
+    white-space: pre;
+    overflow: auto;
+  }
+  #editor::selection { background: #6c63ff44; }
+
+  /* Status bar */
+  .statusbar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 26px;
+    background: #141428;
+    border-top: 1px solid #2a2a4a;
+    display: flex;
+    align-items: center;
+    padding: 0 12px;
+    font-size: 11px;
+    font-family: monospace;
+    color: #555577;
+    gap: 16px;
+    z-index: 40;
+  }
+  .statusbar .modified { color: #ffa502; }
+  .statusbar .spacer { flex: 1; }
+
+  /* Find bar */
+  .findbar {
+    display: none;
+    position: fixed;
+    top: 68px;
+    left: 0;
+    right: 0;
+    height: 40px;
+    background: #141428;
+    border-bottom: 1px solid #2a2a4a;
+    padding: 0 12px;
+    align-items: center;
+    gap: 8px;
+    z-index: 45;
+  }
+  .findbar.open { display: flex; }
+  .findbar input {
+    background: #0f0f1e;
+    border: 1px solid #2a2a4a;
+    border-radius: 4px;
+    color: #e0e0f0;
+    padding: 5px 10px;
+    font-size: 13px;
+    outline: none;
+    width: 240px;
+  }
+  .findbar input:focus { border-color: #6c63ff; }
+  .findbar button {
+    background: #1e1e3a;
+    border: 1px solid #2a2a4a;
+    border-radius: 4px;
+    color: #b0b0cc;
+    padding: 5px 10px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .findbar button:hover { background: #2a2a4a; color: #e0e0f0; }
+  .findbar .match-count { color: #6c63ff; font-size: 12px; font-family: monospace; min-width: 60px; }
+  .findbar .close-find {
+    background: none;
+    border: none;
+    color: #555577;
+    font-size: 18px;
+    cursor: pointer;
+    padding: 0 4px;
+    margin-left: auto;
+  }
+  .findbar .close-find:hover { color: #ff4757; }
+</style>
+</head>
+<body>
+
+<!-- Menu Bar -->
+<div class="menubar">
+  <div class="menu-item" id="menu-file" onclick="toggleMenu('file')">
+    File
+    <div class="dropdown" id="drop-file">
+      <div class="dropdown-item" onclick="newFile()">New <span class="shortcut">Ctrl+N</span></div>
+      <div class="dropdown-sep"></div>
+      <div class="dropdown-item" onclick="saveFile()">Save <span class="shortcut">Ctrl+S</span></div>
+      <div class="dropdown-item" onclick="saveAs()">Save As... <span class="shortcut">Ctrl+Shift+S</span></div>
+      <div class="dropdown-sep"></div>
+      <div class="dropdown-item" onclick="loadFile()">Open... <span class="shortcut">Ctrl+O</span></div>
+    </div>
+  </div>
+  <div class="menu-item" id="menu-edit" onclick="toggleMenu('edit')">
+    Edit
+    <div class="dropdown" id="drop-edit">
+      <div class="dropdown-item" onclick="doUndo()">Undo <span class="shortcut">Ctrl+Z</span></div>
+      <div class="dropdown-item" onclick="doRedo()">Redo <span class="shortcut">Ctrl+Y</span></div>
+      <div class="dropdown-sep"></div>
+      <div class="dropdown-item" onclick="doCut()">Cut <span class="shortcut">Ctrl+X</span></div>
+      <div class="dropdown-item" onclick="doCopy()">Copy <span class="shortcut">Ctrl+C</span></div>
+      <div class="dropdown-item" onclick="doPaste()">Paste <span class="shortcut">Ctrl+V</span></div>
+      <div class="dropdown-sep"></div>
+      <div class="dropdown-item" onclick="selectAll()">Select All <span class="shortcut">Ctrl+A</span></div>
+    </div>
+  </div>
+  <div class="menu-item" onclick="toggleFind()">Find</div>
+  <div class="menu-item" onclick="toggleWordWrap()">Word Wrap</div>
+</div>
+
+<!-- Toolbar -->
+<div class="toolbar">
+  <select class="font-select" id="fontFamily" onchange="changeFont()">
+    <option value="'Cascadia Code', 'Fira Code', monospace">Cascadia Code</option>
+    <option value="'Consolas', monospace">Consolas</option>
+    <option value="'Courier New', monospace">Courier New</option>
+    <option value="'Segoe UI', sans-serif">Segoe UI</option>
+    <option value="'Arial', sans-serif">Arial</option>
+  </select>
+  <input type="number" class="size-input" id="fontSize" value="14" min="8" max="36" onchange="changeFontSize()">
+  <div class="tool-sep"></div>
+  <button class="tool-btn" onclick="toggleLineNumbers()" title="Toggle line numbers">#</button>
+  <button class="tool-btn" onclick="toggleWordWrap()" title="Toggle word wrap">&#x21A9;</button>
+</div>
+
+<!-- Find Bar -->
+<div class="findbar" id="findbar">
+  <input type="text" id="findInput" placeholder="Find..." oninput="doFind()">
+  <button onclick="findPrev()">&uarr;</button>
+  <button onclick="findNext()">&darr;</button>
+  <span class="match-count" id="matchCount"></span>
+  <input type="text" id="replaceInput" placeholder="Replace...">
+  <button onclick="doReplace()">Replace</button>
+  <button onclick="doReplaceAll()">All</button>
+  <button class="close-find" onclick="toggleFind()">&times;</button>
+</div>
+
+<!-- Editor -->
+<div class="editor-wrap">
+  <div class="line-numbers" id="lineNums"></div>
+  <textarea id="editor" spellcheck="false" placeholder="Start typing..."></textarea>
+</div>
+
+<!-- Status Bar -->
+<div class="statusbar">
+  <span id="fileLabel">Untitled</span>
+  <span id="modifiedFlag"></span>
+  <span class="spacer"></span>
+  <span id="cursorPos">Ln 1, Col 1</span>
+  <span id="charCount">0 chars</span>
+  <span id="lineCount">1 line</span>
+  <span>UTF-8</span>
+</div>
+
+<script>
+  const editor = document.getElementById('editor');
+  const lineNums = document.getElementById('lineNums');
+  const fileLabelEl = document.getElementById('fileLabel');
+  const modifiedEl = document.getElementById('modifiedFlag');
+  const cursorPosEl = document.getElementById('cursorPos');
+  const charCountEl = document.getElementById('charCount');
+  const lineCountEl = document.getElementById('lineCount');
+
+  let fileName = 'Untitled';
+  let savedContent = '';
+  let modified = false;
+  let showLineNums = true;
+  let wordWrap = false;
+  let openMenu = null;
+  let findMatches = [];
+  let findIndex = -1;
+
+  // --- Line Numbers ---
+  function updateLineNumbers() {
+    const lines = editor.value.split('\n').length;
+    let html = '';
+    for (let i = 1; i <= lines; i++) html += `<div>${i}</div>`;
+    lineNums.innerHTML = html;
+    lineNums.scrollTop = editor.scrollTop;
+  }
+
+  // --- Status Bar ---
+  function updateStatus() {
+    const val = editor.value;
+    const pos = editor.selectionStart;
+    const before = val.substring(0, pos);
+    const line = before.split('\n').length;
+    const col = pos - before.lastIndexOf('\n');
+    cursorPosEl.textContent = `Ln ${line}, Col ${col}`;
+    charCountEl.textContent = `${val.length} chars`;
+    lineCountEl.textContent = `${val.split('\n').length} lines`;
+
+    const isModified = val !== savedContent;
+    if (isModified !== modified) {
+      modified = isModified;
+      modifiedEl.textContent = modified ? '(modified)' : '';
+      modifiedEl.className = modified ? 'modified' : '';
+    }
+  }
+
+  // --- File Operations ---
+  function newFile() {
+    if (modified && !confirm('Discard unsaved changes?')) return;
+    editor.value = '';
+    savedContent = '';
+    fileName = 'Untitled';
+    fileLabelEl.textContent = fileName;
+    modified = false;
+    modifiedEl.textContent = '';
+    updateLineNumbers();
+    updateStatus();
+    closeMenus();
+  }
+
+  async function saveFile() {
+    savedContent = editor.value;
+    modified = false;
+    modifiedEl.textContent = '';
+    try {
+      await LLMOS.storage.set('notepad_file_' + fileName, editor.value);
+      await LLMOS.storage.set('notepad_filename', fileName);
+    } catch (e) { /* storage may not be available */ }
+    closeMenus();
+  }
+
+  async function saveAs() {
+    const name = prompt('File name:', fileName);
+    if (!name) return;
+    fileName = name;
+    fileLabelEl.textContent = fileName;
+    await saveFile();
+  }
+
+  async function loadFile() {
+    const name = prompt('File name to open:', fileName);
+    if (!name) return;
+    try {
+      const content = await LLMOS.storage.get('notepad_file_' + name);
+      if (content !== null && content !== undefined) {
+        editor.value = content;
+        savedContent = content;
+        fileName = name;
+        fileLabelEl.textContent = fileName;
+        modified = false;
+        modifiedEl.textContent = '';
+        updateLineNumbers();
+        updateStatus();
+      } else {
+        alert('File not found: ' + name);
+      }
+    } catch (e) {
+      alert('Could not load file');
+    }
+    closeMenus();
+  }
+
+  // --- Edit Operations ---
+  function doUndo() { document.execCommand('undo'); closeMenus(); }
+  function doRedo() { document.execCommand('redo'); closeMenus(); }
+  function doCut() { document.execCommand('cut'); closeMenus(); }
+  function doCopy() { document.execCommand('copy'); closeMenus(); }
+  function doPaste() { navigator.clipboard.readText().then(t => { document.execCommand('insertText', false, t); }); closeMenus(); }
+  function selectAll() { editor.select(); closeMenus(); }
+
+  // --- Menus ---
+  function toggleMenu(name) {
+    const drop = document.getElementById('drop-' + name);
+    const item = document.getElementById('menu-' + name);
+    if (openMenu === name) { closeMenus(); return; }
+    closeMenus();
+    drop.classList.add('open');
+    item.classList.add('active');
+    openMenu = name;
+  }
+  function closeMenus() {
+    document.querySelectorAll('.dropdown').forEach(d => d.classList.remove('open'));
+    document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
+    openMenu = null;
+  }
+
+  // --- Find & Replace ---
+  function toggleFind() {
+    const bar = document.getElementById('findbar');
+    bar.classList.toggle('open');
+    const editorWrap = document.querySelector('.editor-wrap');
+    if (bar.classList.contains('open')) {
+      editorWrap.style.top = '108px';
+      document.getElementById('findInput').focus();
+      const sel = editor.value.substring(editor.selectionStart, editor.selectionEnd);
+      if (sel) document.getElementById('findInput').value = sel;
+      doFind();
+    } else {
+      editorWrap.style.top = '68px';
+    }
+    closeMenus();
+  }
+
+  function doFind() {
+    const term = document.getElementById('findInput').value;
+    const countEl = document.getElementById('matchCount');
+    findMatches = [];
+    findIndex = -1;
+    if (!term) { countEl.textContent = ''; return; }
+    let idx = 0;
+    const lower = editor.value.toLowerCase();
+    const search = term.toLowerCase();
+    while ((idx = lower.indexOf(search, idx)) !== -1) {
+      findMatches.push(idx);
+      idx += search.length;
+    }
+    countEl.textContent = findMatches.length ? `${findMatches.length} found` : 'No matches';
+    if (findMatches.length) { findIndex = 0; highlightMatch(); }
+  }
+
+  function highlightMatch() {
+    if (findIndex < 0 || findIndex >= findMatches.length) return;
+    const pos = findMatches[findIndex];
+    const term = document.getElementById('findInput').value;
+    editor.focus();
+    editor.setSelectionRange(pos, pos + term.length);
+    document.getElementById('matchCount').textContent = `${findIndex + 1}/${findMatches.length}`;
+  }
+
+  function findNext() {
+    if (!findMatches.length) return;
+    findIndex = (findIndex + 1) % findMatches.length;
+    highlightMatch();
+  }
+
+  function findPrev() {
+    if (!findMatches.length) return;
+    findIndex = (findIndex - 1 + findMatches.length) % findMatches.length;
+    highlightMatch();
+  }
+
+  function doReplace() {
+    if (findIndex < 0 || !findMatches.length) return;
+    const term = document.getElementById('findInput').value;
+    const repl = document.getElementById('replaceInput').value;
+    const pos = findMatches[findIndex];
+    editor.setSelectionRange(pos, pos + term.length);
+    document.execCommand('insertText', false, repl);
+    doFind();
+  }
+
+  function doReplaceAll() {
+    const term = document.getElementById('findInput').value;
+    const repl = document.getElementById('replaceInput').value;
+    if (!term) return;
+    const val = editor.value;
+    const re = new RegExp(term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'gi');
+    editor.value = val.replace(re, repl);
+    doFind();
+    updateLineNumbers();
+    updateStatus();
+  }
+
+  // --- Settings ---
+  function changeFont() {
+    editor.style.fontFamily = document.getElementById('fontFamily').value;
+  }
+
+  function changeFontSize() {
+    const size = document.getElementById('fontSize').value;
+    editor.style.fontSize = size + 'px';
+    lineNums.style.fontSize = size + 'px';
+    updateLineNumbers();
+  }
+
+  function toggleLineNumbers() {
+    showLineNums = !showLineNums;
+    lineNums.style.display = showLineNums ? '' : 'none';
+  }
+
+  function toggleWordWrap() {
+    wordWrap = !wordWrap;
+    editor.style.whiteSpace = wordWrap ? 'pre-wrap' : 'pre';
+    editor.style.overflowX = wordWrap ? 'hidden' : 'auto';
+    closeMenus();
+  }
+
+  // --- Events ---
+  editor.addEventListener('input', () => { updateLineNumbers(); updateStatus(); });
+  editor.addEventListener('click', updateStatus);
+  editor.addEventListener('keyup', updateStatus);
+  editor.addEventListener('scroll', () => { lineNums.scrollTop = editor.scrollTop; });
+
+  // Tab key inserts tab character
+  editor.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab') {
+      e.preventDefault();
+      document.execCommand('insertText', false, '    ');
+    }
+  });
+
+  // Keyboard shortcuts
+  document.addEventListener('keydown', (e) => {
+    if (e.ctrlKey && e.key === 'n') { e.preventDefault(); newFile(); }
+    if (e.ctrlKey && e.key === 's' && e.shiftKey) { e.preventDefault(); saveAs(); }
+    else if (e.ctrlKey && e.key === 's') { e.preventDefault(); saveFile(); }
+    if (e.ctrlKey && e.key === 'o') { e.preventDefault(); loadFile(); }
+    if (e.ctrlKey && e.key === 'f') { e.preventDefault(); toggleFind(); }
+    if (e.key === 'Escape') { document.getElementById('findbar').classList.remove('open'); closeMenus(); }
+    if (e.ctrlKey && e.key === 'g') {
+      e.preventDefault();
+      const line = parseInt(prompt('Go to line:'), 10);
+      if (!isNaN(line)) {
+        const lines = editor.value.split('\n');
+        let pos = 0;
+        for (let i = 0; i < Math.min(line - 1, lines.length); i++) pos += lines[i].length + 1;
+        editor.setSelectionRange(pos, pos);
+        editor.focus();
+      }
+    }
+  });
+
+  // Close menus on click outside
+  document.addEventListener('click', (e) => {
+    if (!e.target.closest('.menu-item')) closeMenus();
+  });
+
+  // Auto-load last file
+  (async () => {
+    try {
+      const lastFile = await LLMOS.storage.get('notepad_filename');
+      if (lastFile) {
+        const content = await LLMOS.storage.get('notepad_file_' + lastFile);
+        if (content !== null && content !== undefined) {
+          editor.value = content;
+          savedContent = content;
+          fileName = lastFile;
+          fileLabelEl.textContent = fileName;
+        }
+      }
+    } catch (e) { /* ignore */ }
+    updateLineNumbers();
+    updateStatus();
+  })();
+</script>
+</body>
+</html>

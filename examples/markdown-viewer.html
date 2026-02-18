@@ -1,0 +1,107 @@
+<!-- capabilities: ["ui:window", "storage:local"] -->
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>Markdown Viewer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{display:flex;flex-direction:column;height:100vh;background:#1a1a2e;color:#e0e0e0;font-family:sans-serif;font-size:14px}
+header{padding:8px 12px;background:#0d0d1a;border-bottom:1px solid #333;display:flex;align-items:center;gap:12px}
+header h1{font-size:14px;color:#6c63ff;font-weight:600}
+header span{font-size:11px;color:#888}
+#saved-indicator{font-size:11px;color:#4caf50;margin-left:auto;opacity:0;transition:opacity 0.5s}
+.panes{display:flex;flex:1;overflow:hidden}
+#editor,#preview{flex:1;overflow-y:auto;padding:14px}
+#editor{border-right:1px solid #333;background:#0d0d1a}
+textarea{width:100%;height:100%;background:transparent;border:none;outline:none;color:#ccc;font-family:monospace;font-size:13px;line-height:1.6;resize:none}
+#preview{line-height:1.7}
+#preview h1{font-size:1.8em;border-bottom:1px solid #333;padding-bottom:6px;margin-bottom:12px;color:#e0e0e0}
+#preview h2{font-size:1.4em;border-bottom:1px solid #222;padding-bottom:4px;margin:16px 0 8px;color:#e0e0e0}
+#preview h3{font-size:1.15em;margin:14px 0 6px;color:#e0e0e0}
+#preview h4,#preview h5,#preview h6{margin:10px 0 4px;color:#ccc}
+#preview p{margin-bottom:10px}
+#preview a{color:#6c63ff}
+#preview code{background:#0d0d1a;border:1px solid #333;padding:1px 5px;border-radius:3px;font-size:12px;font-family:monospace}
+#preview pre{background:#0d0d1a;border:1px solid #333;border-radius:4px;padding:10px;overflow-x:auto;margin-bottom:10px}
+#preview pre code{background:none;border:none;padding:0}
+#preview blockquote{border-left:3px solid #6c63ff;padding:4px 10px;margin-bottom:10px;color:#aaa;background:#0d0d1a}
+#preview ul,#preview ol{margin:0 0 10px 20px}
+#preview li{margin-bottom:3px}
+#preview hr{border:none;border-top:1px solid #333;margin:14px 0}
+#preview table{border-collapse:collapse;width:100%;margin-bottom:10px}
+#preview th,#preview td{border:1px solid #333;padding:6px 10px;text-align:left}
+#preview th{background:#0d0d1a;color:#6c63ff}
+#preview strong{color:#fff}
+#preview em{color:#b0a0e0}
+</style></head><body>
+<header>
+  <h1>Markdown Viewer</h1>
+  <span>editor | preview</span>
+  <div id="saved-indicator">Saved</div>
+</header>
+<div class="panes">
+  <div id="editor"><textarea id="input" placeholder="Type markdown here..."></textarea></div>
+  <div id="preview"></div>
+</div>
+<script>
+const input = document.getElementById('input');
+const preview = document.getElementById('preview');
+const savedEl = document.getElementById('saved-indicator');
+const STORAGE_KEY = 'llmos_md_content';
+
+function md(src) {
+  let s = src.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  // code blocks
+  s = s.replace(/```([^\n]*)\n([\s\S]*?)```/gm, (_,lang,code) =>
+    `<pre><code class="lang-${lang}">${code.trimEnd()}</code></pre>`);
+  // blockquotes
+  s = s.replace(/^&gt; ?(.*)$/gm, '<blockquote>$1</blockquote>');
+  // headers
+  s = s.replace(/^#{6} (.+)$/gm,'<h6>$1</h6>');
+  s = s.replace(/^#{5} (.+)$/gm,'<h5>$1</h5>');
+  s = s.replace(/^#{4} (.+)$/gm,'<h4>$1</h4>');
+  s = s.replace(/^### (.+)$/gm,'<h3>$1</h3>');
+  s = s.replace(/^## (.+)$/gm,'<h2>$1</h2>');
+  s = s.replace(/^# (.+)$/gm,'<h1>$1</h1>');
+  // hr
+  s = s.replace(/^[-*_]{3,}$/gm,'<hr>');
+  // tables
+  s = s.replace(/^(\|.+\|)\n\|[-| :]+\|\n((?:\|.+\|\n?)*)/gm, (_,hdr,rows) => {
+    const th = hdr.split('|').filter(c=>c.trim()).map(c=>`<th>${c.trim()}</th>`).join('');
+    const trs = rows.trim().split('\n').map(r=>{
+      const tds = r.split('|').filter(c=>c.trim()).map(c=>`<td>${c.trim()}</td>`).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    return `<table><thead><tr>${th}</tr></thead><tbody>${trs}</tbody></table>`;
+  });
+  // lists
+  s = s.replace(/((?:^- .+\n?)+)/gm, bl =>
+    '<ul>'+bl.trim().split('\n').map(l=>`<li>${l.slice(2)}</li>`).join('')+'</ul>');
+  s = s.replace(/((?:^\d+\. .+\n?)+)/gm, bl =>
+    '<ol>'+bl.trim().split('\n').map(l=>`<li>${l.replace(/^\d+\. /,'')}</li>`).join('')+'</ol>');
+  // inline
+  s = s.replace(/\*\*(.+?)\*\*/g,'<strong>$1</strong>');
+  s = s.replace(/\*(.+?)\*/g,'<em>$1</em>');
+  s = s.replace(/_(.+?)_/g,'<em>$1</em>');
+  s = s.replace(/`([^`]+)`/g,'<code>$1</code>');
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g,'<a href="$2" target="_blank">$1</a>');
+  // paragraphs
+  s = s.replace(/^(?!<[a-z])(.+)$/gm,'<p>$1</p>');
+  return s;
+}
+
+function render() { preview.innerHTML = md(input.value); }
+
+let saveTimer;
+function schedSave() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(() => {
+    try { LLMOS.storage.setItem(STORAGE_KEY, input.value); } catch(e) { localStorage.setItem(STORAGE_KEY, input.value); }
+    savedEl.style.opacity = 1;
+    setTimeout(()=>savedEl.style.opacity=0, 1500);
+  }, 600);
+}
+
+// load
+try { input.value = LLMOS.storage.getItem(STORAGE_KEY) || ''; } catch(e) { input.value = localStorage.getItem(STORAGE_KEY) || ''; }
+if (!input.value) input.value = '# Hello Markdown\n\nStart typing **here**.\n\n- Item 1\n- Item 2\n\n`inline code` and ~~more~~.\n\n> A blockquote\n\n```js\nconsole.log("code block");\n```';
+render();
+input.addEventListener('input', ()=>{ render(); schedSave(); });
+</script></body></html>

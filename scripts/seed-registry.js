@@ -29,6 +29,14 @@ const examples = [
   { file: 'todo.html', prompt: 'a todo list', caps: ['ui:window', 'storage:local'], tags: ['productivity'] },
   { file: 'pomodoro.html', prompt: 'a pomodoro timer with break reminders', caps: ['ui:window', 'timer:basic', 'storage:local'], tags: ['productivity', 'time'] },
   { file: 'password-generator.html', prompt: 'a password generator', caps: ['ui:window'], tags: ['security', 'utility'] },
+  { file: 'notepad.html', prompt: 'a notepad with find and replace, line numbers, and file management', caps: ['ui:window', 'storage:local', 'clipboard:rw'], tags: ['productivity', 'editor', 'utility'] },
+  { file: 'unit-converter.html', prompt: 'a unit converter for length, weight, temperature, and data size', caps: ['ui:window'], tags: ['utility', 'reference', 'math'] },
+  { file: 'regex-tester.html', prompt: 'a regex tester with live match highlighting', caps: ['ui:window'], tags: ['developer', 'utility', 'text'] },
+  { file: 'world-clock.html', prompt: 'a world clock showing multiple time zones', caps: ['ui:window', 'storage:local', 'timer:basic'], tags: ['productivity', 'time', 'reference'] },
+  { file: 'json-inspector.html', prompt: 'a JSON inspector with validation and formatting', caps: ['ui:window', 'clipboard:rw'], tags: ['developer', 'utility', 'data'] },
+  { file: 'markdown-viewer.html', prompt: 'a markdown editor with live preview', caps: ['ui:window', 'storage:local'], tags: ['productivity', 'text', 'editor'] },
+  { file: 'color-palette.html', prompt: 'a color palette tool with hex, RGB, and HSL values', caps: ['ui:window', 'storage:local', 'clipboard:rw'], tags: ['creativity', 'design', 'developer'] },
+  { file: 'system-dashboard.html', prompt: 'a system dashboard with uptime and storage usage', caps: ['ui:window', 'storage:local', 'timer:basic'], tags: ['system', 'utility', 'monitoring'] },
 ];
 
 for (const ex of examples) {

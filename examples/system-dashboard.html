@@ -1,0 +1,115 @@
+<!-- capabilities: ["ui:window", "storage:local", "timer:basic"] -->
+<!DOCTYPE html><html lang="en"><head><meta charset="UTF-8"><title>System Dashboard</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#0d0d1a;color:#e0e0e0;font-family:monospace;font-size:13px;padding:16px;min-height:100vh}
+h1{color:#6c63ff;font-size:15px;font-family:sans-serif;margin-bottom:14px;font-weight:600}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px}
+.card{background:#1a1a2e;border:1px solid #2a2a4e;border-radius:8px;padding:12px}
+.card h2{font-size:11px;color:#888;text-transform:uppercase;letter-spacing:1px;font-family:sans-serif;margin-bottom:8px}
+.big{font-size:22px;color:#6c63ff;font-weight:bold}
+.sub{font-size:11px;color:#666;margin-top:2px}
+#log-card{grid-column:1/-1}
+#log{max-height:160px;overflow-y:auto;display:flex;flex-direction:column;gap:4px}
+.log-entry{display:flex;gap:8px;font-size:12px;border-bottom:1px solid #1a1a2e;padding-bottom:3px}
+.log-time{color:#6c63ff;flex-shrink:0;width:80px}
+.log-msg{color:#ccc}
+#storage-card{grid-column:1/-1}
+#storage-list{max-height:160px;overflow-y:auto}
+table{width:100%;border-collapse:collapse}
+th{text-align:left;color:#6c63ff;font-size:11px;padding:4px 6px;border-bottom:1px solid #2a2a4e}
+td{padding:4px 6px;font-size:12px;border-bottom:1px solid #1a1a2e;word-break:break-all;max-width:0}
+td:first-child{color:#a0a0e0;white-space:nowrap;width:160px;max-width:160px}
+td:last-child{color:#888;text-align:right;white-space:nowrap;width:60px}
+.empty{color:#555;font-size:12px;padding:8px 0}
+.actions{display:flex;gap:8px;margin-bottom:12px}
+button{background:#6c63ff;color:#fff;border:none;border-radius:5px;padding:5px 12px;cursor:pointer;font-size:12px;font-family:sans-serif}
+button:hover{background:#7c73ff}
+button.sm{background:#1a1a2e;border:1px solid #333}
+button.sm:hover{background:#2a2a4e}
+</style></head><body>
+<h1>System Dashboard</h1>
+<div class="actions">
+  <button onclick="refreshStorage()">Refresh Storage</button>
+  <button class="sm" onclick="clearLog()">Clear Log</button>
+</div>
+<div class="grid">
+  <div class="card">
+    <h2>Session Start</h2>
+    <div class="big" id="start-time">--:--:--</div>
+    <div class="sub" id="start-date"></div>
+  </div>
+  <div class="card">
+    <h2>Uptime</h2>
+    <div class="big" id="uptime">0s</div>
+    <div class="sub">since session open</div>
+  </div>
+  <div class="card" id="log-card">
+    <h2>Activity Log</h2>
+    <div id="log"></div>
+  </div>
+  <div class="card" id="storage-card">
+    <h2>LLMOS Storage Inspector</h2>
+    <div id="storage-list"></div>
+  </div>
+</div>
+<script>
+const SESSION_START = Date.now();
+const LOG_KEY = 'llmos_dashboard_log';
+
+function fmt(d){return d.toTimeString().slice(0,8);}
+function fmtDur(ms){const s=Math.floor(ms/1000),m=Math.floor(s/60),h=Math.floor(m/60);return h?`${h}h ${m%60}m ${s%60}s`:m?`${m}m ${s%60}s`:`${s}s`;}
+function fmtSize(str){const b=new TextEncoder().encode(str).length;return b>1024?`${(b/1024).toFixed(1)}k`:b+'b';}
+
+function getStorage(){try{return LLMOS.storage;}catch(e){return localStorage;}}
+
+function log(msg){
+  const store=getStorage();
+  let entries=[];
+  try{entries=JSON.parse(store.getItem(LOG_KEY)||'[]');}catch(e){}
+  entries.push({t:Date.now(),msg});
+  if(entries.length>50)entries=entries.slice(-50);
+  try{store.setItem(LOG_KEY,JSON.stringify(entries));}catch(e){}
+  renderLog(entries);
+}
+
+function renderLog(entries){
+  if(!entries){const store=getStorage();try{entries=JSON.parse(store.getItem(LOG_KEY)||'[]');}catch(e){entries=[];}}
+  const el=document.getElementById('log');
+  if(!entries.length){el.innerHTML='<div class="empty">No entries yet.</div>';return;}
+  el.innerHTML=entries.slice().reverse().map(e=>`<div class="log-entry"><span class="log-time">${fmt(new Date(e.t))}</span><span class="log-msg">${e.msg}</span></div>`).join('');
+}
+
+function refreshStorage(){
+  const store=getStorage();
+  const el=document.getElementById('storage-list');
+  const keys=[];
+  for(let i=0;i<store.length;i++)keys.push(store.key(i));
+  if(!keys.length){el.innerHTML='<div class="empty">Storage is empty.</div>';return;}
+  const rows=keys.map(k=>{
+    const v=store.getItem(k)||'';
+    const preview=v.length>60?v.slice(0,60)+'…':v;
+    return `<tr><td>${k}</td><td>${preview}</td><td>${fmtSize(v)}</td></tr>`;
+  }).join('');
+  el.innerHTML=`<table><thead><tr><th>Key</th><th>Value</th><th>Size</th></tr></thead><tbody>${rows}</tbody></table>`;
+  log('Storage refreshed');
+}
+
+function clearLog(){
+  const store=getStorage();
+  store.removeItem(LOG_KEY);
+  renderLog([]);
+}
+
+// uptime ticker
+setInterval(()=>{
+  document.getElementById('uptime').textContent=fmtDur(Date.now()-SESSION_START);
+},1000);
+
+// init
+const now=new Date();
+document.getElementById('start-time').textContent=fmt(now);
+document.getElementById('start-date').textContent=now.toDateString();
+log('Dashboard opened');
+refreshStorage();
+</script></body></html>

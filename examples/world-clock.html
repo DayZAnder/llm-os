@@ -1,0 +1,117 @@
+<!-- capabilities: ["ui:window", "storage:local", "timer:basic"] -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>World Clock</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1a1a2e; color: #e0e0e0; font-family: sans-serif; padding: 16px; }
+h2 { color: #6c63ff; margin-bottom: 12px; font-size: 1rem; }
+.add-row { display: flex; gap: 8px; margin-bottom: 14px; }
+select { background: #16213e; color: #e0e0e0; border: 1px solid #333; border-radius: 6px; padding: 7px 10px; font-size: 0.85rem; flex: 1; }
+button { background: #6c63ff; color: #fff; border: none; border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 0.85rem; }
+button:hover { background: #857dff; }
+.clocks { display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 10px; }
+.clock { background: #16213e; border: 1px solid #2a2a4a; border-radius: 8px; padding: 12px; position: relative; }
+.clock .city { font-size: 0.8rem; color: #aaa; margin-bottom: 4px; }
+.clock .time { font-size: 1.5rem; font-weight: bold; color: #6c63ff; letter-spacing: 1px; }
+.clock .date { font-size: 0.75rem; color: #888; margin-top: 2px; }
+.clock .offset { font-size: 0.7rem; color: #555; margin-top: 2px; }
+.rm { position: absolute; top: 6px; right: 8px; background: none; border: none; color: #444; cursor: pointer; font-size: 0.85rem; padding: 0; }
+.rm:hover { color: #ff6b6b; }
+select:focus, button:focus { outline: none; }
+</style>
+</head>
+<body>
+<h2>World Clock</h2>
+<div class="add-row">
+  <select id="tzsel"></select>
+  <button onclick="addCity()">Add</button>
+</div>
+<div class="clocks" id="clocks"></div>
+<script>
+const ZONES = [
+  ['UTC','UTC'],['New York','America/New_York'],['Los Angeles','America/Los_Angeles'],
+  ['Chicago','America/Chicago'],['Toronto','America/Toronto'],['São Paulo','America/Sao_Paulo'],
+  ['London','Europe/London'],['Paris','Europe/Paris'],['Berlin','Europe/Berlin'],
+  ['Stockholm','Europe/Stockholm'],['Moscow','Europe/Moscow'],['Dubai','Asia/Dubai'],
+  ['Mumbai','Asia/Kolkata'],['Bangkok','Asia/Bangkok'],['Singapore','Asia/Singapore'],
+  ['Tokyo','Asia/Tokyo'],['Seoul','Asia/Seoul'],['Shanghai','Asia/Shanghai'],
+  ['Sydney','Australia/Sydney'],['Auckland','Pacific/Auckland']
+];
+const DEFAULTS = ['UTC','America/New_York','Europe/London','Asia/Tokyo','Australia/Sydney'];
+
+const sel = document.getElementById('tzsel');
+ZONES.forEach(([name, tz]) => {
+  const o = document.createElement('option');
+  o.value = tz; o.textContent = name;
+  sel.appendChild(o);
+});
+
+function load() {
+  try {
+    if (typeof LLMOS !== 'undefined' && LLMOS.storage)
+      return JSON.parse(LLMOS.storage.getItem('worldclock_cities') || 'null');
+  } catch(e) {}
+  try { return JSON.parse(localStorage.getItem('worldclock_cities') || 'null'); } catch(e) {}
+  return null;
+}
+function save(cities) {
+  const s = JSON.stringify(cities);
+  try { if (typeof LLMOS !== 'undefined' && LLMOS.storage) LLMOS.storage.setItem('worldclock_cities', s); } catch(e) {}
+  try { localStorage.setItem('worldclock_cities', s); } catch(e) {}
+}
+
+let cities = load() || DEFAULTS.slice();
+
+function getOffset(tz) {
+  try {
+    const now = new Date();
+    const utc = new Date(now.toLocaleString('en-US', { timeZone: 'UTC' }));
+    const local = new Date(now.toLocaleString('en-US', { timeZone: tz }));
+    const diff = (local - utc) / 3600000;
+    const sign = diff >= 0 ? '+' : '-';
+    const abs = Math.abs(diff);
+    const h = Math.floor(abs), m = Math.round((abs - h) * 60);
+    return `UTC${sign}${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`;
+  } catch(e) { return ''; }
+}
+function nameFor(tz) {
+  const z = ZONES.find(z => z[1] === tz);
+  return z ? z[0] : tz.split('/').pop().replace(/_/g,' ');
+}
+function render() {
+  const container = document.getElementById('clocks');
+  container.innerHTML = '';
+  cities.forEach(tz => {
+    const div = document.createElement('div');
+    div.className = 'clock';
+    div.dataset.tz = tz;
+    div.innerHTML = `<div class="city">${nameFor(tz)}</div><div class="time">--:--:--</div><div class="date">--</div><div class="offset">${getOffset(tz)}</div><button class="rm" title="Remove">✕</button>`;
+    div.querySelector('.rm').onclick = () => { cities = cities.filter(c => c !== tz); save(cities); render(); };
+    container.appendChild(div);
+  });
+}
+function tick() {
+  document.querySelectorAll('.clock').forEach(el => {
+    const tz = el.dataset.tz;
+    try {
+      const now = new Date();
+      const time = now.toLocaleTimeString('en-GB', { timeZone: tz, hour12: false });
+      const date = now.toLocaleDateString('en-GB', { timeZone: tz, weekday:'short', month:'short', day:'numeric' });
+      el.querySelector('.time').textContent = time;
+      el.querySelector('.date').textContent = date;
+    } catch(e) {}
+  });
+}
+function addCity() {
+  const tz = sel.value;
+  if (!cities.includes(tz)) { cities.push(tz); save(cities); render(); }
+}
+render();
+tick();
+setInterval(tick, 1000);
+</script>
+</body>
+</html>

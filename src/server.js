@@ -15,6 +15,8 @@ import { tasks as selfImproveTasks } from './kernel/self-improve/index.js';
 import { loadQueue, queueClaudeTask } from './kernel/self-improve/claude-agent.js';
 import { loadProfile, reloadProfile, getBootApps, solidify, goEphemeral, isSolidified, getSnapshotInfo } from './kernel/profile.js';
 import * as knowledgeBase from './kernel/knowledge.js';
+import { getShellPath, listVersions as listShellVersions, getCurrentId as getShellCurrentId, getCurrentVersion as getShellCurrentVersion, setCurrentId as setShellCurrentId, readVersionHtml } from './kernel/shell-versions/store.js';
+import { improveShell, addSseClient, removeSseClient, notifyShellReload } from './kernel/shell-versions/improve.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
@@ -33,7 +35,7 @@ function serveStatic(url, res) {
   // Map URLs to files
   let filePath;
   if (url === '/' || url === '/index.html') {
-    filePath = join(__dirname, 'shell', 'index.html');
+    filePath = getShellPath();
   } else if (url.startsWith('/sdk/')) {
     filePath = join(__dirname, '..', 'src', url.slice(1));
   } else {
@@ -492,6 +494,67 @@ async function handleAPI(method, fullUrl, body, res) {
       return;
     }
 
+    // --- Shell self-improvement endpoints ---
+
+    // GET /api/shell/versions — list all shell versions (metadata only)
+    if (method === 'GET' && url === '/api/shell/versions') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(listShellVersions()));
+      return;
+    }
+
+    // GET /api/shell/current — current shell version info
+    if (method === 'GET' && url === '/api/shell/current') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ id: getShellCurrentId(), version: getShellCurrentVersion() }));
+      return;
+    }
+
+    // POST /api/shell/improve — generate an improved shell
+    if (method === 'POST' && url === '/api/shell/improve') {
+      const { prompt } = body ? JSON.parse(body) : {};
+      const result = await improveShell(prompt || null, 'user');
+      if (result.error) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // POST /api/shell/rollback/:id — roll back to a previous version
+    const shellRollbackMatch = url.match(/^\/api\/shell\/rollback\/([^/]+)$/);
+    if (method === 'POST' && shellRollbackMatch) {
+      const id = shellRollbackMatch[1];
+      const html = readVersionHtml(id);
+      if (!html) {
+        res.writeHead(404);
+        res.end('Version not found');
+        return;
+      }
+      setShellCurrentId(id);
+      notifyShellReload(id);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true, id }));
+      return;
+    }
+
+    // GET /api/shell/version/:id/html — get full HTML of a version
+    const shellHtmlMatch = url.match(/^\/api\/shell\/version\/([^/]+)\/html$/);
+    if (method === 'GET' && shellHtmlMatch) {
+      const html = readVersionHtml(shellHtmlMatch[1]);
+      if (!html) {
+        res.writeHead(404);
+        res.end('Version not found');
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/html' });
+      res.end(html);
+      return;
+    }
+
     // --- Registry endpoints ---
 
     // GET /api/registry/stats — registry overview
@@ -639,6 +702,19 @@ await initTokenKey();
 
 const server = createServer((req, res) => {
   const pathOnly = req.url.split('?')[0];
+
+  // SSE endpoint — handle before body collection (long-lived connection)
+  if (pathOnly === '/api/shell/events') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+    });
+    res.write(':\n\n'); // comment to establish connection
+    addSseClient(res);
+    req.on('close', () => removeSseClient(res));
+    return;
+  }
 
   if (pathOnly.startsWith('/api/')) {
     let body = '';

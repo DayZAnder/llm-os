@@ -1,0 +1,108 @@
+<!-- capabilities: ["ui:window"] -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Regex Tester</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1a1a2e; color: #e0e0e0; font-family: monospace; padding: 16px; font-size: 0.9rem; }
+h2 { color: #6c63ff; margin-bottom: 12px; font-size: 1rem; font-family: sans-serif; }
+label { color: #aaa; font-size: 0.8rem; display: block; margin-bottom: 4px; font-family: sans-serif; }
+input, textarea { background: #16213e; color: #e0e0e0; border: 1px solid #333; border-radius: 6px; padding: 8px; font-family: monospace; font-size: 0.9rem; width: 100%; }
+input:focus, textarea:focus { outline: none; border-color: #6c63ff; }
+.pat-row { display: flex; gap: 8px; margin-bottom: 10px; }
+.pat-row input:first-child { flex: 1; }
+.pat-row input:last-child { width: 80px; }
+.hl-wrap { position: relative; margin-bottom: 10px; }
+textarea { resize: vertical; min-height: 90px; position: relative; z-index: 1; background: transparent; }
+.hl-bg { position: absolute; top: 0; left: 0; width: 100%; height: 100%; padding: 8px; white-space: pre-wrap; word-wrap: break-word; overflow: hidden; background: #16213e; border-radius: 6px; pointer-events: none; z-index: 0; color: transparent; }
+mark { background: #6c63ff55; color: transparent; border-radius: 2px; }
+.err { color: #ff6b6b; font-size: 0.8rem; margin-bottom: 8px; font-family: sans-serif; }
+.info { color: #aaa; font-size: 0.8rem; margin-bottom: 8px; font-family: sans-serif; }
+.groups { margin-top: 8px; }
+.group { background: #16213e; border: 1px solid #333; border-radius: 4px; padding: 4px 8px; margin-bottom: 4px; }
+.group span { color: #6c63ff; }
+</style>
+</head>
+<body>
+<h2>Regex Tester</h2>
+<label>Pattern &amp; Flags</label>
+<div class="pat-row">
+  <input id="pat" type="text" placeholder="e.g. \b\w+\b" spellcheck="false" />
+  <input id="flags" type="text" placeholder="gim" maxlength="5" spellcheck="false" />
+</div>
+<label>Test String</label>
+<div class="hl-wrap">
+  <div class="hl-bg" id="hlbg" aria-hidden="true"></div>
+  <textarea id="txt" spellcheck="false" placeholder="Enter text to test against..."></textarea>
+</div>
+<div id="err" class="err"></div>
+<div id="info" class="info"></div>
+<div class="groups" id="groups"></div>
+<script>
+const pat = document.getElementById('pat');
+const flags = document.getElementById('flags');
+const txt = document.getElementById('txt');
+const hlbg = document.getElementById('hlbg');
+const err = document.getElementById('err');
+const info = document.getElementById('info');
+const groups = document.getElementById('groups');
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function run() {
+  err.textContent = '';
+  info.textContent = '';
+  groups.innerHTML = '';
+  const text = txt.value;
+  const p = pat.value;
+  if (!p) { hlbg.textContent = text; return; }
+  let rx;
+  try {
+    let f = flags.value.replace(/[^gimsuy]/g,'');
+    if (!f.includes('g') && !f.includes('d')) f += 'g';
+    else if (!f.includes('g')) f += 'g';
+    rx = new RegExp(p, f);
+  } catch(e) { err.textContent = 'Error: ' + e.message; hlbg.textContent = esc(text); return; }
+
+  const matches = [];
+  let m;
+  rx.lastIndex = 0;
+  while ((m = rx.exec(text)) !== null) {
+    matches.push({ start: m.index, end: m.index + m[0].length, groups: m.slice(1), full: m[0] });
+    if (!rx.global || m[0].length === 0) break;
+  }
+
+  info.textContent = matches.length ? `${matches.length} match${matches.length===1?'':'es'}` : 'No matches';
+
+  // build highlighted html
+  let html = '', last = 0;
+  matches.forEach(m => {
+    html += esc(text.slice(last, m.start));
+    html += '<mark>' + esc(text.slice(m.start, m.end)) + '</mark>';
+    last = m.end;
+  });
+  html += esc(text.slice(last));
+  hlbg.innerHTML = html;
+
+  // show capture groups
+  const withGroups = matches.filter(m => m.groups.length > 0);
+  if (withGroups.length) {
+    withGroups.slice(0,10).forEach((m, i) => {
+      const d = document.createElement('div');
+      d.className = 'group';
+      d.innerHTML = `Match ${i+1}: ` + m.groups.map((g,gi) => `<span>$${gi+1}</span>=${esc(g??'undefined')}`).join(', ');
+      groups.appendChild(d);
+    });
+  }
+}
+
+function syncScroll() { hlbg.scrollTop = txt.scrollTop; }
+txt.addEventListener('input', run);
+txt.addEventListener('scroll', syncScroll);
+pat.addEventListener('input', run);
+flags.addEventListener('input', run);
+</script>
+</body>
+</html>

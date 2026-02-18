@@ -1,0 +1,129 @@
+<!-- capabilities: ["ui:window", "clipboard:rw"] -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>JSON Inspector</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #1a1a2e; color: #e0e0e0; font-family: sans-serif; padding: 16px; }
+h2 { color: #6c63ff; margin-bottom: 12px; font-size: 1rem; }
+textarea { background: #16213e; color: #e0e0e0; border: 1px solid #333; border-radius: 6px; padding: 8px; font-family: monospace; font-size: 0.85rem; width: 100%; resize: vertical; min-height: 80px; }
+textarea:focus { outline: none; border-color: #6c63ff; }
+.btns { display: flex; gap: 8px; margin: 10px 0; }
+button { background: #6c63ff; color: #fff; border: none; border-radius: 6px; padding: 7px 14px; cursor: pointer; font-size: 0.85rem; }
+button:hover { background: #857dff; }
+button.sec { background: #2a2a4a; }
+button.sec:hover { background: #3a3a6a; }
+.err { color: #ff6b6b; font-family: monospace; font-size: 0.82rem; margin-bottom: 8px; }
+#out { background: #0d0d1a; border: 1px solid #2a2a4a; border-radius: 6px; padding: 10px; font-family: monospace; font-size: 0.82rem; line-height: 1.6; overflow: auto; max-height: 400px; white-space: pre; display: none; }
+.k { color: #7ab4ff; }
+.s { color: #6dff9a; }
+.n { color: #ffaa44; }
+.b { color: #c084fc; }
+.nl { color: #ff6b6b; }
+.tog { cursor: pointer; user-select: none; }
+.tog:hover { opacity: 0.7; }
+.collapsed > .inner { display: none; }
+.collapsed > .ellipsis { display: inline; }
+.ellipsis { display: none; color: #888; }
+</style>
+</head>
+<body>
+<h2>JSON Inspector</h2>
+<textarea id="inp" placeholder='Paste JSON here...' spellcheck="false"></textarea>
+<div class="btns">
+  <button onclick="format()">Format</button>
+  <button class="sec" onclick="copyOut()">Copy</button>
+  <button class="sec" onclick="minify()">Minify</button>
+</div>
+<div id="err" class="err"></div>
+<div id="out"></div>
+<script>
+const inp = document.getElementById('inp');
+const out = document.getElementById('out');
+const errEl = document.getElementById('err');
+let formatted = '';
+
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+function renderVal(v, indent) {
+  const pad = '  '.repeat(indent);
+  const pad1 = '  '.repeat(indent+1);
+  if (v === null) return `<span class="nl">null</span>`;
+  if (typeof v === 'boolean') return `<span class="b">${v}</span>`;
+  if (typeof v === 'number') return `<span class="n">${v}</span>`;
+  if (typeof v === 'string') return `<span class="s">"${esc(v)}"</span>`;
+  if (Array.isArray(v)) {
+    if (v.length === 0) return '[]';
+    const id = 'n' + Math.random().toString(36).slice(2);
+    const items = v.map((item,i) => `${pad1}${renderVal(item, indent+1)}${i<v.length-1?',':''}`).join('\n');
+    return `<span class="tog" onclick="toggle('${id}')">[</span><span id="${id}"><span class="inner">\n${items}\n${pad}</span><span class="ellipsis">...]</span></span><span class="tog" onclick="toggle('${id}')">]</span>`;
+  }
+  if (typeof v === 'object') {
+    const keys = Object.keys(v);
+    if (keys.length === 0) return '{}';
+    const id = 'n' + Math.random().toString(36).slice(2);
+    const items = keys.map((k,i) => `${pad1}<span class="k">"${esc(k)}"</span>: ${renderVal(v[k], indent+1)}${i<keys.length-1?',':''}`).join('\n');
+    return `<span class="tog" onclick="toggle('${id}')">{</span><span id="${id}"><span class="inner">\n${items}\n${pad}</span><span class="ellipsis">...}</span></span><span class="tog" onclick="toggle('${id}')">}</span>`;
+  }
+  return esc(String(v));
+}
+
+function toggle(id) {
+  const el = document.getElementById(id);
+  if (el) el.classList.toggle('collapsed');
+}
+
+function parse() {
+  errEl.textContent = '';
+  const text = inp.value.trim();
+  if (!text) { out.style.display='none'; return null; }
+  try { return JSON.parse(text); }
+  catch(e) {
+    const m = e.message.match(/position (\d+)/);
+    let msg = 'Error: ' + e.message;
+    if (m) {
+      const pos = parseInt(m[1]);
+      const before = text.slice(Math.max(0,pos-20), pos);
+      const after = text.slice(pos, pos+20);
+      msg += `\n  ...${before}▶${after}...`;
+    }
+    errEl.textContent = msg;
+    out.style.display = 'none';
+    return null;
+  }
+}
+
+function format() {
+  const v = parse();
+  if (v === null && !errEl.textContent) return;
+  if (v === null) return;
+  formatted = JSON.stringify(v, null, 2);
+  out.innerHTML = renderVal(v, 0);
+  out.style.display = 'block';
+}
+
+function minify() {
+  const v = parse();
+  if (v === null) return;
+  formatted = JSON.stringify(v);
+  inp.value = formatted;
+  out.style.display = 'none';
+}
+
+function copyOut() {
+  const text = formatted || inp.value;
+  if (!text) return;
+  const copy = (t) => {
+    try { if (typeof LLMOS !== 'undefined' && LLMOS.clipboard) { LLMOS.clipboard.writeText(t); return; } } catch(e) {}
+    navigator.clipboard?.writeText(t).catch(() => fallback(t));
+  };
+  const fallback = (t) => { const ta = document.createElement('textarea'); ta.value=t; document.body.appendChild(ta); ta.select(); document.execCommand('copy'); ta.remove(); };
+  copy(text);
+}
+
+inp.addEventListener('keydown', e => { if (e.key==='Tab') { e.preventDefault(); const s=inp.selectionStart,en=inp.selectionEnd; inp.value=inp.value.slice(0,s)+'  '+inp.value.slice(en); inp.selectionStart=inp.selectionEnd=s+2; } });
+</script>
+</body>
+</html>
