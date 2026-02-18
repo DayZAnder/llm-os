@@ -1,0 +1,86 @@
+name: Build VM Image
+
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'build/**'
+      - 'src/**'
+      - 'package.json'
+      - '.github/workflows/build-image.yml'
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Cache Buildroot
+        uses: actions/cache@v4
+        with:
+          path: /tmp/buildroot-cache
+          key: buildroot-${{ hashFiles('build/buildroot/configs/llmos_micro_defconfig', 'build/buildroot/configs/linux_micro.config') }}
+          restore-keys: buildroot-
+
+      - name: Build Docker image
+        run: |
+          docker build \
+            -f build/Dockerfile.buildroot \
+            -t llmos-build \
+            .
+
+      - name: Run Buildroot build
+        run: |
+          mkdir -p build/output
+
+          # Restore cache into container if available
+          CACHE_ARGS=""
+          if [ -d /tmp/buildroot-cache/dl ]; then
+            CACHE_ARGS="-v /tmp/buildroot-cache/dl:/buildroot/dl"
+          fi
+
+          docker run --rm --privileged \
+            -v ${{ github.workspace }}/build/output:/output \
+            $CACHE_ARGS \
+            llmos-build
+
+          # Save download cache for next run
+          docker run --rm \
+            -v /tmp/buildroot-cache:/cache \
+            llmos-build \
+            "cp -r /buildroot/dl /cache/ 2>/dev/null || true"
+
+      - name: Verify outputs
+        run: |
+          echo "=== Build outputs ==="
+          ls -lh build/output/
+          for f in build/output/*.qcow2 build/output/*.vhdx build/output/*.ova; do
+            [ -f "$f" ] && echo "OK: $f ($(du -h "$f" | cut -f1))" || echo "MISSING: $f"
+          done
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: llmos-images
+          path: |
+            build/output/*.qcow2
+            build/output/*.vhdx
+            build/output/*.ova
+          retention-days: 30
+
+      - name: Create release (on tag)
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            build/output/*.qcow2
+            build/output/*.vhdx
+            build/output/*.ova
+          generate_release_notes: true
