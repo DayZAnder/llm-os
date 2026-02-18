@@ -1265,6 +1265,23 @@ async function generateApp(prompt) {
     }
 
     const genData = await genRes.json();
+
+    // Handle clarification requests — auto-retry with force
+    if (genData.needsClarification) {
+      log(`Prompt is vague (confidence: ${genData.confidence?.score}). Generating anyway...`, 'warn');
+      const retryRes = await fetch('/api/generate', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt, force: true }),
+      });
+      if (!retryRes.ok) {
+        const err = await retryRes.text();
+        throw new Error(`Generation failed: ${err}`);
+      }
+      const retryData = await retryRes.json();
+      Object.assign(genData, retryData);
+    }
+
     log(`Generated with ${genData.provider} (${genData.model}) in ${genData.generationTime}ms`, 'ok');
 
     if (genData.sanitization?.flagged) {
