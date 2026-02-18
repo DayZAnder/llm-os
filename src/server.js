@@ -14,6 +14,7 @@ import * as scheduler from './kernel/scheduler.js';
 import { tasks as selfImproveTasks } from './kernel/self-improve/index.js';
 import { loadQueue, queueClaudeTask } from './kernel/self-improve/claude-agent.js';
 import { loadProfile, reloadProfile, getBootApps, solidify, goEphemeral, isSolidified, getSnapshotInfo } from './kernel/profile.js';
+import * as knowledgeBase from './kernel/knowledge.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
@@ -202,22 +203,58 @@ async function handleAPI(method, fullUrl, body, res) {
       return;
     }
 
+    // --- Knowledge Base ---
+
+    // GET /api/knowledge — knowledge base stats
+    if (method === 'GET' && url === '/api/knowledge') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(knowledgeBase.getStats()));
+      return;
+    }
+
+    // GET /api/knowledge/entries — all past generations
+    if (method === 'GET' && url === '/api/knowledge/entries') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(knowledgeBase.getEntries()));
+      return;
+    }
+
+    // GET /api/knowledge/similar?q=... — find similar past prompts
+    if (method === 'GET' && url === '/api/knowledge/similar') {
+      const params = new URL(`http://x${fullUrl}`).searchParams;
+      const query = params.get('q') || '';
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(knowledgeBase.findSimilar(query)));
+      return;
+    }
+
     // POST /api/generate — generate an app from prompt
+    // Pass { force: true } to skip clarification and generate anyway
     if (method === 'POST' && url === '/api/generate') {
-      const { prompt } = JSON.parse(body);
+      const { prompt, force } = JSON.parse(body);
       if (!prompt) {
         res.writeHead(400);
         res.end('Missing prompt');
         return;
       }
 
-      const result = await generate(prompt);
+      const result = await generate(prompt, { force });
+
+      // If clarification needed, return it directly
+      if (result.needsClarification) {
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify(result));
+        return;
+      }
 
       // Also propose capabilities based on the prompt
       const proposed = proposeCapabilities(prompt);
       // Merge with LLM-declared capabilities
       const allCaps = [...new Set([...result.capabilities, ...proposed])];
       result.capabilities = allCaps;
+
+      // Record in knowledge base
+      knowledgeBase.recordGeneration(prompt, result);
 
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));

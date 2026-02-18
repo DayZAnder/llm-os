@@ -2,6 +2,7 @@ import { config } from './config.js';
 import { provider as ollamaProvider } from './providers/ollama.js';
 import { provider as claudeProvider } from './providers/claude.js';
 import { provider as openaiProvider } from './providers/openai-compatible.js';
+import { buildContext } from './knowledge.js';
 
 // Provider registry — add new providers here
 const providers = new Map();
@@ -102,6 +103,97 @@ export function sanitizePrompt(input) {
   }
 
   return { clean: clean.trim(), flagged: flags.length > 0, flags };
+}
+
+// --- Prompt Confidence Scoring ---
+// Scores how clear/specific a prompt is before generating.
+// Low confidence → return clarification questions instead of generating garbage.
+
+const VAGUE_PATTERNS = [
+  /^(?:make|build|create)\s+(?:something|a thing|stuff|an? app)\s*$/i,
+  /^(?:do|help|can you)\s/i,
+  /^(?:idk|idc|whatever|anything|surprise me)/i,
+];
+
+const SPECIFICITY_SIGNALS = [
+  // UI elements
+  /button|input|form|list|table|grid|card|modal|dropdown|slider|toggle/i,
+  // Data types
+  /timer|counter|clock|calculator|calendar|chart|graph|todo|note|editor/i,
+  // Actions
+  /sort|filter|search|drag|resize|animate|save|load|export|import/i,
+  // Layout
+  /sidebar|header|footer|column|row|tab|panel|split/i,
+];
+
+const CAPABILITY_HINTS = [
+  /stor(?:age|e|ing)/i,
+  /timer|interval|timeout|countdown/i,
+  /clipboard|copy|paste/i,
+  /network|fetch|api|http/i,
+];
+
+export function scoreConfidence(prompt) {
+  const words = prompt.trim().split(/\s+/);
+  const lower = prompt.toLowerCase();
+  const scores = {};
+
+  // 1. Length score (0-1): very short prompts are vague
+  if (words.length <= 2) scores.length = 0.2;
+  else if (words.length <= 4) scores.length = 0.5;
+  else if (words.length <= 8) scores.length = 0.7;
+  else scores.length = 1.0;
+
+  // 2. Specificity (0-1): does it mention concrete UI/data elements?
+  const specificityHits = SPECIFICITY_SIGNALS.filter(p => p.test(prompt)).length;
+  scores.specificity = Math.min(specificityHits / 2, 1.0);
+
+  // 3. Vagueness penalty (0-1): explicitly vague patterns
+  const isVague = VAGUE_PATTERNS.some(p => p.test(prompt.trim()));
+  scores.clarity = isVague ? 0.1 : 0.8;
+
+  // 4. Capability clarity (0-1): does it hint at what the app needs?
+  const capHits = CAPABILITY_HINTS.filter(p => p.test(prompt)).length;
+  scores.capabilities = capHits > 0 ? 1.0 : 0.5;
+
+  // Weighted average
+  const total = (
+    scores.length * 0.25 +
+    scores.specificity * 0.35 +
+    scores.clarity * 0.25 +
+    scores.capabilities * 0.15
+  );
+
+  return { score: Math.round(total * 100) / 100, components: scores };
+}
+
+export function generateClarifications(prompt) {
+  const questions = [];
+  const lower = prompt.toLowerCase();
+  const words = prompt.trim().split(/\s+/);
+
+  if (words.length <= 3) {
+    questions.push('Can you describe what the app should do in more detail?');
+  }
+
+  if (!SPECIFICITY_SIGNALS.some(p => p.test(prompt))) {
+    questions.push('What kind of interface should it have? (e.g., buttons, lists, forms, charts)');
+  }
+
+  if (!/color|theme|dark|light|style/i.test(lower)) {
+    // Don't ask about style — we default to dark. Only ask functional questions.
+  }
+
+  if (!/save|store|persist|remember/i.test(lower) && !/timer|clock|countdown/i.test(lower)) {
+    questions.push('Should it save data between sessions, or is it temporary?');
+  }
+
+  // Always provide at least one clarification
+  if (questions.length === 0) {
+    questions.push('Any specific features or behavior you want to highlight?');
+  }
+
+  return questions.slice(0, 3); // max 3 questions
 }
 
 export function estimateComplexity(prompt) {
@@ -272,7 +364,7 @@ export async function generateProcess(prompt) {
   };
 }
 
-export async function generate(prompt) {
+export async function generate(prompt, options = {}) {
   const start = Date.now();
 
   // Sanitize input
@@ -281,14 +373,35 @@ export async function generate(prompt) {
     console.warn('[gateway] Injection patterns detected:', flags);
   }
 
+  // Confidence check — return clarification if prompt is too vague
+  const confidence = scoreConfidence(clean);
+  const skipClarification = options.force === true;
+  if (confidence.score < 0.45 && !skipClarification) {
+    const questions = generateClarifications(clean);
+    console.log(`[gateway] Low confidence (${confidence.score}), asking for clarification`);
+    return {
+      needsClarification: true,
+      confidence,
+      questions,
+      originalPrompt: clean,
+      sanitization: { flagged, flags },
+    };
+  }
+
   // Route to provider
   const complexity = estimateComplexity(clean);
   const providerName = selectProvider(complexity);
 
-  console.log(`[gateway] Generating: complexity=${complexity} provider=${providerName}`);
+  console.log(`[gateway] Generating: confidence=${confidence.score} complexity=${complexity} provider=${providerName}`);
+
+  // Inject knowledge base context if relevant past generations exist
+  const kbContext = buildContext(clean);
+  const systemContent = kbContext
+    ? `${SYSTEM_PROMPT}\n\n${kbContext}`
+    : SYSTEM_PROMPT;
 
   const messages = [
-    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: systemContent },
     { role: 'user', content: clean },
   ];
 
