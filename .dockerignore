@@ -1,0 +1,14 @@
+.git
+.github
+node_modules
+build/output
+data
+docs
+# registry is needed by Dockerfile.buildroot COPY
+site
+tests
+scripts
+*.md
+!README.md
+.env
+.claude

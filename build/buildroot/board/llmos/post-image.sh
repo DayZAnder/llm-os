@@ -37,43 +37,36 @@ TIMEOUT 30
 LABEL llmos
     MENU LABEL LLM OS Micro v${VERSION}
     LINUX /boot/bzImage
-    APPEND root=LABEL=LLMOS rootfstype=ext4 console=tty1 console=ttyS0,115200n8 quiet
+    APPEND root=/dev/vda1 rootfstype=ext4 rw rootwait console=tty1 console=ttyS0,115200n8
 EOF
 
 # Copy kernel to a place genimage can find it, named for extlinux
 cp "${BINARIES_DIR}/bzImage" "/tmp/extlinux-overlay/boot/bzImage"
 
-# Inject extlinux config and kernel into rootfs.ext4
-# Use e2cp (from e2tools) or ext2 manipulation
-if command -v e2cp >/dev/null 2>&1; then
-    e2mkdir "${BINARIES_DIR}/rootfs.ext4:/boot/extlinux" 2>/dev/null || true
-    e2cp "/tmp/extlinux-overlay/boot/extlinux/extlinux.conf" "${BINARIES_DIR}/rootfs.ext4:/boot/extlinux/"
-    e2cp "/tmp/extlinux-overlay/boot/bzImage" "${BINARIES_DIR}/rootfs.ext4:/boot/"
+# Inject kernel, extlinux config, and bootloader into rootfs.ext4.
+# Must mount the image because `extlinux --install` writes VBR + ldlinux.sys
+# into the filesystem — e2cp alone is not enough.
+mount -o loop "${BINARIES_DIR}/rootfs.ext4" "${MOUNT_DIR}" || {
+    echo "  ERROR: Cannot mount rootfs.ext4 — is --privileged set?"
+    exit 1
+}
+
+mkdir -p "${MOUNT_DIR}/boot/extlinux"
+cp "/tmp/extlinux-overlay/boot/bzImage" "${MOUNT_DIR}/boot/"
+cp "/tmp/extlinux-overlay/boot/extlinux/extlinux.conf" "${MOUNT_DIR}/boot/extlinux/"
+
+# Install the extlinux bootloader (writes VBR + ldlinux.sys)
+if command -v extlinux >/dev/null 2>&1; then
+    extlinux --install "${MOUNT_DIR}/boot/extlinux"
+    echo "  extlinux installed into /boot/extlinux"
 else
-    # Fallback: mount the ext4 image (needs root/privileged)
-    mount -o loop "${BINARIES_DIR}/rootfs.ext4" "${MOUNT_DIR}" 2>/dev/null || {
-        echo "  WARNING: Cannot mount rootfs.ext4 — trying debugfs"
-        # Last resort: use debugfs to write files
-        debugfs -w "${BINARIES_DIR}/rootfs.ext4" -R "mkdir /boot" 2>/dev/null || true
-        debugfs -w "${BINARIES_DIR}/rootfs.ext4" -R "mkdir /boot/extlinux" 2>/dev/null || true
-        debugfs -w "${BINARIES_DIR}/rootfs.ext4" -R "write /tmp/extlinux-overlay/boot/bzImage /boot/bzImage" 2>/dev/null || true
-        debugfs -w "${BINARIES_DIR}/rootfs.ext4" -R "write /tmp/extlinux-overlay/boot/extlinux/extlinux.conf /boot/extlinux/extlinux.conf" 2>/dev/null || true
-    }
-
-    if mountpoint -q "${MOUNT_DIR}" 2>/dev/null; then
-        mkdir -p "${MOUNT_DIR}/boot/extlinux"
-        cp "/tmp/extlinux-overlay/boot/bzImage" "${MOUNT_DIR}/boot/"
-        cp "/tmp/extlinux-overlay/boot/extlinux/extlinux.conf" "${MOUNT_DIR}/boot/extlinux/"
-
-        # Install extlinux bootloader
-        if command -v extlinux >/dev/null 2>&1; then
-            extlinux --install "${MOUNT_DIR}/boot/extlinux" 2>/dev/null || true
-        fi
-
-        sync
-        umount "${MOUNT_DIR}"
-    fi
+    echo "  ERROR: extlinux not found — VM will not boot"
+    umount "${MOUNT_DIR}"
+    exit 1
 fi
+
+sync
+umount "${MOUNT_DIR}"
 
 rm -rf /tmp/extlinux-overlay
 
