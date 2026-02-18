@@ -110,11 +110,12 @@ export function publishApp({ prompt, code, dockerfile, type, capabilities, model
     return { hash, existing: true, entry: existing };
   }
 
+  const title = extractTitle(prompt);
   const entry = {
     hash,
     prompt,
     normalizedPrompt: normalizePrompt(prompt),
-    title: extractTitle(prompt),
+    title,
     type: type || 'iframe',
     code,
     dockerfile: dockerfile || null,
@@ -124,6 +125,7 @@ export function publishApp({ prompt, code, dockerfile, type, capabilities, model
     launches: 1,
     createdAt: Date.now(),
     tags: extractTags(prompt),
+    spec: `# ${title}\n\n${prompt}\n\n## Requirements\n\n- (edit this spec to guide AI improvements)\n`,
   };
 
   apps.set(hash, entry);
@@ -222,6 +224,17 @@ export function getStats() {
     totalLaunches: entries.reduce((sum, e) => sum + e.launches, 0),
     tags: getTags(),
   };
+}
+
+/**
+ * Update an app's spec (markdown). Returns the updated spec or null if not found.
+ */
+export function updateSpec(hash, spec) {
+  const entry = apps.get(hash);
+  if (!entry) return null;
+  entry.spec = spec;
+  save();
+  return entry.spec;
 }
 
 /**

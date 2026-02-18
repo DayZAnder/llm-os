@@ -8,7 +8,7 @@ import { analyze, analyzeDockerfile } from './kernel/analyzer.js';
 import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType, initTokenKey, verifyToken } from './kernel/capabilities.js';
 import { dockerPing } from './kernel/docker/client.js';
 import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses } from './kernel/docker/process-manager.js';
-import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, rateApp, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
+import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, rateApp, updateSpec, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
 import { storageGet, storageSet, storageRemove, storageKeys, storageUsage, storageClear, storageExport, storageImport, storageListApps, storageExportAll, storageFlushAll } from './kernel/storage.js';
 import * as scheduler from './kernel/scheduler.js';
 import { tasks as selfImproveTasks } from './kernel/self-improve/index.js';
@@ -569,6 +569,27 @@ async function handleAPI(method, fullUrl, body, res) {
       }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
+      return;
+    }
+
+    // GET /api/registry/:hash/spec — get app spec
+    const specGetMatch = url.match(/^\/api\/registry\/([a-f0-9]+)\/spec$/);
+    if (method === 'GET' && specGetMatch) {
+      const entry = getApp(specGetMatch[1]);
+      if (!entry) { res.writeHead(404); res.end('App not found'); return; }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ spec: entry.spec || '' }));
+      return;
+    }
+
+    // PUT /api/registry/:hash/spec — update app spec
+    const specPutMatch = url.match(/^\/api\/registry\/([a-f0-9]+)\/spec$/);
+    if (method === 'PUT' && specPutMatch) {
+      const { spec } = JSON.parse(body);
+      const result = updateSpec(specPutMatch[1], spec);
+      if (result === null) { res.writeHead(404); res.end('App not found'); return; }
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
       return;
     }
 

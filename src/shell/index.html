@@ -649,6 +649,90 @@
   .app-card-rate button.voted { border-color: var(--accent); color: var(--accent); }
   .app-card-rate .score { font-size: 9px; color: var(--text-dim); font-family: var(--font-mono); align-self: center; min-width: 20px; text-align: center; }
 
+  .app-card-spec {
+    background: transparent;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 2px 8px;
+    color: var(--text-dim);
+    font-size: 9px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: all 0.15s;
+  }
+  .app-card-spec:hover { border-color: var(--accent); color: var(--text-primary); }
+
+  .spec-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.7);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+  }
+  .spec-overlay.hidden { display: none; }
+  .spec-panel {
+    background: var(--bg-secondary);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    width: 600px;
+    max-width: 90vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+  }
+  .spec-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .spec-header h3 {
+    margin: 0;
+    font-size: 14px;
+    color: var(--text-primary);
+    font-family: var(--font-mono);
+  }
+  .spec-textarea {
+    flex: 1;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    border: none;
+    padding: 16px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    line-height: 1.6;
+    resize: none;
+    min-height: 300px;
+  }
+  .spec-textarea:focus { outline: none; }
+  .spec-footer {
+    display: flex;
+    gap: 8px;
+    justify-content: flex-end;
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+  }
+  .spec-footer button {
+    padding: 6px 16px;
+    border-radius: 4px;
+    font-size: 12px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    border: 1px solid var(--border);
+    background: var(--bg-tertiary);
+    color: var(--text-secondary);
+  }
+  .spec-footer button:hover { color: var(--text-primary); }
+  .spec-footer .spec-save {
+    background: var(--accent);
+    border-color: var(--accent);
+    color: white;
+  }
+  .spec-footer .spec-save:hover { background: var(--accent-hover); }
+
   .browse-btn {
     background: var(--bg-tertiary);
     border: 1px solid var(--border);
@@ -980,6 +1064,20 @@
       <div class="registry-empty">No apps yet. Generate some apps and they'll appear here.</div>
     </div>
     <div class="registry-stats" id="registry-stats"></div>
+  </div>
+</div>
+
+<div class="spec-overlay hidden" id="spec-overlay">
+  <div class="spec-panel">
+    <div class="spec-header">
+      <h3 id="spec-title">App Spec</h3>
+      <button class="registry-close" id="spec-close">&times;</button>
+    </div>
+    <textarea class="spec-textarea" id="spec-textarea" placeholder="Write your app spec in markdown..."></textarea>
+    <div class="spec-footer">
+      <button id="spec-cancel">Cancel</button>
+      <button class="spec-save" id="spec-save">Save</button>
+    </div>
   </div>
 </div>
 
@@ -1740,13 +1838,61 @@ function renderRegistryApps(apps) {
     downBtn.onclick = (e) => { e.stopPropagation(); doRate(-1, downBtn); };
     rateDiv.append(upBtn, scoreSpan, downBtn);
 
+    const specBtn = document.createElement('button');
+    specBtn.className = 'app-card-spec';
+    specBtn.textContent = 'Spec';
+    specBtn.title = 'View/edit app spec';
+    specBtn.onclick = (e) => { e.stopPropagation(); openSpecEditor(app); };
+
     const actions = document.createElement('div');
     actions.className = 'app-card-actions';
-    actions.append(launchBtn, rateDiv, deleteBtn);
+    actions.append(launchBtn, rateDiv, specBtn, deleteBtn);
 
     card.append(info, typeTag, actions);
     registryBody.appendChild(card);
   }
+}
+
+// --- Spec Editor ---
+const specOverlay = document.getElementById('spec-overlay');
+const specTitle = document.getElementById('spec-title');
+const specTextarea = document.getElementById('spec-textarea');
+let specCurrentHash = null;
+
+document.getElementById('spec-close').onclick = () => specOverlay.classList.add('hidden');
+document.getElementById('spec-cancel').onclick = () => specOverlay.classList.add('hidden');
+document.getElementById('spec-save').onclick = async () => {
+  if (!specCurrentHash) return;
+  try {
+    const res = await fetch(`/api/registry/${specCurrentHash}/spec`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ spec: specTextarea.value }),
+    });
+    if (res.ok) {
+      log(`Spec saved for ${specCurrentHash}`, 'ok');
+      specOverlay.classList.add('hidden');
+    } else {
+      log(`Failed to save spec: ${await res.text()}`, 'error');
+    }
+  } catch (err) {
+    log(`Failed to save spec: ${err.message}`, 'error');
+  }
+};
+
+async function openSpecEditor(app) {
+  specCurrentHash = app.hash;
+  specTitle.textContent = `Spec: ${app.title}`;
+  specTextarea.value = 'Loading...';
+  specOverlay.classList.remove('hidden');
+  try {
+    const res = await fetch(`/api/registry/${app.hash}/spec`);
+    const data = await res.json();
+    specTextarea.value = data.spec || `# ${app.title}\n\n${app.prompt}\n`;
+  } catch {
+    specTextarea.value = `# ${app.title}\n\n${app.prompt}\n`;
+  }
+  specTextarea.focus();
 }
 
 async function launchFromRegistry(app) {
