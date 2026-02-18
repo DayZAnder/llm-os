@@ -1,8 +1,26 @@
 {
   "version": 1,
-  "updatedAt": 1771358067449,
-  "count": 5,
+  "updatedAt": 1771451576364,
+  "count": 6,
   "apps": [
+    {
+      "hash": "de8273b4b8d9db81",
+      "title": "Notepad",
+      "prompt": "a notepad with find and replace, line numbers, and file management",
+      "type": "iframe",
+      "capabilities": [
+        "ui:window",
+        "storage:local",
+        "clipboard:rw"
+      ],
+      "model": "claude-opus-4-6",
+      "tags": [
+        "productivity",
+        "editor",
+        "utility"
+      ],
+      "createdAt": 1771451572812
+    },
     {
       "hash": "54b8aba29e2743a3",
       "title": "NanoClaw",
