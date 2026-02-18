@@ -51,30 +51,11 @@ Pick one, paste it into Claude Code, and let it work. Each prompt is self-contai
 
 ---
 
-### Prompt 1: WASM Sandbox (replace iframes)
+### ~~Prompt 1: WASM Sandbox~~ — DONE
 
-```
-Read the existing iframe sandbox in src/shell/sandbox.js and src/sdk/sdk.js.
+> Implemented in `src/kernel/wasm-sandbox/`. Node.js built-in WebAssembly + worker_threads, zero dependencies. Capability-gated host functions, bounded memory (64MB max), CPU timeouts (30s default), SharedArrayBuffer + Atomics IPC. 27 tests in `tests/wasm-sandbox.test.js`.
 
-Build a WebAssembly-based sandbox to replace (or sit alongside) the iframe approach.
-Use Wasmtime or Extism as the WASM runtime.
-
-Core value reminder: Protect the user first. The WASM sandbox must be MORE restrictive
-than iframes, not less. No filesystem access, no network access, no capabilities
-unless explicitly granted by the kernel with user approval.
-
-Requirements:
-- A WasmSandbox class with the same interface as the iframe SandboxManager
-- launch(appId, code, capabilities, title) → runs app in WASM sandbox
-- kill(appId) → terminates sandbox
-- postMessage-equivalent communication channel between kernel and WASM app
-- Capability enforcement: WASM app cannot call any host function without a valid capability
-- Memory limits per sandbox (configurable, default 64MB)
-- CPU time limits (kill after 30 seconds of continuous execution)
-
-Put it in src/kernel/wasm-sandbox/. Include tests.
-Make it work standalone — don't break the existing iframe sandbox.
-```
+**Next step:** Add storage host call integration test (WASM module that reads/writes via `storage:local` capability), or add network host calls (`network:http` capability).
 
 ---
 
@@ -242,6 +223,196 @@ Requirements:
 Put it in experimental/microkernel/. Include a README with build
 instructions (cargo build --target x86_64-unknown-uefi).
 This should boot in QEMU with OVMF firmware.
+```
+
+---
+
+## Quality Control Prompts — Help Verify What's Been Built
+
+LLM OS is built by AI agents. That means QC is just as important as code generation — we need agents reviewing agents' work. These prompts are designed for exactly that: paste one into your AI tool and let it audit, flag issues, and suggest improvements.
+
+**Every QC finding is a valid PR.** Found a false positive in the analyzer? File it. Found a test gap? Add the test. Found generated code that smells wrong? Fix it.
+
+### QC Prompt 1: Analyzer False Positive / False Negative Audit
+
+```
+Read src/kernel/analyzer.js — this is the static security analyzer for LLM-generated code.
+Read tests/security/analyzer-vectors.json — existing test vectors.
+
+Your job: find rules that are too strict (false positives) or too loose (false negatives).
+
+For each of the ~35 regex rules in the analyzer:
+1. Construct a BENIGN code snippet that the rule would incorrectly flag (false positive)
+2. Construct a MALICIOUS code snippet that evades the rule (false negative)
+3. Rate the rule's precision: HIGH (few false positives), MEDIUM, LOW (noisy)
+
+Output a JSON array of findings:
+[{
+  "rule": "RULE_NAME",
+  "type": "false_positive" | "false_negative",
+  "code": "the code snippet",
+  "explanation": "why this is a problem",
+  "suggested_fix": "improved regex or new rule"
+}]
+
+Focus on real-world patterns, not contrived edge cases. Think about what an LLM would
+actually generate vs. what an attacker would actually try. Add any new test vectors to
+tests/security/analyzer-vectors.json.
+```
+
+### QC Prompt 2: Generated App Security Review
+
+```
+Read src/kernel/analyzer.js to understand what the static analyzer checks for.
+Read src/sdk/sdk.js to understand the SDK API available to generated apps.
+Read the examples/ directory to see reference apps.
+
+Now read each app in the registry/ directory (if any) or examples/ directory.
+For EACH app, produce a security assessment:
+
+1. SANDBOX ESCAPE: Does it try to access parent/top/window.parent? Any postMessage to '*'?
+2. DATA EXFILTRATION: Does it load external resources (images, scripts, CSS)?
+   Does it use fetch/XHR without network capability?
+3. CAPABILITY ABUSE: Does it use SDK functions beyond its declared capabilities?
+4. CODE QUALITY: Is the HTML well-formed? Does JS have obvious bugs?
+5. USER EXPERIENCE: Does it match the dark theme (#0d0d1a bg, #6c63ff accent)?
+   Is it actually useful for what the prompt asked?
+
+Rate each app: PASS (ship it), WARN (needs minor fixes), FAIL (regenerate or reject).
+
+For WARN/FAIL apps, provide specific code fixes. Submit fixes as a PR.
+```
+
+### QC Prompt 3: Test Coverage Gap Analysis
+
+```
+Read ALL test files in tests/ directory. Read ALL source files in src/kernel/ and src/sdk/.
+
+For each source module, list:
+1. Functions/methods that HAVE test coverage
+2. Functions/methods that have NO test coverage
+3. Edge cases that existing tests miss (empty input, large input, concurrent calls, error paths)
+
+Produce a coverage report:
+
+| Module | Functions Tested | Functions Untested | Missing Edge Cases |
+|--------|-----------------|-------------------|-------------------|
+
+Then pick the 3 most critical gaps (prioritize security-related code) and write the
+missing tests. Follow the existing test pattern: custom assert functions, no test framework,
+console output with checkmarks.
+
+Add new tests to the appropriate existing test file. Run the full suite:
+node tests/analyzer.test.js && node tests/storage.test.js && node tests/registry.test.js && node tests/scheduler.test.js && node tests/gateway.test.js && node tests/wasm-sandbox.test.js
+```
+
+### QC Prompt 4: SDK Isolation Verification
+
+```
+Read src/sdk/sdk.js — this runs INSIDE untrusted iframe sandboxes.
+Read src/shell/sandbox.js — this manages sandboxes from the trusted side.
+Read src/kernel/capabilities.js — this controls what apps can do.
+
+Your job: try to break the isolation. For each SDK function:
+
+1. Can a malicious app call it without the required capability?
+2. Can a malicious app craft a postMessage that the kernel would trust?
+3. Can a malicious app access other apps' storage?
+4. Can a malicious app escalate its capabilities at runtime?
+5. Can a malicious app DoS the kernel (infinite messages, huge payloads)?
+
+For each attack vector you find:
+- Write a proof-of-concept code snippet
+- Verify whether the analyzer catches it
+- Suggest a fix (code patch or new analyzer rule)
+
+Output findings as a markdown table:
+| Attack | Possible? | Analyzer Catches? | Fix |
+```
+
+### QC Prompt 5: WASM Sandbox Security Audit
+
+```
+Read src/kernel/wasm-sandbox/index.js and src/kernel/wasm-sandbox/worker.js.
+Read tests/wasm-sandbox.test.js for existing test coverage.
+
+Audit the WASM sandbox for:
+
+1. MEMORY SAFETY: Can a WASM module allocate beyond its declared maximum?
+   Can it access memory outside its linear memory? Does the validator
+   correctly parse ALL valid memory section encodings (multi-byte LEB128)?
+
+2. CPU EXHAUSTION: Can a module evade the timeout? What if it spends all
+   time in a host call (Atomics.wait)? What about stack overflow vs infinite loop?
+
+3. HOST FUNCTION ABUSE: Can a module call host functions it shouldn't have access to?
+   Can it send oversized payloads through SharedArrayBuffer? What happens with
+   malformed JSON in the IPC channel?
+
+4. IMPORT VALIDATION: Can a module import functions from namespaces other than 'llmos'
+   and 'env'? What if it imports a function that doesn't exist?
+
+5. CONCURRENCY: What happens if two modules make host calls simultaneously?
+   Is the SharedArrayBuffer layout safe against race conditions?
+
+For each issue found, write a test case that demonstrates it and a fix.
+Add tests to tests/wasm-sandbox.test.js.
+```
+
+### QC Prompt 6: Cross-Component Integration Audit
+
+```
+Read these files in order:
+1. src/server.js — API endpoints
+2. src/kernel/gateway.js — LLM routing and prompt handling
+3. src/kernel/analyzer.js — static analysis
+4. src/kernel/capabilities.js — capability enforcement
+5. src/shell/sandbox.js — sandbox management
+6. src/sdk/sdk.js — in-sandbox SDK
+
+Trace the full request lifecycle: user types a prompt → LLM generates code →
+analyzer scans it → capabilities are proposed → user approves → app launches
+in sandbox → app calls SDK functions → kernel fulfills or denies.
+
+For each handoff between components, check:
+1. Is input validated at the boundary?
+2. Can malformed data from one component crash another?
+3. Are error cases handled (LLM returns garbage, analyzer throws, sandbox fails)?
+4. Are there race conditions (two apps launched simultaneously, kill during launch)?
+
+Produce a flow diagram with annotations showing where you found issues.
+Write integration tests for any gaps you find.
+```
+
+### QC Prompt 7: Values Compliance Deep Scan
+
+```
+Read the 4 core values in CLAUDE.md (top of file).
+Read scripts/values-check.js to understand what the automated checker covers.
+
+Now read EVERY source file in src/ and scripts/. For each file, check:
+
+VALUE 1 (Protect the user):
+- Any network calls that could leak user data?
+- Any hardcoded URLs that phone home?
+- Any logging that includes user prompts or generated code?
+- Any capability that's auto-granted without user approval?
+
+VALUE 2 (Empower the user):
+- Any artificial rate limits that aren't security-related?
+- Any hardcoded model restrictions that prevent user choice?
+- Any features gated behind specific providers?
+
+VALUE 3 (Take a piece, leave a piece):
+- Any code that would break if a component is removed?
+- Any tight coupling that prevents standalone testing?
+
+VALUE 4 (Nothing is perfect):
+- Any TODO/FIXME/HACK comments that indicate known issues?
+- Any error handling that silently swallows failures?
+
+Output findings per file. For critical findings, submit fixes as a PR.
+For minor findings, file GitHub issues.
 ```
 
 ---
