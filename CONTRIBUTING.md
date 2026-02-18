@@ -59,32 +59,11 @@ Pick one, paste it into Claude Code, and let it work. Each prompt is self-contai
 
 ---
 
-### Prompt 2: Cryptographic Capability Tokens
+### ~~Prompt 2: Cryptographic Capability Tokens~~ — DONE
 
-```
-Read the existing simple capability system in src/kernel/capabilities.js.
+> Implemented in `src/kernel/capabilities.js`. HMAC-SHA256 signed tokens via Web Crypto API, constant-time verification with `timingSafeEqual`, per-token revocation via nonce tracking, 4-hour TTL, session-scoped key rotation. Server endpoint `POST /api/grant` returns signed tokens injected into sandboxed iframes as `window.__LLMOS_TOKENS__`. 51 tests in `tests/capabilities.test.js`.
 
-Replace the in-memory whitelist with cryptographic capability tokens.
-
-Core value reminder: Protect the user first. Tokens must be unforgeable.
-A generated app must NEVER be able to escalate its own privileges.
-All capability grants require explicit user approval.
-
-Requirements:
-- HMAC-SHA256 signed tokens using Web Crypto API (SubtleCrypto) — no npm crypto libs
-- Token contains: appId, capability type, scope constraints, expiry, nonce
-- Kernel generates a random secret on startup (regenerated each session)
-- verifyToken() is constant-time to prevent timing attacks
-- Revocation list for tokens that should be invalidated early
-- Backward compatible: existing capability checks still work
-
-Update src/kernel/capabilities.js in place. Add tests that verify:
-- Valid tokens are accepted
-- Tampered tokens are rejected
-- Expired tokens are rejected
-- Revoked tokens are rejected
-- Apps cannot forge tokens without the kernel secret
-```
+**Next step:** Add capability scoping (e.g., `storage:local` scoped to specific keys), or implement token refresh before expiry.
 
 ---
 
@@ -303,7 +282,7 @@ missing tests. Follow the existing test pattern: custom assert functions, no tes
 console output with checkmarks.
 
 Add new tests to the appropriate existing test file. Run the full suite:
-node tests/analyzer.test.js && node tests/storage.test.js && node tests/registry.test.js && node tests/scheduler.test.js && node tests/gateway.test.js && node tests/wasm-sandbox.test.js
+node tests/analyzer.test.js && node tests/storage.test.js && node tests/registry.test.js && node tests/scheduler.test.js && node tests/gateway.test.js && node tests/wasm-sandbox.test.js && node tests/capabilities.test.js
 ```
 
 ### QC Prompt 4: SDK Isolation Verification
@@ -524,15 +503,17 @@ Core values (non-negotiable):
 4. NOTHING IS PERFECT — ship working code, iterate, never violate core intent
 
 Tech: Node.js 22+, vanilla JS (no React/Vue), ES modules, dark theme (#0d0d1a).
-Zero runtime dependencies. Tests run with `node tests/*.test.js`.
-Security: iframe sandboxes, capability-based access, regex static analyzer, prompt injection defense.
+Zero runtime dependencies. Tests: `npm test` (297 tests across 7 files).
+Security: iframe + WASM sandboxes, HMAC-SHA256 capability tokens, regex static analyzer, prompt injection defense.
 
 Key files:
-- src/kernel/analyzer.js — static security analysis (35 regex rules)
+- src/kernel/analyzer.js — static security analysis (~35 regex rules)
+- src/kernel/capabilities.js — HMAC-SHA256 capability tokens (Web Crypto API)
 - src/kernel/storage.js — per-app persistent storage (JSON files, 5MB quota)
-- src/kernel/capabilities.js — capability-based access control
-- src/kernel/gateway.js — LLM integration (pluggable: Ollama, Claude, OpenAI, and more)
-- src/kernel/registry/store.js — app registry with search
+- src/kernel/gateway.js — LLM routing (pluggable: Ollama, Claude, OpenAI, and more)
+- src/kernel/wasm-sandbox/ — WebAssembly sandbox (worker_threads, SharedArrayBuffer IPC)
+- src/kernel/registry/store.js — app registry with content-addressed search
+- src/kernel/scheduler.js — background self-improvement scheduler
 - src/server.js — HTTP API server
 - src/shell/index.html — desktop UI (vanilla JS, single file)
 - src/sdk/sdk.js — SDK injected into sandboxed apps
@@ -640,7 +621,7 @@ If your provider uses the OpenAI-compatible `/v1/chat/completions` format (OpenR
 - No classes where functions suffice
 - No frameworks (React, Vue, Angular) in the shell or kernel
 - Zero runtime dependencies unless absolutely necessary (currently: none)
-- Tests welcome (vitest preferred, but any test runner works)
+- Tests use custom assert functions — no test framework, console output with checkmarks
 - Dark color scheme: `--bg-primary: #0d0d1a`, `--accent: #6c63ff`
 - Every security decision should err on the side of denying access
 

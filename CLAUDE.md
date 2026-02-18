@@ -38,13 +38,49 @@ src/
   kernel/
     config.js            — Environment config (.env loader)
     gateway.js           — LLM routing (Ollama for simple, Claude for complex)
-    analyzer.js          — Static analysis (regex-based, blocks eval/injection)
-    capabilities.js      — Per-app capability whitelist
+    analyzer.js          — Static analysis (regex-based, ~35 rules, blocks eval/injection)
+    capabilities.js      — Capability tokens (HMAC-SHA256 signed, constant-time verify)
+    storage.js           — Per-app persistent storage (JSON files, 5MB quota)
+    scheduler.js         — Background self-improvement task scheduler
+    profile.js           — OS profile & ephemeral mode (data/profile.yaml)
+    knowledge.js         — Knowledge base / memory
+    providers/
+      ollama.js          — Local Ollama inference
+      claude.js          — Anthropic Claude API
+      openai-compatible.js — OpenAI, OpenRouter, Groq, Together, vLLM, LM Studio
+    registry/
+      store.js           — App registry (SHA-256 content-addressed, trigram search)
+    wasm-sandbox/
+      index.js           — WASM sandbox controller (launch, kill, host calls)
+      worker.js          — WASM worker thread (runs in worker_threads)
+    docker/
+      client.js          — Docker API client (container lifecycle)
+      process-manager.js — Process app management (bots, agents, servers)
+    self-improve/
+      index.js           — Task registry for automated improvement
+      generate-apps.js   — Generates diverse apps from 80+ prompt categories
+      test-security.js   — Adversarial security testing
+      improve-apps.js    — Rewrites apps with better UX
+      qc-apps.js         — Quality checks registry apps
+      claude-agent.js    — Claude agent queue & coordination
+    utils/
+      normalize.js       — Text normalization, similarity, token counting
   sdk/
     sdk.js               — In-sandbox SDK (runs inside iframes, postMessage bridge)
   shell/
     index.html           — Desktop UI (prompt bar, windows, modals, log)
     sandbox.js           — Iframe sandbox manager (creates, injects SDK, kills)
+  apps/
+    nanoclaw.js          — Container-based agent framework
+tests/
+  analyzer.test.js       — 46 tests: analyzer rules
+  storage.test.js        — 43 tests: CRUD, quota, persistence, isolation
+  registry.test.js       — 46 tests: publish, search, browse, tags
+  scheduler.test.js      — 46 tests: tasks, circuit breaker, budget
+  gateway.test.js        — 38 tests: sanitization, complexity, providers
+  wasm-sandbox.test.js   — 27 tests: launch, kill, timeouts, memory, isolation
+  capabilities.test.js   — 51 tests: HMAC tokens, expiry, revocation, forgery
+  security/              — Injection vectors, analyzer vectors (JSON test data)
 ```
 
 ## How It Works
@@ -104,8 +140,9 @@ node src/server.js       # http://localhost:3000
 ## Open Contribution Areas
 
 See CONTRIBUTING.md for detailed prompts for each component. Priority areas:
-- WASM sandbox (replace iframes with Wasmtime/Extism)
-- Cryptographic capability tokens (HMAC-SHA256 via Web Crypto)
-- App registry with content addressing (SQLite + SHA-256)
-- Bootable image (Buildroot/Alpine, boots into kiosk browser)
+- LLM-driven system configuration (natural language → display, browser, boot policies)
+- Shell UI improvements (drag-resize windows, minimize/maximize, settings panel)
+- Security hardening (sandbox escape audit, prompt injection testing)
 - Custom Rust microkernel (long-term, `no_std`, UEFI boot)
+
+Already implemented: WASM sandbox, cryptographic capability tokens, app registry, persistent storage, bootable VM images, LLM gateway with 6+ providers, static analyzer, self-improvement scheduler.

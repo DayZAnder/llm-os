@@ -507,7 +507,7 @@
 <span class="dim">[analyzer] Static analysis: 0 critical, 0 warnings</span>
 <span class="warn">[caps] App requests: [ui:window, timer:basic, storage:local]</span>
 <span class="dim">[user] Approved capabilities</span>
-<span class="output">[sandbox] Launched app-1 in isolated iframe</span>
+<span class="output">[sandbox] Launched app-1 in isolated iframe (HMAC tokens issued)</span>
 <span class="output">[sandbox] App running with 3 capabilities granted</span>
     </div>
   </div>
@@ -580,7 +580,7 @@
       <div class="step-num">5</div>
       <div>
         <h3>It runs in a sandbox</h3>
-        <p>Isolated iframe with strict CSP. The SDK communicates with the kernel via postMessage. Every call is validated against your approved capabilities.</p>
+        <p>Three isolation tiers: iframe with strict CSP, WASM sandbox with memory limits, or Docker containers for process apps. HMAC-SHA256 signed capability tokens. Every SDK call is validated against your approved capabilities.</p>
       </div>
     </div>
   </div>
@@ -591,18 +591,18 @@
   <h2>Architecture</h2>
   <p class="subtitle">Layered design — every layer gets replaced as we move toward an ephemeral OS.</p>
 
-  <div class="arch-block"><span class="layer">Phase 1 (current)</span>     <span class="layer">Phase 4</span>              <span class="layer">Phase 5 (vision)</span>
+  <div class="arch-block"><span class="layer">Phase 3 (current)</span>      <span class="layer">Phase 4</span>              <span class="layer">Phase 5 (vision)</span>
 
 <span class="accent">Generated Apps</span>            <span class="accent">Generated Apps</span>         <span class="accent">Generated Apps</span>
-   iframe sandbox             WASM sandbox            WASM sandbox
+   iframe + WASM + Docker     WASM sandbox            WASM sandbox
        |                          |                       |
 <span class="accent">Shell UI</span>                    <span class="accent">Shell UI</span>                <span class="accent">Generated Shell</span>
    browser DOM                framebuffer             regenerated at boot
        |                          |                       |
 <span class="accent">Kernel</span>                      <span class="accent">Kernel</span>                  <span class="accent">Kernel + Profile</span>
-   Node.js                    Rust no_std             reads user identity
+   Node.js + crypto tokens    Rust no_std             reads user identity
        |                          |                       |
-<span class="accent">Host OS</span>                     <span class="accent">Custom Microkernel</span>      <span class="accent">Ephemeral Root</span>
+<span class="accent">Host OS / Buildroot VM</span>      <span class="accent">Custom Microkernel</span>      <span class="accent">Ephemeral Root</span>
    Windows/Linux/macOS        UEFI boot               fresh every boot</div>
 </section>
 
@@ -621,9 +621,9 @@
 <span class="cmd">code .</span>
 
 <span class="comment"># Tell Claude Code what to build:</span>
-<span class="comment"># "Add WASM sandbox"</span>
-<span class="comment"># "Improve the shell UI"</span>
-<span class="comment"># "Audit the security"</span></pre>
+<span class="comment" id="prompt-1"># "Add drag-resize to windows"</span>
+<span class="comment" id="prompt-2"># "Add LLM-driven system config"</span>
+<span class="comment" id="prompt-3"># "Audit the security"</span></pre>
     </div>
     <div class="qs-card">
       <div class="tag">ANY AI TOOL</div>
@@ -647,6 +647,7 @@
 <span class="cmd">node src/server.js</span>
 
 <span class="comment"># Open http://localhost:3000</span>
+<span class="comment"># npm test  (297 tests, zero deps)</span>
 <span class="comment"># Supports Ollama, Claude, OpenAI,</span>
 <span class="comment"># OpenRouter, Groq, Together, vLLM</span></pre>
     </div>
@@ -762,5 +763,82 @@
   <p style="margin-top: 8px">Zero analytics. Zero tracking. Zero telemetry. <a href="#values">It's the first value.</a></p>
 </footer>
 
+<script>
+// Dynamically load current project priorities from GitHub issues.
+// Safeguards: label whitelist, title length, blocklist, owner-only fallback.
+(function() {
+  const REPO = 'DayZAnder/llm-os';
+  const OWNER = 'DayZAnder';
+  const GOOD_LABELS = ['component', 'good first issue', 'enhancement', 'help wanted', 'security'];
+  const BAD_LABELS = ['invalid', 'wontfix', 'duplicate', 'spam', 'question'];
+  const PROMPT_IDS = ['prompt-1', 'prompt-2', 'prompt-3'];
+  const MIN_TITLE_LEN = 10;
+  const MAX_TITLE_LEN = 60;
+
+  // Spam patterns — titles that look like bot/spam posts
+  const SPAM_PATTERNS = [
+    /\b(buy|cheap|discount|free money|click here|subscribe)\b/i,
+    /\b(crypto|bitcoin|nft|airdrop|token sale)\b/i,
+    /https?:\/\//i,
+    /(.)\1{5,}/,  // repeated characters
+  ];
+
+  function isSpam(title) {
+    return SPAM_PATTERNS.some(p => p.test(title));
+  }
+
+  function hasGoodLabel(labels) {
+    return labels.some(l => GOOD_LABELS.includes(l));
+  }
+
+  function hasBadLabel(labels) {
+    return labels.some(l => BAD_LABELS.includes(l));
+  }
+
+  function truncate(s, max) {
+    return s.length <= max ? s : s.slice(0, max - 1) + '\u2026';
+  }
+
+  // Shuffle and pick n items
+  function pickRandom(arr, n) {
+    const shuffled = [...arr].sort(() => Math.random() - 0.5);
+    return shuffled.slice(0, n);
+  }
+
+  // Convert issue title to a Claude Code prompt (imperative form)
+  function toPrompt(title) {
+    // Strip leading emoji/brackets
+    let t = title.replace(/^[\p{Emoji}\s[\]()#]+/u, '').trim();
+    // Strip trailing issue markers like " (#3)"
+    t = t.replace(/\s*\(#\d+\)\s*$/, '');
+    // Ensure it starts with a verb if it doesn't
+    if (/^[A-Z][a-z]/.test(t) && !/^(Add|Build|Create|Fix|Improve|Implement|Audit|Update|Design|Write|Test|Remove|Refactor)/.test(t)) {
+      t = 'Improve the ' + t.charAt(0).toLowerCase() + t.slice(1);
+    }
+    return truncate(t, MAX_TITLE_LEN);
+  }
+
+  fetch('https://api.github.com/repos/' + REPO + '/issues?state=open&per_page=30&sort=updated')
+    .then(function(r) { return r.ok ? r.json() : Promise.reject(); })
+    .then(function(issues) {
+      var filtered = issues.filter(function(i) {
+        if (i.pull_request) return false;
+        var labels = (i.labels || []).map(function(l) { return l.name; });
+        if (hasBadLabel(labels)) return false;
+        if (!hasGoodLabel(labels) && i.user.login !== OWNER) return false;
+        if (i.title.length < MIN_TITLE_LEN) return false;
+        if (isSpam(i.title)) return false;
+        return true;
+      });
+      if (filtered.length < 2) return; // keep defaults
+      var picked = pickRandom(filtered, 3);
+      picked.forEach(function(issue, idx) {
+        var el = document.getElementById(PROMPT_IDS[idx]);
+        if (el) el.textContent = '# "' + toPrompt(issue.title) + '"';
+      });
+    })
+    .catch(function() { /* keep hardcoded defaults */ });
+})();
+</script>
 </body>
 </html>

@@ -4,7 +4,7 @@
 
 No pre-built apps. No compiled binaries. You describe what you need, and the OS generates it, sandboxes it, and runs it — with capability-based security ensuring generated code can only do what you approve.
 
-> **Status:** Architecture & design phase. Looking for contributors.
+> **Status:** Working prototype — WASM sandbox, cryptographic capability tokens, app registry, persistent storage, LLM gateway, static analyzer, self-improvement scheduler, and bootable VM images. 297+ tests, zero runtime dependencies. Looking for contributors.
 
 ## Vision
 
@@ -116,9 +116,10 @@ The single chokepoint for all AI generation. Pluggable provider registry routes 
 #### 2. Sandbox Manager
 Every generated app runs in complete isolation:
 
-- **Phase 1:** iframe sandboxes with strict CSP (web-based apps)
-- **Phase 2:** WebAssembly (WASM) for near-native performance
-- **Phase 3:** Firecracker/gVisor microVMs for apps needing syscalls
+- **iframe sandboxes** with strict CSP (web-based apps) — implemented
+- **WebAssembly (WASM)** sandbox with Node.js built-in WebAssembly + worker_threads — implemented (zero dependencies, 64MB memory cap, 30s CPU timeout, SharedArrayBuffer IPC)
+- **Docker containers** for process apps (bots, agents, servers) — implemented
+- **Future:** Firecracker/gVisor microVMs for apps needing syscalls
 
 No app can touch the filesystem, network, or other apps without explicit capabilities.
 
@@ -253,18 +254,23 @@ Prompt injection is the #1 threat when LLMs generate executable code.
 | Cross-app attacks | Complete isolation; message bus is the only channel |
 | Supply chain (malicious registry app) | Content-addressed, community-audited, signed by generating model |
 
-## Tech Stack (Planned)
+## Tech Stack
 
-| Component | Technology | Why |
-|-----------|-----------|-----|
-| Shell / Window Manager | Tauri or Electron | Cross-platform desktop, web rendering |
-| App Sandboxing (Phase 1) | iframe + strict CSP | Fast to prototype, well-understood |
-| App Sandboxing (Phase 2) | WebAssembly (Extism/Wasmtime) | Memory-safe, near-native, portable |
-| Local LLM | Ollama / llama.cpp | Free, private, fast for simple apps |
-| Cloud LLM | Claude, OpenAI, OpenRouter, Groq, Together | Complex app generation (pluggable) |
-| Registry Backend | SQLite + Git (content-addressed) | Simple, proven, works offline |
-| Inter-Process Comm | postMessage → shared-nothing message bus | Secure by default |
-| Static Analysis | tree-sitter + custom rules | Fast AST parsing, language-agnostic |
+| Component | Technology | Status |
+|-----------|-----------|--------|
+| Shell / Window Manager | Vanilla JS, single-file HTML | Implemented |
+| App Sandboxing (iframe) | iframe + strict CSP + postMessage | Implemented |
+| App Sandboxing (WASM) | Node.js built-in WebAssembly + worker_threads | Implemented |
+| App Sandboxing (Docker) | Docker containers for process apps | Implemented |
+| Capability Tokens | HMAC-SHA256 via Web Crypto API | Implemented |
+| Local LLM | Ollama | Implemented |
+| Cloud LLM | Claude, OpenAI, OpenRouter, Groq, Together | Implemented (pluggable) |
+| Registry Backend | JSON + SHA-256 content addressing | Implemented |
+| Inter-Process Comm | postMessage (iframe), SharedArrayBuffer (WASM) | Implemented |
+| Static Analysis | Regex-based rules (~35 patterns) | Implemented |
+| Persistent Storage | Per-app JSON files, 5MB quota | Implemented |
+| Self-Improvement | Background scheduler with LLM tasks | Implemented |
+| VM Images | Alpine Linux + Buildroot | Implemented |
 
 ## Open Questions
 
@@ -286,11 +292,16 @@ These are genuinely unsolved and need community input:
 git clone https://github.com/DayZAnder/llm-os.git
 cd llm-os
 cp .env.example .env      # Edit with your LLM provider settings
-npm install
 node src/server.js         # Open http://localhost:3000
 ```
 
-Type a description in the prompt bar. The OS generates, analyzes, and sandboxes your app.
+Zero runtime dependencies — no `npm install` needed. Type a description in the prompt bar. The OS generates, analyzes, and sandboxes your app.
+
+### Run the tests
+
+```bash
+npm test                   # 297 tests across 7 test files
+```
 
 ### Download a VM image
 
@@ -344,9 +355,9 @@ docker run --rm --privileged -v $(pwd)/build/output:/output llmos-buildroot
 - [x] Self-improvement scheduler (automated LLM tasks with guardrails)
 - [x] Smaller image via Buildroot (~50MB micro variant)
 
-### Phase 3a: WASM Sandbox + System Configuration
-- [ ] Replace iframes with WebAssembly (Wasmtime/Extism)
-- [ ] Cryptographic capability tokens (HMAC-SHA256)
+### Phase 3a: WASM Sandbox + Capability Tokens ✓
+- [x] WASM sandbox (Node.js built-in WebAssembly + worker_threads, zero dependencies)
+- [x] Cryptographic capability tokens (HMAC-SHA256 via Web Crypto API)
 - [ ] LLM-driven system configuration from natural language (display, browser, boot, storage policies)
 - [ ] System capability gates: `system:display`, `system:browser`, `system:boot`, `system:storage`
 
