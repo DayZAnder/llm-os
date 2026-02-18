@@ -7,8 +7,8 @@
 #   docker run --rm --privileged -v $(pwd)/build/output:/output llmos-builder
 #
 # Output:
-#   build/output/llmos-0.1.0.qcow2  (Proxmox)
-#   build/output/llmos-0.1.0.vhdx   (Hyper-V)
+#   build/output/llmos-0.2.3.qcow2  (Proxmox)
+#   build/output/llmos-0.2.3.vhdx   (Hyper-V)
 #
 # Needs: --privileged (for loopback mount + bootloader install)
 

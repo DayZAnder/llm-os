@@ -9,7 +9,7 @@ BINARIES_DIR="${BINARIES_DIR:-$1}"
 BOARD_DIR="$(dirname "$0")"
 GENIMAGE_CFG="${BOARD_DIR}/genimage.cfg"
 GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
-VERSION="0.2.2"
+VERSION="0.2.3"
 NAME="llmos-${VERSION}-micro"
 
 echo "[llmos] Post-image: creating disk images..."

@@ -6,7 +6,7 @@ set -euo pipefail
 # Usage:
 #   ./build/test-vm.sh [path-to-qcow2]
 #
-# Default: build/output/llmos-0.2.2-micro.qcow2
+# Default: build/output/llmos-0.2.3-micro.qcow2
 #
 # Requires: qemu-system-x86_64 in PATH
 #
@@ -16,7 +16,7 @@ set -euo pipefail
 #   3. LLM OS server starts
 #   4. HTTP health check responds
 
-IMAGE="${1:-build/output/llmos-0.2.2-micro.qcow2}"
+IMAGE="${1:-build/output/llmos-0.2.3-micro.qcow2}"
 SSH_PORT=2222
 HTTP_PORT=3001
 TIMEOUT=60

@@ -8,7 +8,7 @@ set -euo pipefail
 DISK_SIZE_MB=4096
 IMAGE_RAW="/tmp/llmos.raw"
 MOUNT_DIR="/tmp/rootfs"
-VERSION="0.2.2"
+VERSION="0.2.3"
 VARIANT="${VARIANT:-server}"  # server (headless) or desktop (kiosk Chromium)
 
 echo "
