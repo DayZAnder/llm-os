@@ -4,7 +4,7 @@
 clear
 echo ""
 echo "  ╔══════════════════════════════════════╗"
-echo "  ║       LLM OS Micro v0.2.1            ║"
+echo "  ║       LLM OS Micro v0.2.2            ║"
 echo "  ║       AI-native operating system      ║"
 echo "  ╚══════════════════════════════════════╝"
 echo ""
