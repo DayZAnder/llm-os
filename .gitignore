@@ -9,3 +9,6 @@ src-tauri/target/
 .DS_Store
 Thumbs.db
 data/
+
+# Build output artifacts
+build/output/
