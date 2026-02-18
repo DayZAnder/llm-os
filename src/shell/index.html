@@ -1350,7 +1350,7 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
   capModal.classList.remove('hidden');
 
   // Wire up buttons
-  const approveHandler = () => {
+  const approveHandler = async () => {
     capModal.classList.add('hidden');
     modalApprove.removeEventListener('click', approveHandler);
     modalDeny.removeEventListener('click', denyHandler);
@@ -1358,13 +1358,29 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
     const approved = [...modalCaps.querySelectorAll('input:checked')].map(cb => cb.value);
 
     if (onApprove) {
-      // Process app — caller handles launch
+      // Process app — caller handles launch (Docker, no tokens needed)
       onApprove(approved);
     } else {
-      // Iframe app — standard launch
+      // Iframe app — grant capabilities and get signed tokens
       const appId = `app-${++appCounter}`;
       const title = prompt.slice(0, 40);
-      const iframe = sandboxMgr.launch(appId, genData.code, approved, title);
+
+      let tokens = {};
+      try {
+        const grantRes = await fetch('/api/grant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appId, capabilities: approved }),
+        });
+        if (grantRes.ok) {
+          const grantData = await grantRes.json();
+          tokens = grantData.tokens || {};
+        }
+      } catch (err) {
+        log(`Token grant failed: ${err.message} (launching without tokens)`, 'warn');
+      }
+
+      const iframe = sandboxMgr.launch(appId, genData.code, approved, title, tokens);
       addAppWindow(appId, iframe, title, genData.model);
       log(`Launched ${appId} with capabilities: [${approved.join(', ')}]`, 'ok');
 
@@ -1632,7 +1648,22 @@ async function launchFromRegistry(app) {
     fetch(`/api/registry/launch/${app.hash}`, { method: 'POST' }).catch(() => {});
 
     const appId = `app-${++appCounter}`;
-    const iframe = sandboxMgr.launch(appId, app.code, app.capabilities, app.title);
+
+    // Grant capabilities and get signed tokens
+    let tokens = {};
+    try {
+      const grantRes = await fetch('/api/grant', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ appId, capabilities: app.capabilities }),
+      });
+      if (grantRes.ok) {
+        const grantData = await grantRes.json();
+        tokens = grantData.tokens || {};
+      }
+    } catch {}
+
+    const iframe = sandboxMgr.launch(appId, app.code, app.capabilities, app.title, tokens);
     addAppWindow(appId, iframe, app.title, app.model);
     log(`Launched from registry: "${app.title}" (${app.hash})`, 'ok');
   } else if (app.type === 'process') {

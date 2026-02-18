@@ -60,6 +60,7 @@ export class WasmSandbox {
    * @param {number} options.timeoutMs — CPU timeout in ms (default: 30000)
    * @param {number} options.memoryPages — initial WASM memory pages (default: 16)
    * @param {number} options.maxMemoryPages — max WASM memory pages (default: 1024)
+   * @param {object} options.tokens — capability tokens (optional, for future use)
    * @returns {Promise<number>} — return value of the WASM entry function
    */
   async launch(appId, wasmBytes, capabilities = [], title = '', options = {}) {
@@ -73,6 +74,7 @@ export class WasmSandbox {
       timeoutMs = DEFAULT_TIMEOUT_MS,
       memoryPages = DEFAULT_MEMORY_PAGES,
       maxMemoryPages = DEFAULT_MAX_MEMORY_PAGES,
+      tokens = {},
     } = options;
 
     const sharedBuffer = new SharedArrayBuffer(SAB_SIZE);
@@ -82,6 +84,7 @@ export class WasmSandbox {
         workerData: {
           wasmBytes: Buffer.from(wasmBytes),
           capabilities,
+          tokens,
           memoryPages,
           maxMemoryPages,
           entryFn,

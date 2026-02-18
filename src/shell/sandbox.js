@@ -83,8 +83,9 @@ export class SandboxManager {
     }
   }
 
-  launch(appId, code, capabilities, title) {
+  launch(appId, code, capabilities, title, tokens = {}) {
     // Build the sandboxed HTML
+    const tokensJson = JSON.stringify(tokens).replace(/</g, '\\u003c');
     const sandboxedHtml = `
 <!DOCTYPE html>
 <html>
@@ -97,6 +98,8 @@ export class SandboxManager {
   #llmos-root { width: 100%; height: 100%; }
 </style>
 <script>
+// Capability tokens — injected at launch, read-only
+window.__LLMOS_TOKENS__ = Object.freeze(${tokensJson});
 // LLM-OS SDK injected by kernel
 ${this.sdkCode}
 </script>

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { config } from './kernel/config.js';
 import { generate, generateProcess, getProviders } from './kernel/gateway.js';
 import { analyze, analyzeDockerfile } from './kernel/analyzer.js';
-import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType } from './kernel/capabilities.js';
+import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType, initTokenKey, verifyToken } from './kernel/capabilities.js';
 import { dockerPing } from './kernel/docker/client.js';
 import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses } from './kernel/docker/process-manager.js';
 import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
@@ -265,6 +265,15 @@ async function handleAPI(method, fullUrl, body, res) {
     if (method === 'POST' && url === '/api/analyze') {
       const { code } = JSON.parse(body);
       const result = analyze(code);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
+    // POST /api/grant — grant capabilities and return signed tokens
+    if (method === 'POST' && url === '/api/grant') {
+      const { appId, capabilities } = JSON.parse(body);
+      const result = await grantCapabilities(appId, capabilities);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
       return;
@@ -535,6 +544,9 @@ async function handleAPI(method, fullUrl, body, res) {
 // Flush storage on shutdown
 process.on('SIGINT', () => { storageFlushAll(); process.exit(0); });
 process.on('SIGTERM', () => { storageFlushAll(); process.exit(0); });
+
+// Initialize capability token signing key (session-scoped, rotates on restart)
+await initTokenKey();
 
 const server = createServer((req, res) => {
   const pathOnly = req.url.split('?')[0];

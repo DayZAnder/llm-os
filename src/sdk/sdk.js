@@ -142,6 +142,10 @@
     async request(capability) {
       return kernelCall('caps:request', { capability });
     },
+    getToken(capability) {
+      const tokens = window.__LLMOS_TOKENS__ || {};
+      return tokens[capability] || null;
+    },
   };
 
   // Expose as global
