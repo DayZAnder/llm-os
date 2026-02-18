@@ -129,29 +129,28 @@
     background: var(--bg-surface);
   }
 
-  /* Desktop — app windows */
+  /* Desktop — floating window container */
   .desktop {
     flex: 1;
-    display: grid;
-    gap: 2px;
-    padding: 2px;
+    position: relative;
     overflow: hidden;
   }
 
-  .desktop.cols-1 { grid-template-columns: 1fr; }
-  .desktop.cols-2 { grid-template-columns: 1fr 1fr; }
-  .desktop.cols-3 { grid-template-columns: 1fr 1fr 1fr; }
-  .desktop.cols-4 { grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr; }
-
   .app-window {
+    position: absolute;
     background: var(--bg-secondary);
     border: 1px solid var(--border);
-    border-radius: 4px;
+    border-radius: 6px;
     display: flex;
     flex-direction: column;
     overflow: hidden;
     min-height: 0;
+    box-shadow: 0 4px 20px rgba(0,0,0,0.4);
+    transition: box-shadow 0.15s;
   }
+  .app-window.focused { box-shadow: 0 8px 32px rgba(108,99,255,0.25), 0 4px 20px rgba(0,0,0,0.5); border-color: var(--accent-dim); }
+  .app-window.maximized { inset: 0 !important; width: 100% !important; height: 100% !important; border-radius: 0; }
+  .app-window.minimized { display: none !important; }
 
   .app-titlebar {
     height: 30px;
@@ -165,27 +164,33 @@
     color: var(--text-secondary);
     flex-shrink: 0;
     gap: 8px;
+    cursor: grab;
+    user-select: none;
   }
+  .app-titlebar:active { cursor: grabbing; }
 
-  .app-titlebar .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .app-titlebar .title { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; pointer-events: none; }
   .app-titlebar .model-tag {
     font-size: 9px;
     background: var(--accent-dim);
     color: var(--text-primary);
     padding: 1px 6px;
     border-radius: 3px;
+    pointer-events: none;
   }
 
-  .app-titlebar .close-btn {
+  .app-titlebar .win-btn {
     background: none;
     border: none;
     color: var(--text-dim);
     cursor: pointer;
-    font-size: 14px;
+    font-size: 13px;
     padding: 0 4px;
     line-height: 1;
+    pointer-events: auto;
   }
-  .app-titlebar .close-btn:hover { color: var(--danger); }
+  .app-titlebar .win-btn:hover { color: var(--text-primary); }
+  .app-titlebar .win-btn.close-btn:hover { color: var(--danger); }
 
   .app-body {
     flex: 1;
@@ -198,6 +203,21 @@
     height: 100%;
     border: none;
   }
+
+  /* Resize handles */
+  .resize-handle {
+    position: absolute;
+    z-index: 2;
+  }
+  .resize-handle.rh-n  { top: -3px; left: 8px; right: 8px; height: 6px; cursor: n-resize; }
+  .resize-handle.rh-s  { bottom: -3px; left: 8px; right: 8px; height: 6px; cursor: s-resize; }
+  .resize-handle.rh-e  { right: -3px; top: 8px; bottom: 8px; width: 6px; cursor: e-resize; }
+  .resize-handle.rh-w  { left: -3px; top: 8px; bottom: 8px; width: 6px; cursor: w-resize; }
+  .resize-handle.rh-nw { top: -4px; left: -4px; width: 12px; height: 12px; cursor: nw-resize; }
+  .resize-handle.rh-ne { top: -4px; right: -4px; width: 12px; height: 12px; cursor: ne-resize; }
+  .resize-handle.rh-sw { bottom: -4px; left: -4px; width: 12px; height: 12px; cursor: sw-resize; }
+  .resize-handle.rh-se { bottom: -4px; right: -4px; width: 12px; height: 12px; cursor: se-resize; }
+  .app-window.maximized .resize-handle { display: none; }
 
   /* Prompt bar */
   .prompt-bar {
@@ -373,11 +393,16 @@
     font-size: 11px;
     font-family: var(--font-mono);
     color: var(--text-secondary);
-    cursor: default;
+    cursor: pointer;
     display: flex;
     align-items: center;
     gap: 6px;
+    transition: border-color 0.15s, background 0.15s;
+    user-select: none;
   }
+  .taskbar-item:hover { background: var(--bg-surface); }
+  .taskbar-item.active { border-color: var(--accent-dim); background: var(--bg-surface); color: var(--text-primary); }
+  .taskbar-item.minimized { opacity: 0.6; }
 
   /* Log */
   .log-panel {
@@ -1033,7 +1058,7 @@
   </div>
 
   <!-- Desktop with app windows -->
-  <div class="desktop cols-1" id="desktop" style="display:none"></div>
+  <div class="desktop" id="desktop" style="display:none"></div>
 </div>
 
 <!-- Taskbar -->
@@ -1155,6 +1180,206 @@ const claudeStatus = document.getElementById('claude-status');
 const dockerStatus = document.getElementById('docker-status');
 const appCountEl = document.getElementById('app-count');
 
+// --- Window Manager ---
+const WM = {
+  windows: new Map(),
+  nextZ: 100,
+  DEFAULT_W: 700,
+  DEFAULT_H: 480,
+  MIN_W: 300,
+  MIN_H: 200,
+  CASCADE: 30,
+  cascadeIdx: 0,
+
+  register(appId, el) {
+    const { x, y } = this.getInitialPosition();
+    const w = Math.min(this.DEFAULT_W, desktop.clientWidth - 40);
+    const h = Math.min(this.DEFAULT_H, desktop.clientHeight - 40);
+    const z = ++this.nextZ;
+    const entry = { el, x, y, w, h, z, state: 'normal', savedRect: null };
+    this.windows.set(appId, entry);
+    this.applyRect(appId);
+    el.style.zIndex = z;
+    this.setFocused(appId);
+  },
+
+  unregister(appId) {
+    this.windows.delete(appId);
+    // Update focus to topmost remaining window
+    if (this.windows.size > 0) {
+      let topId = null, topZ = -1;
+      for (const [id, w] of this.windows) { if (w.z > topZ && w.state !== 'minimized') { topZ = w.z; topId = id; } }
+      if (topId) this.setFocused(topId);
+    }
+  },
+
+  applyRect(appId) {
+    const w = this.windows.get(appId);
+    if (!w || w.state === 'maximized') return;
+    w.el.style.left = w.x + 'px';
+    w.el.style.top = w.y + 'px';
+    w.el.style.width = w.w + 'px';
+    w.el.style.height = w.h + 'px';
+  },
+
+  raise(appId) {
+    const w = this.windows.get(appId);
+    if (!w) return;
+    w.z = ++this.nextZ;
+    w.el.style.zIndex = w.z;
+    this.setFocused(appId);
+  },
+
+  setFocused(appId) {
+    for (const [id, w] of this.windows) {
+      w.el.classList.toggle('focused', id === appId);
+      const tb = document.getElementById(`taskbar-${id}`);
+      if (tb) tb.classList.toggle('active', id === appId);
+    }
+  },
+
+  minimize(appId) {
+    const w = this.windows.get(appId);
+    if (!w) return;
+    w.state = 'minimized';
+    w.el.classList.add('minimized');
+    const tb = document.getElementById(`taskbar-${appId}`);
+    if (tb) tb.classList.add('minimized');
+    // Focus next topmost
+    let topId = null, topZ = -1;
+    for (const [id, e] of this.windows) { if (e.state !== 'minimized' && e.z > topZ) { topZ = e.z; topId = id; } }
+    if (topId) this.raise(topId);
+  },
+
+  maximize(appId) {
+    const w = this.windows.get(appId);
+    if (!w) return;
+    if (w.state === 'maximized') {
+      // Restore
+      w.state = 'normal';
+      w.el.classList.remove('maximized');
+      if (w.savedRect) { w.x = w.savedRect.x; w.y = w.savedRect.y; w.w = w.savedRect.w; w.h = w.savedRect.h; }
+      this.applyRect(appId);
+    } else {
+      // Maximize
+      w.savedRect = { x: w.x, y: w.y, w: w.w, h: w.h };
+      w.state = 'maximized';
+      w.el.classList.add('maximized');
+    }
+    this.raise(appId);
+  },
+
+  restore(appId) {
+    const w = this.windows.get(appId);
+    if (!w) return;
+    if (w.state === 'minimized') {
+      w.state = 'normal';
+      w.el.classList.remove('minimized');
+      const tb = document.getElementById(`taskbar-${appId}`);
+      if (tb) tb.classList.remove('minimized');
+    }
+    this.raise(appId);
+  },
+
+  getInitialPosition() {
+    const dw = desktop.clientWidth || 800;
+    const dh = desktop.clientHeight || 600;
+    const x = 20 + (this.cascadeIdx * this.CASCADE);
+    const y = 20 + (this.cascadeIdx * this.CASCADE);
+    this.cascadeIdx++;
+    if (x + this.DEFAULT_W > dw - 20 || y + this.DEFAULT_H > dh - 20) this.cascadeIdx = 0;
+    return { x: Math.min(x, dw - this.MIN_W), y: Math.min(y, dh - this.MIN_H) };
+  },
+
+  startDrag(appId, e) {
+    const w = this.windows.get(appId);
+    if (!w || w.state === 'maximized') return;
+    e.preventDefault();
+    this.raise(appId);
+    const startX = e.clientX, startY = e.clientY;
+    const origX = w.x, origY = w.y;
+    const iframes = desktop.querySelectorAll('iframe');
+    iframes.forEach(f => f.style.pointerEvents = 'none');
+
+    const onMove = (ev) => {
+      const dw = desktop.clientWidth, dh = desktop.clientHeight;
+      w.x = Math.max(0, Math.min(dw - 40, origX + ev.clientX - startX));
+      w.y = Math.max(0, Math.min(dh - 40, origY + ev.clientY - startY));
+      w.el.style.left = w.x + 'px';
+      w.el.style.top = w.y + 'px';
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      iframes.forEach(f => f.style.pointerEvents = '');
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  },
+
+  startResize(appId, e, dir) {
+    const w = this.windows.get(appId);
+    if (!w || w.state === 'maximized') return;
+    e.preventDefault();
+    e.stopPropagation();
+    this.raise(appId);
+    const startX = e.clientX, startY = e.clientY;
+    const origX = w.x, origY = w.y, origW = w.w, origH = w.h;
+
+    // Prevent iframe from stealing mouse events during resize
+    const iframes = desktop.querySelectorAll('iframe');
+    iframes.forEach(f => f.style.pointerEvents = 'none');
+
+    const onMove = (ev) => {
+      const dx = ev.clientX - startX;
+      const dy = ev.clientY - startY;
+
+      if (dir.includes('e')) w.w = Math.max(this.MIN_W, origW + dx);
+      if (dir.includes('s')) w.h = Math.max(this.MIN_H, origH + dy);
+      if (dir.includes('w')) {
+        const newW = Math.max(this.MIN_W, origW - dx);
+        w.x = origX + origW - newW;
+        w.w = newW;
+      }
+      if (dir.includes('n')) {
+        const newH = Math.max(this.MIN_H, origH - dy);
+        w.y = origY + origH - newH;
+        w.h = newH;
+      }
+      this.applyRect(appId);
+    };
+    const onUp = () => {
+      document.removeEventListener('mousemove', onMove);
+      document.removeEventListener('mouseup', onUp);
+      iframes.forEach(f => f.style.pointerEvents = '');
+    };
+    document.addEventListener('mousemove', onMove);
+    document.addEventListener('mouseup', onUp);
+  },
+
+  tileAll() {
+    const wins = [...this.windows.entries()].filter(([, w]) => w.state !== 'minimized');
+    const count = wins.length;
+    if (count === 0) return;
+    const dw = desktop.clientWidth, dh = desktop.clientHeight;
+    const cols = count <= 1 ? 1 : count <= 4 ? 2 : 3;
+    const rows = Math.ceil(count / cols);
+    const cellW = Math.floor(dw / cols);
+    const cellH = Math.floor(dh / rows);
+    wins.forEach(([id, w], i) => {
+      w.state = 'normal';
+      w.el.classList.remove('maximized', 'minimized');
+      w.x = (i % cols) * cellW;
+      w.y = Math.floor(i / cols) * cellH;
+      w.w = cellW;
+      w.h = cellH;
+      this.applyRect(id);
+    });
+    const tb = document.querySelectorAll('.taskbar-item.minimized');
+    tb.forEach(t => t.classList.remove('minimized'));
+  },
+};
+
 // --- Examples ---
 const EXAMPLES = [
   'a simple calculator',
@@ -1214,27 +1439,59 @@ function updateDesktopLayout() {
     desktop.style.display = 'none';
     emptyState.style.display = '';
     taskbar.classList.add('hidden');
-    desktop.className = 'desktop cols-1';
     return;
   }
 
   emptyState.style.display = 'none';
   desktop.style.display = '';
   taskbar.classList.remove('hidden');
+}
 
-  if (count === 1) desktop.className = 'desktop cols-1';
-  else if (count === 2) desktop.className = 'desktop cols-2';
-  else if (count === 3) desktop.className = 'desktop cols-3';
-  else desktop.className = 'desktop cols-4';
+function createResizeHandles(appId) {
+  const frag = document.createDocumentFragment();
+  for (const dir of ['n','s','e','w','nw','ne','sw','se']) {
+    const h = document.createElement('div');
+    h.className = `resize-handle rh-${dir}`;
+    h.onmousedown = (e) => WM.startResize(appId, e, dir);
+    frag.appendChild(h);
+  }
+  return frag;
+}
+
+function createTitleButtons(appId, closeFn) {
+  const frag = document.createDocumentFragment();
+  const minBtn = document.createElement('button');
+  minBtn.className = 'win-btn';
+  minBtn.textContent = '\u2013';
+  minBtn.title = 'Minimize';
+  minBtn.onclick = (e) => { e.stopPropagation(); WM.minimize(appId); };
+
+  const maxBtn = document.createElement('button');
+  maxBtn.className = 'win-btn';
+  maxBtn.textContent = '\u25a1';
+  maxBtn.title = 'Maximize';
+  maxBtn.onclick = (e) => { e.stopPropagation(); WM.maximize(appId); };
+
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'win-btn close-btn';
+  closeBtn.textContent = '\u00d7';
+  closeBtn.title = 'Close';
+  closeBtn.onclick = (e) => { e.stopPropagation(); closeFn(); };
+
+  frag.append(minBtn, maxBtn, closeBtn);
+  return frag;
 }
 
 function addAppWindow(appId, iframe, title, model) {
   const win = document.createElement('div');
   win.className = 'app-window';
   win.id = `window-${appId}`;
+  win.onmousedown = () => WM.raise(appId);
 
   const titlebar = document.createElement('div');
   titlebar.className = 'app-titlebar';
+  titlebar.onmousedown = (e) => { if (e.target === titlebar || e.target.classList.contains('title') || e.target.classList.contains('model-tag')) WM.startDrag(appId, e); };
+  titlebar.ondblclick = () => WM.maximize(appId);
 
   const titleEl = document.createElement('span');
   titleEl.className = 'title';
@@ -1244,18 +1501,13 @@ function addAppWindow(appId, iframe, title, model) {
   modelTag.className = 'model-tag';
   modelTag.textContent = model.split('/').pop().split(':')[0];
 
-  const closeBtn = document.createElement('button');
-  closeBtn.className = 'close-btn';
-  closeBtn.textContent = '\u00d7';
-  closeBtn.onclick = () => closeApp(appId);
-
-  titlebar.append(titleEl, modelTag, closeBtn);
+  titlebar.append(titleEl, modelTag, createTitleButtons(appId, () => closeApp(appId)));
 
   const body = document.createElement('div');
   body.className = 'app-body';
   body.appendChild(iframe);
 
-  win.append(titlebar, body);
+  win.append(titlebar, body, createResizeHandles(appId));
   desktop.appendChild(win);
 
   // Taskbar entry
@@ -1263,12 +1515,19 @@ function addAppWindow(appId, iframe, title, model) {
   tbItem.className = 'taskbar-item';
   tbItem.id = `taskbar-${appId}`;
   tbItem.textContent = title;
+  tbItem.onclick = () => {
+    const w = WM.windows.get(appId);
+    if (w?.state === 'minimized') WM.restore(appId);
+    else WM.raise(appId);
+  };
   taskbar.appendChild(tbItem);
 
+  WM.register(appId, win);
   updateDesktopLayout();
 }
 
 function closeApp(appId) {
+  WM.unregister(appId);
   sandboxMgr.kill(appId);
   document.getElementById(`window-${appId}`)?.remove();
   document.getElementById(`taskbar-${appId}`)?.remove();
@@ -1281,9 +1540,12 @@ function addProcessWindow(appId, processInfo, title) {
   const win = document.createElement('div');
   win.className = 'app-window';
   win.id = `window-${appId}`;
+  win.onmousedown = () => WM.raise(appId);
 
   const titlebar = document.createElement('div');
   titlebar.className = 'app-titlebar';
+  titlebar.onmousedown = (e) => { if (e.target === titlebar || e.target.classList.contains('title') || e.target.classList.contains('model-tag')) WM.startDrag(appId, e); };
+  titlebar.ondblclick = () => WM.maximize(appId);
 
   const titleEl = document.createElement('span');
   titleEl.className = 'title';
@@ -1298,12 +1560,7 @@ function addProcessWindow(appId, processInfo, title) {
   statusEl.id = `status-${appId}`;
   statusEl.textContent = processInfo.status;
 
-  const closeBtn = document.createElement('button');
-  closeBtn.className = 'close-btn';
-  closeBtn.textContent = '\u00d7';
-  closeBtn.onclick = () => closeProcessApp(appId);
-
-  titlebar.append(titleEl, modelTag, statusEl, closeBtn);
+  titlebar.append(titleEl, modelTag, statusEl, createTitleButtons(appId, () => closeProcessApp(appId)));
 
   const body = document.createElement('div');
   body.className = 'app-body process-body';
@@ -1322,7 +1579,7 @@ function addProcessWindow(appId, processInfo, title) {
   logViewer.textContent = 'Waiting for logs...';
   body.appendChild(logViewer);
 
-  win.append(titlebar, body);
+  win.append(titlebar, body, createResizeHandles(appId));
   desktop.appendChild(win);
 
   // Taskbar
@@ -1330,6 +1587,11 @@ function addProcessWindow(appId, processInfo, title) {
   tbItem.className = 'taskbar-item';
   tbItem.id = `taskbar-${appId}`;
   tbItem.textContent = `\u25cf ${title}`;
+  tbItem.onclick = () => {
+    const w = WM.windows.get(appId);
+    if (w?.state === 'minimized') WM.restore(appId);
+    else WM.raise(appId);
+  };
   taskbar.appendChild(tbItem);
 
   // Poll status + logs
@@ -1339,6 +1601,7 @@ function addProcessWindow(appId, processInfo, title) {
   // Initial log fetch after 3s
   setTimeout(() => fetchProcessLogs(appId), 3000);
 
+  WM.register(appId, win);
   updateDesktopLayout();
 }
 
@@ -1373,6 +1636,7 @@ async function closeProcessApp(appId) {
   if (proc?.pollInterval) clearInterval(proc.pollInterval);
   processApps.delete(appId);
 
+  WM.unregister(appId);
   try { await fetch(`/api/process/stop/${appId}`, { method: 'POST' }); } catch {}
   document.getElementById(`window-${appId}`)?.remove();
   document.getElementById(`taskbar-${appId}`)?.remove();

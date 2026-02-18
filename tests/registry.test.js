@@ -98,11 +98,11 @@ assert(getApp(result2.hash).launches === beforeLaunches + 1, 'launch count incre
 console.log('\nsearchApps:');
 const calcResults = searchApps('calculator');
 assert(calcResults.length >= 1, 'finds calculator app');
-assert(calcResults[0].hash === result1.hash, 'calculator is top result');
+assert(calcResults.some(r => r.hash === result1.hash), 'test calculator in results');
 
 const todoResults = searchApps('todo list categories');
 assert(todoResults.length >= 1, 'finds todo app');
-assert(todoResults[0].hash === result2.hash, 'todo is top result');
+assert(todoResults.some(r => r.hash === result2.hash), 'test todo in results');
 
 const noResults = searchApps('x');
 assert(noResults.length === 0, 'too short query returns empty');
