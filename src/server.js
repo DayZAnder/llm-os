@@ -261,6 +261,36 @@ async function handleAPI(method, fullUrl, body, res) {
       return;
     }
 
+    // POST /api/inject — inject pre-generated HTML as an app (bypasses LLM)
+    if (method === 'POST' && url === '/api/inject') {
+      const { code, title, model, provider } = JSON.parse(body);
+      if (!code) {
+        res.writeHead(400);
+        res.end('Missing code');
+        return;
+      }
+      const capabilities = [];
+      const capMatch = code.match(/<!--\s*capabilities:\s*(\[.*?\])\s*-->/);
+      if (capMatch) {
+        try { capabilities.push(...JSON.parse(capMatch[1])); } catch {}
+      }
+      const proposed = proposeCapabilities(title || 'injected app');
+      const allCaps = [...new Set([...capabilities, ...proposed])];
+      const result = {
+        code,
+        capabilities: allCaps,
+        model: model || 'opus-4.6-manual',
+        provider: provider || 'inject',
+        complexity: 'medium',
+        generationTime: 0,
+        sanitization: { flagged: false, flags: [] },
+      };
+      knowledgeBase.recordGeneration(title || 'injected app', result);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(result));
+      return;
+    }
+
     // POST /api/analyze — run static analysis on code
     if (method === 'POST' && url === '/api/analyze') {
       const { code } = JSON.parse(body);
