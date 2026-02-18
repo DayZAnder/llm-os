@@ -76,4 +76,22 @@ saveApp({
   tags: ['bot', 'communication', 'automation', 'ai'],
 });
 
+// SSH Client template (process app)
+const { SSH_CLIENT } = await import('../src/apps/ssh-client.js');
+saveApp({
+  hash: hash(SSH_CLIENT.dockerfile),
+  prompt: 'ssh client — web-based SSH terminal with xterm.js',
+  normalizedPrompt: 'ssh client terminal remote connect',
+  title: 'SSH Client',
+  type: 'process',
+  code: SSH_CLIENT.code,
+  dockerfile: SSH_CLIENT.dockerfile,
+  capabilities: SSH_CLIENT.capabilities,
+  model: 'template',
+  provider: 'community',
+  launches: 0,
+  createdAt: Date.now(),
+  tags: ['utility', 'developer', 'networking', 'terminal'],
+});
+
 console.log('\nDone. Run: node scripts/build-registry-index.js');

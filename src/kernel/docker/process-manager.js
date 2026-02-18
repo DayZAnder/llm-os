@@ -6,7 +6,7 @@ import { config } from '../config.js';
 import { execSync } from 'child_process';
 import { writeFileSync, mkdirSync, existsSync, rmSync } from 'fs';
 import { join } from 'path';
-import { tmpdir } from 'os';
+import { tmpdir, platform } from 'os';
 
 const allocatedPorts = new Set();
 const processes = new Map();
@@ -57,14 +57,20 @@ export async function buildImage(appId, dockerfile, contextFiles = {}) {
   }
 
   const imageName = `llmos-${appId}`;
+  // Docker on Windows needs forward-slash paths for build context
+  const dockerPath = platform() === 'win32' ? buildDir.replace(/\\/g, '/') : buildDir;
   try {
-    execSync(`docker build -t ${imageName} "${buildDir}"`, {
+    const output = execSync(`docker build -t ${imageName} "${dockerPath}"`, {
       stdio: 'pipe',
-      timeout: 120000,
+      timeout: 300000, // 5 min for large images (Chromium etc.)
     });
+    console.log(`[process-mgr] Built image ${imageName}`);
   } catch (err) {
-    const stderr = err.stderr?.toString() || err.message;
-    throw new Error(`Image build failed: ${stderr.slice(0, 500)}`);
+    const stderr = err.stderr?.toString() || '';
+    const stdout = err.stdout?.toString() || '';
+    const detail = stderr || stdout || err.message;
+    console.error(`[process-mgr] Build failed for ${appId}:`, detail.slice(0, 1000));
+    throw new Error(`Image build failed: ${detail.slice(0, 500)}`);
   } finally {
     // Cleanup build dir
     try { rmSync(buildDir, { recursive: true }); } catch {}

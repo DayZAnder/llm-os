@@ -1569,6 +1569,7 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
 // --- Process App Detection & Generation ---
 const PROCESS_KEYWORDS = [
   'nanoclaw', 'run nanoclaw',
+  'ssh client', 'ssh terminal', 'ssh connect',
   'whatsapp bot', 'telegram bot', 'discord bot',
   'background service', 'daemon', 'long-running',
   'docker', 'container', 'node.js server', 'api server',
@@ -1590,13 +1591,14 @@ async function generateProcessApp(prompt) {
 
   if (!genRes.ok) throw new Error(`Process generation failed: ${await genRes.text()}`);
   const genData = await genRes.json();
-  log(`Process app generated with ${genData.provider} in ${genData.generationTime}ms`, 'ok');
+  const isTemplate = genData.provider === 'built-in';
+  log(isTemplate ? `Matched known app template` : `Process app generated with ${genData.provider} in ${genData.generationTime}ms`, 'ok');
 
   // Show capability modal
   showCapabilityModal(prompt, genData, { passed: true, criticalCount: 0, warningCount: 0, findings: [] },
     async (approved) => {
       const appId = `proc-${++appCounter}`;
-      const title = prompt.slice(0, 40);
+      const title = genData.containerConfig?.title || prompt.slice(0, 40);
 
       try {
         // Build image
@@ -1612,8 +1614,10 @@ async function generateProcessApp(prompt) {
         });
 
         if (!buildRes.ok) {
-          const err = await buildRes.json();
-          log(`Build failed: ${err.error || 'unknown error'}`, 'error');
+          const errText = await buildRes.text();
+          let msg;
+          try { msg = JSON.parse(errText).error; } catch { msg = errText; }
+          log(`Build failed: ${msg || 'unknown error'}`, 'error');
           return;
         }
 
@@ -1629,7 +1633,7 @@ async function generateProcessApp(prompt) {
             appId,
             imageName,
             capabilities: approved,
-            config: { port: 3001, title },
+            config: { port: genData.containerConfig?.port || 3001, title },
           }),
         });
 
@@ -1945,7 +1949,7 @@ async function launchFromRegistry(app) {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ appId, dockerfile: app.dockerfile, context: { 'index.js': app.code } }),
           });
-          if (!buildRes.ok) { log('Build failed', 'error'); return; }
+          if (!buildRes.ok) { const errText = await buildRes.text(); log(`Build failed: ${errText || buildRes.statusText}`, 'error'); return; }
           const { imageName } = await buildRes.json();
 
           const launchRes = await fetch('/api/process/launch', {

@@ -1,5 +1,6 @@
-// NanoClaw — known app template
-// When user types "run nanoclaw", we skip LLM generation and use this directly.
+// Known app templates
+// When user types a matching keyword, we skip LLM generation and use these directly.
+import { SSH_CLIENT } from './ssh-client.js';
 
 export const NANOCLAW = {
   name: 'NanoClaw',
@@ -14,7 +15,7 @@ export const NANOCLAW = {
   dockerfile: `FROM node:22-slim
 
 RUN apt-get update && apt-get install -y --no-install-recommends \\
-    chromium libgbm1 libnss3 libatk-bridge2.0-0 libx11-xcb1 \\
+    git chromium libgbm1 libnss3 libatk-bridge2.0-0 libx11-xcb1 \\
     && rm -rf /var/lib/apt/lists/*
 
 RUN groupadd -r nanoclaw && useradd -r -g nanoclaw -m nanoclaw
@@ -48,6 +49,9 @@ CMD ["npm", "start"]`,
 // Known apps registry
 export const KNOWN_APPS = {
   nanoclaw: NANOCLAW,
+  'ssh client': SSH_CLIENT,
+  'ssh terminal': SSH_CLIENT,
+  ssh: SSH_CLIENT,
 };
 
 /**

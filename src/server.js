@@ -17,6 +17,7 @@ import { loadProfile, reloadProfile, getBootApps, solidify, goEphemeral, isSolid
 import * as knowledgeBase from './kernel/knowledge.js';
 import { getShellPath, listVersions as listShellVersions, getCurrentId as getShellCurrentId, getCurrentVersion as getShellCurrentVersion, setCurrentId as setShellCurrentId, readVersionHtml } from './kernel/shell-versions/store.js';
 import { improveShell, addSseClient, removeSseClient, notifyShellReload } from './kernel/shell-versions/improve.js';
+import { matchKnownApp } from './apps/nanoclaw.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
@@ -483,9 +484,29 @@ async function handleAPI(method, fullUrl, body, res) {
       return;
     }
 
-    // POST /api/generate-process — generate a process app
+    // POST /api/generate-process — generate a process app (or match known template)
     if (method === 'POST' && url === '/api/generate-process') {
       const { prompt } = JSON.parse(body);
+
+      // Check known app templates first (skip LLM generation)
+      const knownApp = matchKnownApp(prompt);
+      if (knownApp) {
+        console.log(`[server] Matched known app: ${knownApp.name}`);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({
+          type: 'process',
+          dockerfile: knownApp.dockerfile,
+          code: knownApp.code,
+          capabilities: knownApp.capabilities,
+          model: 'template',
+          provider: 'built-in',
+          generationTime: 0,
+          containerConfig: knownApp.containerConfig,
+          setupInstructions: knownApp.setupInstructions,
+        }));
+        return;
+      }
+
       const result = await generateProcess(prompt);
       const proposed = proposeCapabilities(prompt);
       result.capabilities = [...new Set([...result.capabilities, ...proposed])];
