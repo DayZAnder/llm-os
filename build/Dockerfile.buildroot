@@ -21,7 +21,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ca-certificates cpio diffutils \
     file findutils flex \
     gawk gcc g++ git gzip \
-    libncurses-dev libssl-dev \
+    libelf-dev libncurses-dev libssl-dev \
     make patch perl python3 python-is-python3 \
     rsync sed tar unzip wget xz-utils \
     # Image tools
