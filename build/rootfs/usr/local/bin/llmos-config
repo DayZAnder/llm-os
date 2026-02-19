@@ -22,7 +22,7 @@ done
 echo ""
 
 echo "  Commands:"
-echo "    llmos-config set OLLAMA_URL http://192.168.1.100:11434"
+echo "    llmos-config set OLLAMA_URL http://your-ollama-host:11434"
 echo "    llmos-config set ANTHROPIC_API_KEY sk-ant-..."
 echo "    llmos-config restart"
 echo ""

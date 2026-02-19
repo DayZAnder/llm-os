@@ -89,6 +89,11 @@ export async function launchContainer(appId, imageName, capabilities = [], conta
 
   const port = containerConfig.port ? allocatePort() : 0;
   const containerName = `llmos-${appId}`;
+
+  // Remove stale container with same name (leftover from crash or incomplete cleanup)
+  try { await dockerRequest('POST', `/containers/${containerName}/stop?t=1`); } catch {}
+  try { await dockerRequest('DELETE', `/containers/${containerName}`); } catch {}
+
   const hasNetwork = capabilities.includes('process:network');
   const hasVolume = capabilities.includes('process:volume');
   const hasAnthropicKey = capabilities.includes('api:anthropic');
@@ -129,7 +134,7 @@ export async function launchContainer(appId, imageName, capabilities = [], conta
       MemorySwap: 512 * 1024 * 1024,  // no swap
       NanoCpus: 1_000_000_000,
       PidsLimit: 64,
-      ReadonlyRootfs: true,
+      ReadonlyRootfs: false,
       NetworkMode: hasNetwork ? 'bridge' : 'none',
       CapDrop: ['ALL'],
       SecurityOpt: ['no-new-privileges'],
@@ -278,6 +283,52 @@ export function listProcesses() {
 /** Get a specific process. */
 export function getProcess(appId) {
   return processes.get(appId);
+}
+
+/**
+ * Sync running llmos-* containers into allocatedPorts + processes.
+ * Call on startup to recover from server restarts without losing track of containers.
+ */
+export async function syncRunningContainers() {
+  try {
+    const containers = await dockerRequest('GET', '/containers/json?filters=' + encodeURIComponent('{"name":["llmos-"]}'));
+    if (!Array.isArray(containers)) return;
+    for (const c of containers) {
+      const name = (c.Names?.[0] || '').replace(/^\//, '');
+      if (!name.startsWith('llmos-')) continue;
+      const appId = name.replace('llmos-', '');
+
+      // Extract host port from port bindings
+      let port = 0;
+      const ports = c.Ports || [];
+      for (const p of ports) {
+        if (p.PublicPort && p.PublicPort >= config.docker.portStart && p.PublicPort <= config.docker.portEnd) {
+          port = p.PublicPort;
+          break;
+        }
+      }
+
+      if (port) allocatedPorts.add(port);
+
+      // Only add to processes if not already tracked
+      if (!processes.has(appId)) {
+        processes.set(appId, {
+          appId,
+          containerId: c.Id,
+          containerName: name,
+          port,
+          status: c.State === 'running' ? 'running' : 'stopped',
+          title: appId,
+          capabilities: [],
+          hasWebUI: port > 0,
+          createdAt: (c.Created || 0) * 1000,
+        });
+        console.log(`[process-mgr] Recovered container: ${appId} (port ${port})`);
+      }
+    }
+  } catch (err) {
+    console.warn('[process-mgr] syncRunningContainers failed:', err.message);
+  }
 }
 
 /** Stop all running containers (for server shutdown). */

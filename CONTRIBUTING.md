@@ -91,94 +91,121 @@ Pick one, paste it into Claude Code, and let it work. Each prompt is self-contai
 
 ---
 
-### Prompt 4: CI Pipeline (GitHub Actions)
+### ~~Prompt 4: CI Pipeline (GitHub Actions)~~ — DONE
+
+> Implemented in `.github/workflows/`. Tests run on every push/PR. VM images built and uploaded on tagged releases. Values check runs automatically.
+
+**Next step:** Add build status badge to README, or improve build caching.
+
+---
+
+### ~~Prompt 5: Shell UI~~ — DONE
+
+> Implemented in `src/shell/index.html`. Floating window manager with drag, resize, minimize, maximize. Settings panel, keyboard shortcuts, capability approval dialog with explanations. All vanilla JS.
+
+**Next step:** Add multi-monitor support, or improve the taskbar with app grouping.
+
+---
+
+### Prompt 6: Resource Quotas for Docker Apps
 
 ```
-Set up GitHub Actions to automatically build and test LLM OS on every push/PR.
+Read src/kernel/docker/process-manager.js — this launches Docker containers
+for process apps (SSH, browser, bots).
 
-Core value reminder: Nothing is perfect — but CI catches regressions before
-they reach users. Every PR should pass before merge.
+Core value reminder: Protect the user first. Without resource limits, a
+generated app could consume all CPU/memory and crash the host.
 
 Requirements:
-- Run all tests (node --test tests/*.test.js) on push and PR
-- Run the values-check workflow (already exists, wire it in)
-- Build the VM image on tagged releases (v*)
-- Upload QCOW2 and VHDX as release assets automatically
-- Build matrix: Node.js 22 on Ubuntu
-- Cache node_modules between runs
-- Badge in README showing build status
+- Add configurable CPU limits per container (e.g., --cpus=0.5)
+- Add configurable memory limits per container (e.g., --memory=256m)
+- Add network bandwidth limits if Docker supports it
+- Add PID limits (already partially done with --pids-limit)
+- Make limits configurable per-app via capability system
+- Add a new capability: system:resources with sub-types
+- Show resource usage in the app info panel
+- Default: conservative limits, user can increase via capabilities
 
-Put workflows in .github/workflows/. The VM build needs Docker (privileged).
+Update process-manager.js and capabilities.js. Add tests.
 ```
 
 ---
 
-### Prompt 5: Improve the Shell UI
+### Prompt 7: Multi-File App Generation
 
 ```
-Read src/shell/index.html — the current desktop UI.
+Currently LLM OS generates single-file HTML apps. Extend it to support
+multi-file generation for more complex applications.
 
-Improve it while keeping the core architecture (vanilla JS, no frameworks).
-
-Core value reminder: Empower the user. The UI should be fast, responsive,
-and get out of the user's way. The prompt bar is the primary interaction.
+Core value reminder: Empower the user. Single-file apps hit a ceiling.
+Users should be able to generate client+server apps from a single prompt.
 
 Requirements:
-- Add drag-and-drop window resizing (currently only tiling)
-- Add window minimize/maximize (currently only close)
-- Add a "recently generated" sidebar showing last 10 apps from the log
-- Add keyboard shortcut: Ctrl+Space to focus the prompt bar
-- Add keyboard shortcut: Ctrl+W to close the focused app
-- Add a settings panel (accessible via gear icon) for:
-  - Ollama URL
-  - API keys (masked input)
-  - Default capabilities to auto-approve
-- Improve the capability approval dialog:
-  - Show a brief explanation of each capability
-  - Remember user preferences ("always allow timer:basic")
-- Keep the dark color scheme: bg #0d0d1a, accent #6c63ff
-- Keep it vanilla JS — no React, no Vue
+- Extend the LLM system prompt to support multi-file output (JSON manifest)
+- Add a manifest parser that extracts files from LLM response
+- Each file gets its own static analysis pass
+- Multi-file apps run in Docker containers (not iframes)
+- Include package.json generation for Node.js apps
+- Example: "make a chat app with websockets" → server.js + index.html + package.json
+- Capability system gates network and filesystem access
+- Add tests for manifest parsing and multi-file analysis
 
-Edit src/shell/index.html in place. Test by running node src/server.js.
+Modify src/kernel/gateway.js and src/kernel/analyzer.js.
 ```
 
 ---
 
-### Prompt 6: Security Hardening
+### Prompt 8: Known App Template — File Manager
 
 ```
-Read all files in src/kernel/ and src/sdk/sdk.js.
+Read src/apps/ssh-client.js and src/apps/chromium-browser.js for the pattern.
 
-Audit the security of the current prototype and fix any issues you find.
+Build a new known app template: a file manager that lets users browse,
+create, rename, and delete files within their app storage directories.
 
-Core value reminder: Protect the user first. This is the most important
-contribution you can make. A sandbox escape or prompt injection bypass
-means a generated app could harm the user's system.
+Core value reminder: Protect the user first. The file manager must ONLY
+access /data/apps/ — never the host filesystem.
 
-Look for and fix:
-1. Sandbox escape vectors: Can an iframe app access the parent frame?
-   Can it make network requests? Can it read cookies or localStorage
-   from the host?
-2. Prompt injection bypasses: Can a user craft a prompt that makes the
-   LLM ignore its system prompt? Can it leak the system prompt?
-3. Static analysis gaps: What malicious patterns does analyzer.js miss?
-   Add detection rules for anything you find.
-4. Capability bypass: Can an app call storage/network without having
-   the capability approved?
-5. postMessage security: Is the message origin validated? Can a third-party
-   page inject messages?
+Requirements:
+- Docker container running a Node.js file server
+- Web UI with directory tree, file list, upload/download
+- Restricted to /data/apps/<appId>/ directories only
+- Path traversal protection (no ../ escapes)
+- Supports: create file/folder, rename, delete, upload, download
+- Dark theme matching the shell (#0d0d1a, #6c63ff accent)
+- Register as known app template in src/apps/nanoclaw.js
 
-For each issue found:
-- Fix it in the code
-- Add a test case that verifies the fix
-- Add a comment explaining the attack vector
-
-Put new tests in tests/security/. Create the directory if needed.
+Put in src/apps/file-manager.js. Follow the chromium-browser.js pattern.
 ```
 
 ---
 
-### Prompt 7: Rust Microkernel Research Spike
+### Prompt 9: Security Hardening — Intent-Level Analysis
+
+```
+Read src/kernel/analyzer.js — the static security analyzer.
+
+Core value reminder: Protect the user first. The current analyzer catches
+syntax-level threats (eval, dynamic imports) but misses intent-level
+attacks (data exfiltration disguised as legitimate API calls).
+
+Requirements:
+- Add heuristic detection for data gathering + outbound patterns
+  (e.g., reading localStorage then sending via image src or CSS url())
+- Detect capability escalation patterns (requesting storage:local then
+  trying to access other apps' data via path manipulation)
+- Add entropy analysis for suspiciously encoded strings (base64 with
+  high entropy = possible exfiltration payload)
+- Add a rule for CSS-based data exfiltration (@import, background-image
+  with user data in URL)
+- Each new rule needs test vectors in tests/security/analyzer-vectors.json
+
+Focus on patterns an LLM might generate if given an adversarial prompt.
+```
+
+---
+
+### Prompt 10: Rust Microkernel Research Spike
 
 ```
 This is a research task, not production code.
@@ -396,6 +423,23 @@ For minor findings, file GitHub issues.
 
 ---
 
+## Help Wanted — Current Priorities
+
+These are the areas where contributions would have the most impact right now. Check the [issues page](https://github.com/DayZAnder/llm-os/issues) for specific tasks.
+
+| Area | Difficulty | Impact | Description |
+|------|-----------|--------|-------------|
+| **Resource quotas** | Medium | High | CPU/memory limits for Docker containers (Prompt 6 above) |
+| **Multi-file generation** | Hard | High | Generate client+server apps from a single prompt (Prompt 7) |
+| **Intent-level security** | Hard | Critical | Detect data exfiltration disguised as normal code (Prompt 9) |
+| **Known app templates** | Easy | Medium | File manager, text editor, terminal emulator (Prompt 8) |
+| **Test coverage** | Easy | Medium | Many kernel functions lack edge-case tests (QC Prompt 3) |
+| **Rust microkernel** | Hard | Exploratory | UEFI boot PoC — path to Phase 4 (Prompt 10) |
+| **Documentation** | Easy | High | Tutorials, architecture diagrams, API docs |
+| **Example apps** | Easy | Medium | High-quality example apps for the registry |
+
+---
+
 ## Low-Token Contributions (Quick Wins)
 
 Have limited AI tokens? These focused tasks are small, self-contained, and valuable. Each takes 5–15 minutes.
@@ -503,7 +547,7 @@ Core values (non-negotiable):
 4. NOTHING IS PERFECT — ship working code, iterate, never violate core intent
 
 Tech: Node.js 22+, vanilla JS (no React/Vue), ES modules, dark theme (#0d0d1a).
-Zero runtime dependencies. Tests: `npm test` (297 tests across 7 files).
+Zero runtime dependencies. Tests: `npm test` (355 tests across 8 files).
 Security: iframe + WASM sandboxes, HMAC-SHA256 capability tokens, regex static analyzer, prompt injection defense.
 
 Key files:

@@ -1,6 +1,7 @@
 // Known app templates
 // When user types a matching keyword, we skip LLM generation and use these directly.
 import { SSH_CLIENT } from './ssh-client.js';
+import { CHROMIUM_BROWSER } from './chromium-browser.js';
 
 export const NANOCLAW = {
   name: 'NanoClaw',
@@ -52,6 +53,9 @@ export const KNOWN_APPS = {
   'ssh client': SSH_CLIENT,
   'ssh terminal': SSH_CLIENT,
   ssh: SSH_CLIENT,
+  'web browser': CHROMIUM_BROWSER,
+  'chromium': CHROMIUM_BROWSER,
+  'browser': CHROMIUM_BROWSER,
 };
 
 /**

@@ -122,54 +122,29 @@ cat > "${MOUNT_DIR}/etc/fstab" << 'EOF'
 LABEL=LLMOS  /  ext4  defaults,noatime  0 1
 EOF
 
-# Install extlinux (simpler than GRUB, works in Docker)
-chroot "${MOUNT_DIR}" apk add --no-cache syslinux 2>/dev/null || true
-
-mkdir -p "${MOUNT_DIR}/boot/extlinux"
-cat > "${MOUNT_DIR}/boot/extlinux/extlinux.conf" << EOF
-DEFAULT llmos
-PROMPT 1
-TIMEOUT 30
-
-LABEL llmos
-    MENU LABEL LLM OS v${VERSION}
-    LINUX /boot/vmlinuz-lts
-    INITRD /boot/initramfs-lts
-    APPEND root=LABEL=LLMOS rootfstype=ext4 modules=ext4,virtio_blk,virtio_net,virtio_pci,hv_vmbus,hv_storvsc,hv_netvsc console=tty1 console=ttyS0,115200n8 quiet
-
-LABEL recovery
-    MENU LABEL LLM OS v${VERSION} (recovery)
-    LINUX /boot/vmlinuz-lts
-    INITRD /boot/initramfs-lts
-    APPEND root=LABEL=LLMOS rootfstype=ext4 modules=ext4 console=tty1 single
-EOF
-
-# Install syslinux MBR
-if [ -f /usr/share/syslinux/mbr.bin ]; then
-    dd if=/usr/share/syslinux/mbr.bin of="${IMAGE_RAW}" bs=440 count=1 conv=notrunc
-elif [ -f "${MOUNT_DIR}/usr/share/syslinux/mbr.bin" ]; then
-    dd if="${MOUNT_DIR}/usr/share/syslinux/mbr.bin" of="${IMAGE_RAW}" bs=440 count=1 conv=notrunc
-fi
-
-# Install extlinux to boot partition
-chroot "${MOUNT_DIR}" extlinux --install /boot/extlinux 2>/dev/null || \
-    extlinux --install "${MOUNT_DIR}/boot/extlinux" 2>/dev/null || true
-
-# Fallback: try GRUB if extlinux failed
-if [ ! -f "${MOUNT_DIR}/boot/extlinux/ldlinux.sys" ]; then
-    echo "  extlinux failed, trying GRUB..."
-    mkdir -p "${MOUNT_DIR}/boot/grub"
-    cat > "${MOUNT_DIR}/boot/grub/grub.cfg" << EOF
+# Use GRUB — more reliable than extlinux in Docker/loop-device builds
+mkdir -p "${MOUNT_DIR}/boot/grub"
+cat > "${MOUNT_DIR}/boot/grub/grub.cfg" << EOF
 set default=0
 set timeout=3
 
 menuentry "LLM OS v${VERSION}" {
-    linux /boot/vmlinuz-lts root=LABEL=LLMOS rootfstype=ext4 modules=ext4 console=tty1 console=ttyS0,115200n8 quiet
+    linux /boot/vmlinuz-lts root=LABEL=LLMOS rootfstype=ext4 modules=ext4,virtio_blk,virtio_net,virtio_pci,hv_vmbus,hv_storvsc,hv_netvsc console=tty1 console=ttyS0,115200n8 quiet
+    initrd /boot/initramfs-lts
+}
+
+menuentry "LLM OS v${VERSION} (recovery)" {
+    linux /boot/vmlinuz-lts root=LABEL=LLMOS rootfstype=ext4 modules=ext4 console=tty1 single
     initrd /boot/initramfs-lts
 }
 EOF
-    grub-install --target=i386-pc --boot-directory="${MOUNT_DIR}/boot" --recheck "${LOOP_DISK}" 2>/dev/null || true
-fi
+
+echo "  Installing GRUB to ${LOOP_DISK}..."
+grub-install --target=i386-pc --boot-directory="${MOUNT_DIR}/boot" --recheck "${LOOP_DISK}"
+echo "  GRUB installed successfully."
+
+echo "  Boot directory contents:"
+ls -la "${MOUNT_DIR}/boot/grub/"
 
 # --- Step 7: Output ---
 echo "[7/7] Creating output images..."

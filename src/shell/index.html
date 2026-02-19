@@ -449,8 +449,14 @@
   }
 
   .process-body { display: flex; flex-direction: column; }
-  .process-body iframe { flex: 1; border: none; min-height: 0; }
+  .process-body iframe { flex: 1; border: none; min-height: 200px; }
   .process-body .process-logs { flex-shrink: 0; }
+  .process-body.has-webui .process-logs { height: 0; overflow: hidden; border: none; padding: 0; }
+  .process-body.has-webui .process-logs.expanded { height: 120px; overflow-y: auto; border-top: 1px solid var(--border); padding: 8px; }
+  .process-body .log-toggle-bar { display: flex; border-top: 1px solid var(--border); }
+  .process-body .log-toggle { background: var(--bg-secondary); border: none; color: var(--text-dim); font-size: 10px; cursor: pointer; padding: 2px 8px; font-family: var(--font-mono); text-align: left; flex: 1; }
+  .process-body .log-toggle:hover { color: var(--text-primary); }
+  .process-body .log-toggle + .log-toggle { border-left: 1px solid var(--border); }
 
   /* Registry panel */
   .registry-overlay {
@@ -694,7 +700,7 @@
     display: flex;
     align-items: center;
     justify-content: center;
-    z-index: 200;
+    z-index: 1000;
   }
   .spec-overlay.hidden { display: none; }
   .spec-panel {
@@ -1161,6 +1167,7 @@ let sdkCode = '';
 let generating = false;
 let sandboxMgr;
 const processApps = new Map(); // appId → { port, status, pollInterval }
+const openIframeApps = new Map(); // appId → { hash, title, model, capabilities }
 
 // --- DOM refs ---
 const promptInput = document.getElementById('prompt-input');
@@ -1213,9 +1220,10 @@ const WM = {
     }
   },
 
-  applyRect(appId) {
+  applyRect(appId, rect) {
     const w = this.windows.get(appId);
     if (!w || w.state === 'maximized') return;
+    if (rect) { w.x = rect.x; w.y = rect.y; w.w = rect.w; w.h = rect.h; }
     w.el.style.left = w.x + 'px';
     w.el.style.top = w.y + 'px';
     w.el.style.width = w.w + 'px';
@@ -1312,6 +1320,7 @@ const WM = {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       iframes.forEach(f => f.style.pointerEvents = '');
+      saveSession();
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -1352,6 +1361,7 @@ const WM = {
       document.removeEventListener('mousemove', onMove);
       document.removeEventListener('mouseup', onUp);
       iframes.forEach(f => f.style.pointerEvents = '');
+      saveSession();
     };
     document.addEventListener('mousemove', onMove);
     document.addEventListener('mouseup', onUp);
@@ -1529,9 +1539,11 @@ function addAppWindow(appId, iframe, title, model) {
 function closeApp(appId) {
   WM.unregister(appId);
   sandboxMgr.kill(appId);
+  openIframeApps.delete(appId);
   document.getElementById(`window-${appId}`)?.remove();
   document.getElementById(`taskbar-${appId}`)?.remove();
   updateDesktopLayout();
+  saveSession();
   log(`Closed app: ${appId}`, 'info');
 }
 
@@ -1565,12 +1577,41 @@ function addProcessWindow(appId, processInfo, title) {
   const body = document.createElement('div');
   body.className = 'app-body process-body';
 
-  // If the process has a web UI, embed it
+  // If the process has a web UI, embed it (with delayed load to let container start)
   if (processInfo.hasWebUI && processInfo.port) {
+    body.classList.add('has-webui');
     const iframe = document.createElement('iframe');
-    iframe.src = `http://localhost:${processInfo.port}`;
+    iframe.id = `iframe-${appId}`;
+    const iframeSrc = `http://localhost:${processInfo.port}`;
+    // Delay loading to give container time to start HTTP server
+    if (processInfo.status === 'running') {
+      iframe.src = iframeSrc;
+    } else {
+      iframe.srcdoc = '<body style="background:#1a1a2e;color:#888;display:flex;align-items:center;justify-content:center;height:100vh;margin:0;font-family:sans-serif"><p>Starting container...</p></body>';
+      setTimeout(() => { iframe.src = iframeSrc; }, 4000);
+    }
     body.appendChild(iframe);
   }
+
+  // Toolbar: reload + log toggle (for web UI apps)
+  const toolbar = document.createElement('div');
+  toolbar.className = 'log-toggle-bar';
+  if (processInfo.hasWebUI && processInfo.port) {
+    const reloadBtn = document.createElement('button');
+    reloadBtn.className = 'log-toggle';
+    reloadBtn.textContent = '\u21bb Reload';
+    reloadBtn.onclick = () => {
+      const iframe = document.getElementById(`iframe-${appId}`);
+      if (iframe) { iframe.src = `http://localhost:${processInfo.port}`; }
+    };
+    toolbar.appendChild(reloadBtn);
+  }
+  const logToggle = document.createElement('button');
+  logToggle.className = 'log-toggle';
+  logToggle.textContent = processInfo.hasWebUI ? '> Show logs' : '';
+  logToggle.style.display = processInfo.hasWebUI ? '' : 'none';
+  toolbar.appendChild(logToggle);
+  body.appendChild(toolbar);
 
   // Log viewer
   const logViewer = document.createElement('div');
@@ -1578,6 +1619,11 @@ function addProcessWindow(appId, processInfo, title) {
   logViewer.id = `logs-${appId}`;
   logViewer.textContent = 'Waiting for logs...';
   body.appendChild(logViewer);
+
+  logToggle.onclick = () => {
+    logViewer.classList.toggle('expanded');
+    logToggle.textContent = logViewer.classList.contains('expanded') ? '< Hide logs' : '> Show logs';
+  };
 
   win.append(titlebar, body, createResizeHandles(appId));
   desktop.appendChild(win);
@@ -1632,16 +1678,108 @@ async function pollProcess(appId) {
 }
 
 async function closeProcessApp(appId) {
+  if (!processApps.has(appId)) return; // guard against repeated clicks
   const proc = processApps.get(appId);
   if (proc?.pollInterval) clearInterval(proc.pollInterval);
   processApps.delete(appId);
 
+  // Remove UI immediately so user sees feedback
   WM.unregister(appId);
-  try { await fetch(`/api/process/stop/${appId}`, { method: 'POST' }); } catch {}
   document.getElementById(`window-${appId}`)?.remove();
   document.getElementById(`taskbar-${appId}`)?.remove();
   updateDesktopLayout();
   log(`Stopped process: ${appId}`, 'info');
+
+  // Stop container in background (don't block UI)
+  try { await fetch(`/api/process/stop/${appId}`, { method: 'POST' }); } catch {}
+}
+
+// --- Session Persistence ---
+
+function saveSession() {
+  const iframeApps = [];
+  for (const [appId, info] of openIframeApps) {
+    const wm = WM.windows.get(appId);
+    iframeApps.push({
+      appId, hash: info.hash, title: info.title,
+      model: info.model, capabilities: info.capabilities,
+      windowRect: wm ? { x: wm.x, y: wm.y, w: wm.w, h: wm.h } : null,
+    });
+  }
+  try {
+    localStorage.setItem('llmos-session', JSON.stringify({ iframeApps, appCounter }));
+  } catch {}
+}
+
+async function restoreSession() {
+  // 1. Restore process apps from server
+  try {
+    const res = await fetch('/api/process/list');
+    if (res.ok) {
+      const procs = await res.json();
+      for (const proc of procs) {
+        if (proc.status === 'stopped' || proc.status === 'failed') continue;
+        addProcessWindow(proc.appId, proc, proc.title);
+        // Update appCounter to avoid collisions
+        const num = parseInt(proc.appId.replace(/\D/g, ''), 10);
+        if (!isNaN(num) && num >= appCounter) appCounter = num + 1;
+      }
+    }
+  } catch (err) {
+    console.warn('[session] Failed to restore process apps:', err.message);
+  }
+
+  // 2. Restore iframe apps from localStorage
+  let manifest;
+  try {
+    manifest = JSON.parse(localStorage.getItem('llmos-session'));
+  } catch {}
+  if (!manifest?.iframeApps?.length) return;
+
+  for (const entry of manifest.iframeApps) {
+    try {
+      // Fetch app code from registry
+      const regRes = await fetch(`/api/registry/${entry.hash}`);
+      if (!regRes.ok) continue;
+      const app = await regRes.json();
+
+      // Grant capability tokens
+      let tokens = {};
+      try {
+        const grantRes = await fetch('/api/grant', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ appId: entry.appId, capabilities: entry.capabilities || [] }),
+        });
+        if (grantRes.ok) tokens = (await grantRes.json()).tokens || {};
+      } catch {}
+
+      // Launch sandbox and create window
+      const iframe = sandboxMgr.launch(entry.appId, app.code, entry.capabilities || [], entry.title, tokens);
+      addAppWindow(entry.appId, iframe, entry.title, entry.model);
+      openIframeApps.set(entry.appId, {
+        hash: entry.hash, title: entry.title,
+        model: entry.model, capabilities: entry.capabilities || [],
+      });
+
+      // Restore window position
+      if (entry.windowRect) WM.applyRect(entry.appId, entry.windowRect);
+
+      // Update appCounter
+      const num = parseInt(entry.appId.replace(/\D/g, ''), 10);
+      if (!isNaN(num) && num >= appCounter) appCounter = num + 1;
+    } catch (err) {
+      console.warn(`[session] Failed to restore ${entry.appId}:`, err.message);
+    }
+  }
+
+  // Ensure appCounter is at least as high as manifest's
+  if (manifest.appCounter && manifest.appCounter > appCounter) {
+    appCounter = manifest.appCounter;
+  }
+
+  const restored = openIframeApps.size + processApps.size;
+  if (restored > 0) log(`Restored ${restored} app(s) from previous session`, 'info');
 }
 
 // --- Generation Flow ---
@@ -1653,11 +1791,24 @@ async function generateApp(prompt) {
   log(`Generating: "${prompt}"`);
 
   try {
-    // Detect app type from prompt
-    const isProcess = detectProcessApp(prompt);
+    // Route prompt: LLM classification with regex fallback
+    let route;
+    try {
+      const routeRes = await fetch('/api/route', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ prompt }),
+      });
+      route = await routeRes.json();
+      const src = route.source === 'llm' ? `LLM (${route.routerModel})` : 'regex';
+      log(`Routed: ${route.type}${route.template ? ` → ${route.template}` : ''}, complexity=${route.complexity} [${src}]`);
+    } catch {
+      // If router fails entirely, use client-side detection
+      route = { type: detectProcessApp(prompt) ? 'process' : 'iframe', template: null };
+      log('Router unavailable, using client-side detection');
+    }
 
-    if (isProcess) {
-      log('Detected process app request, using Docker runtime');
+    if (route.type === 'process') {
       await generateProcessApp(prompt);
       return;
     }
@@ -1692,7 +1843,8 @@ async function generateApp(prompt) {
       Object.assign(genData, retryData);
     }
 
-    log(`Generated with ${genData.provider} (${genData.model}) in ${genData.generationTime}ms`, 'ok');
+    const hintMsg = genData.modelHint ? ` (requested: ${genData.modelHint})` : '';
+    log(`Generated with ${genData.provider} (${genData.model}) in ${genData.generationTime}ms${hintMsg}`, 'ok');
 
     if (genData.sanitization?.flagged) {
       log(`Injection patterns stripped: ${genData.sanitization.flags.join(', ')}`, 'warn');
@@ -1742,11 +1894,13 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
       analysis.findings.filter(f => f.severity === 'CRITICAL')
         .map(f => `Line ${f.line}: ${f.description}`).join('<br>');
     modalAnalysis.appendChild(block);
-    modalApprove.disabled = true;
-    modalApprove.textContent = 'Blocked';
+    modalApprove.style.display = 'none';
+    modalDeny.textContent = 'Dismiss';
   } else {
+    modalApprove.style.display = '';
     modalApprove.disabled = false;
     modalApprove.textContent = 'Approve & Launch';
+    modalDeny.textContent = 'Deny';
   }
 
   if (analysis.warningCount > 0) {
@@ -1811,11 +1965,15 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
       addAppWindow(appId, iframe, title, genData.model);
       log(`Launched ${appId} with capabilities: [${approved.join(', ')}]`, 'ok');
 
-      // Auto-publish to registry
-      publishToRegistry({
+      // Auto-publish to registry and track for session persistence
+      const pubResult = await publishToRegistry({
         prompt, code: genData.code, type: 'iframe',
         capabilities: approved, model: genData.model, provider: genData.provider,
       });
+      if (pubResult?.hash) {
+        openIframeApps.set(appId, { hash: pubResult.hash, title, model: genData.model, capabilities: approved });
+        saveSession();
+      }
     }
   };
 
@@ -1834,6 +1992,7 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
 const PROCESS_KEYWORDS = [
   'nanoclaw', 'run nanoclaw',
   'ssh client', 'ssh terminal', 'ssh connect',
+  'web browser', 'chromium', 'browser',
   'whatsapp bot', 'telegram bot', 'discord bot',
   'background service', 'daemon', 'long-running',
   'docker', 'container', 'node.js server', 'api server',
@@ -1856,7 +2015,8 @@ async function generateProcessApp(prompt) {
   if (!genRes.ok) throw new Error(`Process generation failed: ${await genRes.text()}`);
   const genData = await genRes.json();
   const isTemplate = genData.provider === 'built-in';
-  log(isTemplate ? `Matched known app template` : `Process app generated with ${genData.provider} in ${genData.generationTime}ms`, 'ok');
+  const procHintMsg = genData.modelHint ? ` (requested: ${genData.modelHint})` : '';
+  log(isTemplate ? `Matched known app template` : `Process app generated with ${genData.provider} (${genData.model}) in ${genData.generationTime}ms${procHintMsg}`, 'ok');
 
   // Show capability modal
   showCapabilityModal(prompt, genData, { passed: true, criticalCount: 0, warningCount: 0, findings: [] },
@@ -1873,7 +2033,10 @@ async function generateProcessApp(prompt) {
           body: JSON.stringify({
             appId,
             dockerfile: genData.dockerfile,
-            context: { 'index.js': genData.code },
+            context: {
+              ...(genData.code ? { 'index.js': genData.code } : {}),
+              ...(genData.containerConfig?.contextFiles || {}),
+            },
           }),
         });
 
@@ -2199,6 +2362,8 @@ async function launchFromRegistry(app) {
 
     const iframe = sandboxMgr.launch(appId, app.code, app.capabilities, app.title, tokens);
     addAppWindow(appId, iframe, app.title, app.model);
+    openIframeApps.set(appId, { hash: app.hash, title: app.title, model: app.model, capabilities: app.capabilities || [] });
+    saveSession();
     log(`Launched from registry: "${app.title}" (${app.hash})`, 'ok');
   } else if (app.type === 'process') {
     log(`Launching process app from registry: "${app.title}"`, 'info');
@@ -2587,6 +2752,9 @@ async function init() {
   } catch {
     log('LLM OS ready', 'ok');
   }
+
+  // Restore apps from previous session
+  await restoreSession();
 }
 
 init();

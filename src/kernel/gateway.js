@@ -3,6 +3,7 @@ import { provider as ollamaProvider } from './providers/ollama.js';
 import { provider as claudeProvider } from './providers/claude.js';
 import { provider as openaiProvider } from './providers/openai-compatible.js';
 import { buildContext } from './knowledge.js';
+import { getBestModel } from './resource-monitor.js';
 
 // Provider registry — add new providers here
 const providers = new Map();
@@ -59,6 +60,56 @@ Rules:
 - Available capabilities: ui:window, storage:local, timer:basic, clipboard:rw, network:http
 - Keep the app simple, functional, and visually clean
 - Use a dark color scheme (dark background, light text)`;
+
+// --- Model Hint Extraction ---
+// Parse "use opus", "with claude", "using haiku" etc. from user prompts.
+// Returns { provider, model, cleanPrompt } or null if no hint found.
+
+const MODEL_ALIASES = {
+  // Claude models
+  opus:    { provider: 'claude', model: 'claude-opus-4-6' },
+  sonnet:  { provider: 'claude', model: 'claude-sonnet-4-5-20250929' },
+  haiku:   { provider: 'claude', model: 'claude-haiku-4-5-20251001' },
+  claude:  { provider: 'claude', model: null }, // use configured default
+  // OpenAI models
+  'gpt-4o':  { provider: 'openai', model: 'gpt-4o' },
+  'gpt-4':   { provider: 'openai', model: 'gpt-4o' },
+  'o1':      { provider: 'openai', model: 'o1' },
+  openai:    { provider: 'openai', model: null },
+  // Local
+  ollama:  { provider: 'ollama', model: null },
+  qwen:    { provider: 'ollama', model: null },
+  local:   { provider: 'ollama', model: null },
+};
+
+// Patterns: "use opus", "using opus", "with opus", "via claude", "by opus"
+// Also at end: "... make a calculator, opus" or "... make a calculator (opus)"
+const MODEL_HINT_PATTERNS = [
+  // "use/using/with/via/by <model>" anywhere in prompt
+  /\b(?:use|using|with|via|by)\s+(opus|sonnet|haiku|claude|openai|ollama|qwen|local|gpt-4o?|o1)\b/i,
+  // "... , <model>" at end of prompt
+  /,\s*(opus|sonnet|haiku|claude|openai|ollama|qwen|local|gpt-4o?|o1)\s*$/i,
+  // "... (<model>)" at end of prompt
+  /\(\s*(opus|sonnet|haiku|claude|openai|ollama|qwen|local|gpt-4o?|o1)\s*\)\s*$/i,
+  // "<model> model" or "<model>-model"
+  /\b(opus|sonnet|haiku)\s*[-]?\s*model\b/i,
+];
+
+export function extractModelHint(prompt) {
+  for (const pattern of MODEL_HINT_PATTERNS) {
+    const m = prompt.match(pattern);
+    if (m) {
+      const alias = m[1].toLowerCase();
+      const resolved = MODEL_ALIASES[alias];
+      if (resolved) {
+        // Strip the hint from the prompt
+        const cleanPrompt = prompt.replace(m[0], '').replace(/\s{2,}/g, ' ').trim();
+        return { ...resolved, alias, cleanPrompt };
+      }
+    }
+  }
+  return null;
+}
 
 // Keywords that suggest a complex app needing a capable model
 const COMPLEX_KEYWORDS = [
@@ -222,6 +273,42 @@ export function selectProvider(complexity) {
   return 'ollama';
 }
 
+/**
+ * Dynamic provider+model selection using resource monitor.
+ * Returns { provider, model } with the best available model for the task.
+ * Falls back to static selectProvider() if monitor has no data.
+ */
+export async function selectBestProvider(complexity) {
+  // Explicit routing overrides everything
+  const primary = config.routing.primary;
+  if (primary && providers.has(primary)) {
+    const prov = providers.get(primary);
+    if (prov.isAvailable(getProviderConfig(primary))) {
+      return { provider: primary, model: null }; // Use configured model
+    }
+  }
+
+  // Map complexity to resource-monitor task
+  const task = complexity === 'complex' ? 'generate-complex'
+    : complexity === 'medium' ? 'generate-medium'
+    : 'generate-simple';
+
+  const best = await getBestModel(task);
+  if (best) {
+    // Check if the provider is actually usable
+    const prov = providers.get(best.provider);
+    if (prov && prov.isAvailable(getProviderConfig(best.provider))) {
+      const configuredModel = getProviderConfig(best.provider).model;
+      // Only override if the monitor found a better model than configured
+      const modelOverride = best.name !== configuredModel ? best.name : null;
+      return { provider: best.provider, model: modelOverride };
+    }
+  }
+
+  // Fallback to static selection
+  return { provider: selectProvider(complexity), model: null };
+}
+
 function getFallbackProvider(failedProvider) {
   // Explicit fallback
   const fallback = config.routing.fallback;
@@ -320,14 +407,36 @@ function extractProcessCapabilities(text) {
 
 export async function generateProcess(prompt) {
   const start = Date.now();
-  const { clean, flagged, flags } = sanitizePrompt(prompt);
+
+  // Extract model hint before sanitization
+  const modelHint = extractModelHint(prompt);
+  const effectivePrompt = modelHint ? modelHint.cleanPrompt : prompt;
+
+  const { clean, flagged, flags } = sanitizePrompt(effectivePrompt);
   if (flagged) console.warn('[gateway] Injection patterns detected:', flags);
 
-  const complexity = estimateComplexity(clean);
-  // Process apps prefer capable models
-  const providerName = selectProvider('complex');
+  // Model hint overrides default routing; otherwise use dynamic selection
+  let providerName, modelOverride;
+  if (modelHint) {
+    providerName = modelHint.provider;
+    modelOverride = modelHint.model;
+    const prov = providers.get(providerName);
+    if (!prov || !prov.isAvailable(getProviderConfig(providerName))) {
+      console.warn(`[gateway] Requested provider '${providerName}' not available, falling back`);
+      const best = await selectBestProvider('complex');
+      providerName = best.provider;
+      modelOverride = best.model;
+    } else {
+      console.log(`[gateway] Model hint: "${modelHint.alias}" → ${providerName}${modelOverride ? ` (${modelOverride})` : ''}`);
+    }
+  } else {
+    // Dynamic: pick best available for process apps (always complex)
+    const best = await selectBestProvider('complex');
+    providerName = best.provider;
+    modelOverride = best.model;
+  }
 
-  console.log(`[gateway] Generating process app: provider=${providerName}`);
+  console.log(`[gateway] Generating process app: provider=${providerName}${modelOverride ? ` model=${modelOverride}` : ''}`);
 
   const messages = [
     { role: 'system', content: PROCESS_SYSTEM_PROMPT },
@@ -335,15 +444,31 @@ export async function generateProcess(prompt) {
   ];
 
   let raw;
-  try {
-    raw = await generateWithProvider(providerName, messages);
-  } catch (err) {
-    const fb = getFallbackProvider(providerName);
-    if (fb) {
-      console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
-      raw = await generateWithProvider(fb, messages);
-    } else {
-      throw err;
+  if (modelOverride) {
+    const origCfg = getProviderConfig(providerName);
+    const overrideCfg = { ...origCfg, model: modelOverride };
+    const prov = providers.get(providerName);
+    try {
+      raw = await prov.generate(messages, overrideCfg);
+    } catch (err) {
+      const fb = getFallbackProvider(providerName);
+      if (fb) {
+        console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
+        raw = await generateWithProvider(fb, messages);
+        providerName = fb;
+        modelOverride = null;
+      } else { throw err; }
+    }
+  } else {
+    try {
+      raw = await generateWithProvider(providerName, messages);
+    } catch (err) {
+      const fb = getFallbackProvider(providerName);
+      if (fb) {
+        console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
+        raw = await generateWithProvider(fb, messages);
+        providerName = fb;
+      } else { throw err; }
     }
   }
 
@@ -356,19 +481,24 @@ export async function generateProcess(prompt) {
     dockerfile,
     code,
     capabilities,
-    model: cfg.model,
+    model: modelOverride || cfg.model,
     provider: providerName,
-    complexity,
+    complexity: estimateComplexity(clean),
     generationTime: Date.now() - start,
     sanitization: { flagged, flags },
+    modelHint: modelHint ? modelHint.alias : null,
   };
 }
 
 export async function generate(prompt, options = {}) {
   const start = Date.now();
 
+  // Extract model hint before sanitization (e.g. "use opus")
+  const modelHint = extractModelHint(prompt);
+  const effectivePrompt = modelHint ? modelHint.cleanPrompt : prompt;
+
   // Sanitize input
-  const { clean, flagged, flags } = sanitizePrompt(prompt);
+  const { clean, flagged, flags } = sanitizePrompt(effectivePrompt);
   if (flagged) {
     console.warn('[gateway] Injection patterns detected:', flags);
   }
@@ -388,11 +518,30 @@ export async function generate(prompt, options = {}) {
     };
   }
 
-  // Route to provider
+  // Route to provider — model hint overrides complexity-based routing
   const complexity = estimateComplexity(clean);
-  const providerName = selectProvider(complexity);
+  let providerName, modelOverride;
+  if (modelHint) {
+    providerName = modelHint.provider;
+    modelOverride = modelHint.model;
+    // Check if provider is available, fall back to auto if not
+    const prov = providers.get(providerName);
+    if (!prov || !prov.isAvailable(getProviderConfig(providerName))) {
+      console.warn(`[gateway] Requested provider '${providerName}' (${modelHint.alias}) not available, falling back`);
+      const best = await selectBestProvider(complexity);
+      providerName = best.provider;
+      modelOverride = best.model;
+    } else {
+      console.log(`[gateway] Model hint: "${modelHint.alias}" → ${providerName}${modelOverride ? ` (${modelOverride})` : ''}`);
+    }
+  } else {
+    // Dynamic: pick best available for this complexity level
+    const best = await selectBestProvider(complexity);
+    providerName = best.provider;
+    modelOverride = best.model;
+  }
 
-  console.log(`[gateway] Generating: confidence=${confidence.score} complexity=${complexity} provider=${providerName}`);
+  console.log(`[gateway] Generating: confidence=${confidence.score} complexity=${complexity} provider=${providerName}${modelOverride ? ` model=${modelOverride}` : ''}`);
 
   // Inject knowledge base context if relevant past generations exist
   const kbContext = buildContext(clean);
@@ -405,31 +554,56 @@ export async function generate(prompt, options = {}) {
     { role: 'user', content: clean },
   ];
 
-  let raw;
-  try {
-    raw = await generateWithProvider(providerName, messages);
-  } catch (err) {
-    // Fallback: try another available provider
-    const fb = getFallbackProvider(providerName);
-    if (fb) {
-      console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
-      raw = await generateWithProvider(fb, messages);
-    } else {
-      throw err;
+  // Build provider config, applying model override if specified
+  const genOptions = {};
+  let effectiveConfig = providerName;
+  if (modelOverride) {
+    // Temporarily override the model in provider config
+    const origCfg = getProviderConfig(providerName);
+    const overrideCfg = { ...origCfg, model: modelOverride };
+    // Use direct provider call with overridden config
+    const prov = providers.get(providerName);
+    try {
+      var raw = await prov.generate(messages, overrideCfg, genOptions);
+    } catch (err) {
+      const fb = getFallbackProvider(providerName);
+      if (fb) {
+        console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
+        raw = await generateWithProvider(fb, messages);
+        effectiveConfig = fb;
+        modelOverride = null;
+      } else {
+        throw err;
+      }
+    }
+  } else {
+    try {
+      var raw = await generateWithProvider(providerName, messages);
+    } catch (err) {
+      const fb = getFallbackProvider(providerName);
+      if (fb) {
+        console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
+        raw = await generateWithProvider(fb, messages);
+        effectiveConfig = fb;
+      } else {
+        throw err;
+      }
     }
   }
 
   const code = cleanResponse(raw);
   const capabilities = extractCapabilities(code);
-  const cfg = getProviderConfig(providerName);
+  const usedProvider = typeof effectiveConfig === 'string' ? effectiveConfig : providerName;
+  const cfg = getProviderConfig(usedProvider);
 
   return {
     code,
     capabilities,
-    model: cfg.model,
-    provider: providerName,
+    model: modelOverride || cfg.model,
+    provider: usedProvider,
     complexity,
     generationTime: Date.now() - start,
     sanitization: { flagged, flags },
+    modelHint: modelHint ? modelHint.alias : null,
   };
 }

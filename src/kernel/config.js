@@ -40,6 +40,7 @@ export const config = {
   routing: {
     primary: process.env.PRIMARY_PROVIDER || '',
     fallback: process.env.FALLBACK_PROVIDER || '',
+    routerModel: process.env.ROUTER_MODEL || '',  // Small model for prompt routing (e.g. qwen2.5:0.5b)
   },
   port: parseInt(process.env.PORT || '3000', 10),
   docker: {

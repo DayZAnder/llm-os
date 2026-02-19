@@ -1,7 +1,7 @@
 // Tests for LLM gateway — sanitization, complexity, provider selection, routing
 // Run: node tests/gateway.test.js
 
-import { sanitizePrompt, estimateComplexity, selectProvider, getProviders, scoreConfidence, generateClarifications } from '../src/kernel/gateway.js';
+import { sanitizePrompt, estimateComplexity, selectProvider, getProviders, scoreConfidence, generateClarifications, extractModelHint } from '../src/kernel/gateway.js';
 
 let passed = 0;
 let failed = 0;
@@ -137,6 +137,56 @@ console.log('\nConfidence scoring:');
 {
   const { components } = scoreConfidence('build a countdown timer with storage');
   assert(components.capabilities === 1.0, 'mentions timer+storage → full capability score');
+}
+
+// --- Model hint extraction ---
+console.log('\nModel hint extraction:');
+
+{
+  const hint = extractModelHint('make a calculator using opus');
+  assert(hint !== null, '"using opus" detected');
+  assert(hint.provider === 'claude', 'opus routes to claude');
+  assert(hint.model === 'claude-opus-4-6', 'opus resolves to claude-opus-4-6');
+  assert(hint.cleanPrompt === 'make a calculator', 'hint stripped from prompt');
+}
+
+{
+  const hint = extractModelHint('build a todo app with haiku');
+  assert(hint !== null, '"with haiku" detected');
+  assert(hint.provider === 'claude', 'haiku routes to claude');
+  assert(hint.model === 'claude-haiku-4-5-20251001', 'haiku resolves correctly');
+  assert(hint.cleanPrompt === 'build a todo app', 'haiku hint stripped');
+}
+
+{
+  const hint = extractModelHint('create a chat app, sonnet');
+  assert(hint !== null, 'trailing ", sonnet" detected');
+  assert(hint.provider === 'claude', 'sonnet routes to claude');
+}
+
+{
+  const hint = extractModelHint('make a timer (ollama)');
+  assert(hint !== null, '"(ollama)" detected');
+  assert(hint.provider === 'ollama', 'ollama hint routes to ollama');
+  assert(hint.model === null, 'ollama has no model override');
+}
+
+{
+  const hint = extractModelHint('use claude to build a notes app');
+  assert(hint !== null, '"use claude" detected');
+  assert(hint.provider === 'claude', 'claude hint routes to claude');
+  assert(hint.model === null, 'claude uses configured default');
+}
+
+{
+  const hint = extractModelHint('build a simple todo app');
+  assert(hint === null, 'no hint in plain prompt');
+}
+
+{
+  const hint = extractModelHint('make a calculator via local');
+  assert(hint !== null, '"via local" detected');
+  assert(hint.provider === 'ollama', 'local routes to ollama');
 }
 
 // --- Clarification generation ---

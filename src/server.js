@@ -7,7 +7,7 @@ import { generate, generateProcess, getProviders } from './kernel/gateway.js';
 import { analyze, analyzeDockerfile } from './kernel/analyzer.js';
 import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType, initTokenKey, verifyToken } from './kernel/capabilities.js';
 import { dockerPing } from './kernel/docker/client.js';
-import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses } from './kernel/docker/process-manager.js';
+import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses, syncRunningContainers } from './kernel/docker/process-manager.js';
 import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, rateApp, updateSpec, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
 import { storageGet, storageSet, storageRemove, storageKeys, storageUsage, storageClear, storageExport, storageImport, storageListApps, storageExportAll, storageFlushAll } from './kernel/storage.js';
 import * as scheduler from './kernel/scheduler.js';
@@ -18,6 +18,8 @@ import * as knowledgeBase from './kernel/knowledge.js';
 import { getShellPath, listVersions as listShellVersions, getCurrentId as getShellCurrentId, getCurrentVersion as getShellCurrentVersion, setCurrentId as setShellCurrentId, readVersionHtml } from './kernel/shell-versions/store.js';
 import { improveShell, addSseClient, removeSseClient, notifyShellReload } from './kernel/shell-versions/improve.js';
 import { matchKnownApp } from './apps/nanoclaw.js';
+import { routePrompt } from './kernel/prompt-router.js';
+import { probe as probeResources, getResourceSummary } from './kernel/resource-monitor.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const pkg = JSON.parse(readFileSync(join(__dirname, '..', 'package.json'), 'utf-8'));
@@ -484,6 +486,30 @@ async function handleAPI(method, fullUrl, body, res) {
       return;
     }
 
+    // POST /api/route — classify a prompt (LLM routing with regex fallback)
+    if (method === 'POST' && url === '/api/route') {
+      const { prompt } = JSON.parse(body);
+      const route = await routePrompt(prompt);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(route));
+      return;
+    }
+
+    // GET /api/resources — available models and resource summary
+    if (method === 'GET' && url === '/api/resources') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(getResourceSummary()));
+      return;
+    }
+
+    // POST /api/resources/probe — force re-probe available models
+    if (method === 'POST' && url === '/api/resources/probe') {
+      const models = await probeResources();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ models: models.length, summary: getResourceSummary() }));
+      return;
+    }
+
     // POST /api/generate-process — generate a process app (or match known template)
     if (method === 'POST' && url === '/api/generate-process') {
       const { prompt } = JSON.parse(body);
@@ -778,6 +804,23 @@ ${provLines}
   } else if (bootApps.length > 0 && solid) {
     console.log(`  [profile] ${bootApps.length} boot app(s) loaded from snapshot`);
   }
+
+  // Recover running containers from before restart
+  syncRunningContainers().then(() => {
+    const count = listProcesses().length;
+    if (count > 0) console.log(`  [docker] Recovered ${count} running container(s)`);
+  }).catch(() => {});
+
+  // Probe available models (async, non-blocking)
+  probeResources().then(models => {
+    if (models.length > 0) {
+      const best = models[0];
+      const weakest = models[models.length - 1];
+      console.log(`  [resources] ${models.length} model(s) available — best: ${best.name} (tier ${best.tier}), routing: ${weakest.name} (tier ${weakest.tier})`);
+    } else {
+      console.log('  [resources] No models detected (will use regex routing)');
+    }
+  }).catch(() => {});
 
   // Register self-improvement tasks
   for (const taskDef of selfImproveTasks) {

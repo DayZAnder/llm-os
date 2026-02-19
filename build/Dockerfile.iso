@@ -1,7 +1,7 @@
 # LLM OS — VM Image Builder
 #
 # Builds a bootable Alpine Linux VM image with Docker + Node.js + our kernel.
-# Run this on a Linux host (e.g., torino.xh.se):
+# Run this on a Linux host with Docker:
 #
 #   docker build -f build/Dockerfile.iso -t llmos-builder .
 #   docker run --rm --privileged -v $(pwd)/build/output:/output llmos-builder

@@ -28,15 +28,56 @@ CMD ["node", "index.js"]`,
   code: `const http = require('http');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 const { WebSocketServer } = require('ws');
 const { Client } = require('ssh2');
 
 const PORT = parseInt(process.env.PORT || '3001', 10);
+const SCROLLBACK_SIZE = 8000;
+const SESSION_TIMEOUT = 10 * 60 * 1000; // 10 min without attached WS
 
 // Resolve xterm assets from node_modules
 const XTERM_CSS = path.join(__dirname, 'node_modules/xterm/css/xterm.css');
 const XTERM_JS = path.join(__dirname, 'node_modules/xterm/lib/xterm.js');
 const FIT_JS = path.join(__dirname, 'node_modules/xterm-addon-fit/lib/xterm-addon-fit.js');
+
+// --- Session Manager ---
+// Sessions persist independently of WebSocket connections.
+// Each session holds an SSH connection, a scrollback buffer, and an optional attached WS.
+const sessions = new Map(); // sessionId -> { sshClient, stream, scrollback, ws, host, username, cols, rows, createdAt, detachedAt }
+
+function createSessionId() { return crypto.randomBytes(8).toString('hex'); }
+
+function destroySession(id) {
+  const s = sessions.get(id);
+  if (!s) return;
+  if (s.stream) try { s.stream.close(); } catch {}
+  if (s.sshClient) try { s.sshClient.end(); } catch {}
+  if (s.ws && s.ws.readyState === 1) {
+    try { s.ws.send(JSON.stringify({ type: 'close', sessionId: id })); } catch {}
+  }
+  sessions.delete(id);
+  console.log('[session] Destroyed ' + id + ' (' + sessions.size + ' remaining)');
+}
+
+// Cleanup detached sessions every 60s
+setInterval(() => {
+  const now = Date.now();
+  for (const [id, s] of sessions) {
+    if (!s.ws && s.detachedAt && now - s.detachedAt > SESSION_TIMEOUT) {
+      console.log('[session] Timeout: ' + id);
+      destroySession(id);
+    }
+  }
+}, 60000);
+
+function sessionList() {
+  const list = [];
+  for (const [id, s] of sessions) {
+    list.push({ id, host: s.host, username: s.username, createdAt: s.createdAt });
+  }
+  return list;
+}
 
 const HTML = \`<!DOCTYPE html>
 <html>
@@ -63,6 +104,7 @@ const HTML = \`<!DOCTYPE html>
   #toolbar button { background: rgba(42,42,74,0.8); border: 1px solid #3a3a5a; color: #aaa; border-radius: 4px; padding: 4px 12px; font-size: 12px; cursor: pointer; }
   #toolbar button:hover { background: #3a3a5a; color: #fff; }
   .hint { color: #666; font-size: 12px; margin-top: 16px; }
+  #status-bar { position: absolute; bottom: 0; left: 0; right: 0; background: rgba(42,42,74,0.9); color: #888; font-size: 11px; padding: 2px 12px; font-family: monospace; z-index: 10; }
 </style>
 </head>
 <body>
@@ -86,12 +128,75 @@ const HTML = \`<!DOCTYPE html>
 <div id="terminal-panel">
   <div id="toolbar"><button id="disconnect-btn">Disconnect</button></div>
   <div id="terminal-container"></div>
+  <div id="status-bar"></div>
 </div>
 
 <script src="/xterm.js"><\\/script>
 <script src="/fit.js"><\\/script>
 <script>
-let ws, term, fitAddon;
+let ws, term, fitAddon, currentSessionId = null;
+let pendingConnect = null; // queued connect message to send after WS opens
+
+function openWS() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
+  ws = new WebSocket(proto + '//' + location.host + '/ws');
+  ws.onmessage = handleMessage;
+  ws.onclose = () => {
+    if (currentSessionId) setTimeout(openWS, 2000);
+  };
+  ws.onerror = () => {};
+  ws.onopen = () => {
+    if (currentSessionId) {
+      ws.send(JSON.stringify({ type: 'attach', sessionId: currentSessionId }));
+    } else if (pendingConnect) {
+      ws.send(JSON.stringify(pendingConnect));
+      pendingConnect = null;
+    }
+  };
+}
+
+function handleMessage(e) {
+  let msg;
+  try { msg = JSON.parse(e.data); } catch { return; }
+  const errorEl = document.getElementById('error');
+  const btn = document.getElementById('connect-btn');
+
+  if (msg.type === 'sessions') {
+    // Server tells us about existing sessions on first connect
+    if (msg.list && msg.list.length > 0 && !currentSessionId) {
+      // Auto-reattach to first active session
+      currentSessionId = msg.list[0].id;
+      showTerminal();
+      ws.send(JSON.stringify({ type: 'attach', sessionId: currentSessionId }));
+      setStatus('Reattaching to ' + msg.list[0].username + '@' + msg.list[0].host + '...');
+    }
+  } else if (msg.type === 'ready') {
+    currentSessionId = msg.sessionId;
+    showTerminal();
+    setStatus('Connected — session ' + msg.sessionId.slice(0, 8));
+  } else if (msg.type === 'attached') {
+    setStatus('Reattached — session ' + (currentSessionId || '').slice(0, 8) + ' (' + msg.host + ')');
+  } else if (msg.type === 'scrollback') {
+    if (term && msg.data) {
+      term.write(Uint8Array.from(atob(msg.data), c => c.charCodeAt(0)));
+    }
+  } else if (msg.type === 'data') {
+    if (term) term.write(Uint8Array.from(atob(msg.data), c => c.charCodeAt(0)));
+  } else if (msg.type === 'error') {
+    if (term) { term.write('\\\\r\\\\n\\\\x1b[31m' + msg.message + '\\\\x1b[0m\\\\r\\\\n'); }
+    else { errorEl.textContent = msg.message; btn.disabled = false; btn.textContent = 'Connect'; }
+  } else if (msg.type === 'close') {
+    currentSessionId = null;
+    if (term) term.write('\\\\r\\\\n\\\\x1b[33mSession ended.\\\\x1b[0m\\\\r\\\\n');
+    setStatus('Disconnected');
+  }
+}
+
+function setStatus(text) {
+  const bar = document.getElementById('status-bar');
+  if (bar) bar.textContent = text;
+}
 
 function connect() {
   const host = document.getElementById('host').value.trim();
@@ -107,37 +212,21 @@ function connect() {
   btn.disabled = true;
   btn.textContent = 'Connecting...';
 
-  const proto = location.protocol === 'https:' ? 'wss:' : 'ws:';
-  ws = new WebSocket(proto + '//' + location.host + '/ws');
+  const msg = { type: 'connect', host, port, username, password };
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(msg));
+  } else {
+    pendingConnect = msg;
+    openWS();
+  }
 
-  ws.onopen = () => {
-    ws.send(JSON.stringify({ type: 'connect', host, port, username, password }));
-  };
-
-  ws.onmessage = (e) => {
-    let msg;
-    try { msg = JSON.parse(e.data); } catch { return; }
-    if (msg.type === 'ready') {
-      showTerminal();
-    } else if (msg.type === 'data') {
-      term.write(Uint8Array.from(atob(msg.data), c => c.charCodeAt(0)));
-    } else if (msg.type === 'error') {
-      if (term) { term.write('\\\\r\\\\n\\\\x1b[31m' + msg.message + '\\\\x1b[0m\\\\r\\\\n'); }
-      else { errorEl.textContent = msg.message; btn.disabled = false; btn.textContent = 'Connect'; }
-    } else if (msg.type === 'close') {
-      if (term) term.write('\\\\r\\\\n\\\\x1b[33mConnection closed.\\\\x1b[0m\\\\r\\\\n');
+  // Timeout — reset button if no response in 15s
+  setTimeout(() => {
+    if (btn.textContent === 'Connecting...') {
+      btn.disabled = false; btn.textContent = 'Connect';
+      errorEl.textContent = 'Connection timed out. Try again.';
     }
-  };
-
-  ws.onclose = () => {
-    if (!term) { btn.disabled = false; btn.textContent = 'Connect'; }
-  };
-
-  ws.onerror = () => {
-    errorEl.textContent = 'WebSocket connection failed';
-    btn.disabled = false;
-    btn.textContent = 'Connect';
-  };
+  }, 15000);
 }
 
 function showTerminal() {
@@ -145,36 +234,46 @@ function showTerminal() {
   const tp = document.getElementById('terminal-panel');
   tp.style.display = 'flex';
 
-  term = new Terminal({
-    cursorBlink: true,
-    theme: { background: '#1a1a2e', foreground: '#e0e0e0', cursor: '#6c63ff' },
-    fontSize: 14,
-    fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', monospace",
-  });
-  fitAddon = new FitAddon.FitAddon();
-  term.loadAddon(fitAddon);
-  term.open(document.getElementById('terminal-container'));
-  setTimeout(() => { fitAddon.fit(); }, 50);
+  if (!term) {
+    term = new Terminal({
+      cursorBlink: true,
+      theme: { background: '#1a1a2e', foreground: '#e0e0e0', cursor: '#6c63ff' },
+      fontSize: 14,
+      fontFamily: "'Cascadia Code', 'Fira Code', 'Consolas', monospace",
+    });
+    fitAddon = new FitAddon.FitAddon();
+    term.loadAddon(fitAddon);
+    term.open(document.getElementById('terminal-container'));
+    setTimeout(() => { fitAddon.fit(); }, 50);
+
+    term.onData((data) => {
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'input', data: btoa(data) }));
+      }
+    });
+
+    window.addEventListener('resize', () => {
+      fitAddon.fit();
+      if (ws && ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
+      }
+    });
+  }
+
   term.focus();
-
-  ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
-
-  term.onData((data) => {
-    if (ws && ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({ type: 'input', data: btoa(data) }));
-    }
-  });
-
-  window.addEventListener('resize', () => {
+  setTimeout(() => {
     fitAddon.fit();
     if (ws && ws.readyState === WebSocket.OPEN) {
       ws.send(JSON.stringify({ type: 'resize', cols: term.cols, rows: term.rows }));
     }
-  });
+  }, 100);
 }
 
 function disconnect() {
-  if (ws) ws.close();
+  if (ws && ws.readyState === WebSocket.OPEN && currentSessionId) {
+    ws.send(JSON.stringify({ type: 'disconnect', sessionId: currentSessionId }));
+  }
+  currentSessionId = null;
   document.getElementById('terminal-panel').style.display = 'none';
   document.getElementById('connect-panel').style.display = 'flex';
   document.getElementById('connect-btn').disabled = false;
@@ -188,6 +287,9 @@ document.getElementById('disconnect-btn').onclick = disconnect;
 document.querySelectorAll('#connect-panel input').forEach(el => {
   el.addEventListener('keydown', (e) => { if (e.key === 'Enter') connect(); });
 });
+
+// Auto-connect WebSocket on load to check for existing sessions
+openWS();
 <\\/script>
 </body>
 </html>\`;
@@ -214,95 +316,157 @@ const server = http.createServer((req, res) => {
       return res.end('Not Found');
     }
   }
-  // Health check
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    return res.end(JSON.stringify({ status: 'ok', connections: wss.clients.size }));
+    return res.end(JSON.stringify({ status: 'ok', connections: wss.clients.size, sessions: sessions.size }));
   }
   res.writeHead(404);
   res.end('Not Found');
 });
 
-// --- WebSocket SSH bridge ---
+// --- WebSocket SSH bridge with persistent sessions ---
 
 const wss = new WebSocketServer({ server, path: '/ws' });
 
 wss.on('connection', (ws) => {
-  let sshClient = null;
-  let stream = null;
+  // Send list of active sessions so client can reattach
+  ws.send(JSON.stringify({ type: 'sessions', list: sessionList() }));
+
+  let attachedSessionId = null;
 
   ws.on('message', (raw) => {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
 
-    if (msg.type === 'connect' && !sshClient) {
-      sshClient = new Client();
+    // --- Create new SSH session ---
+    if (msg.type === 'connect') {
+      const sessionId = createSessionId();
+      const sshClient = new Client();
+      const session = {
+        sshClient, stream: null, scrollback: Buffer.alloc(0),
+        ws, host: msg.host, username: msg.username,
+        cols: 80, rows: 24, createdAt: Date.now(), detachedAt: null,
+      };
 
       sshClient.on('ready', () => {
-        sshClient.shell({ term: 'xterm-256color', cols: 80, rows: 24 }, (err, sh) => {
+        sshClient.shell({ term: 'xterm-256color', cols: session.cols, rows: session.rows }, (err, stream) => {
           if (err) {
             ws.send(JSON.stringify({ type: 'error', message: err.message }));
             sshClient.end();
-            sshClient = null;
+            sessions.delete(sessionId);
             return;
           }
-          stream = sh;
-          ws.send(JSON.stringify({ type: 'ready' }));
+          session.stream = stream;
+          sessions.set(sessionId, session);
+          attachedSessionId = sessionId;
+          ws.send(JSON.stringify({ type: 'ready', sessionId }));
+          console.log('[session] Created ' + sessionId + ' -> ' + msg.username + '@' + msg.host);
 
           stream.on('data', (data) => {
-            if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'data', data: data.toString('base64') }));
+            // Append to scrollback buffer
+            session.scrollback = Buffer.concat([session.scrollback, data]);
+            if (session.scrollback.length > SCROLLBACK_SIZE) {
+              session.scrollback = session.scrollback.slice(session.scrollback.length - SCROLLBACK_SIZE);
+            }
+            // Forward to attached WS
+            if (session.ws && session.ws.readyState === 1) {
+              session.ws.send(JSON.stringify({ type: 'data', data: data.toString('base64') }));
+            }
           });
 
           stream.stderr.on('data', (data) => {
-            if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'data', data: data.toString('base64') }));
+            session.scrollback = Buffer.concat([session.scrollback, data]);
+            if (session.scrollback.length > SCROLLBACK_SIZE) {
+              session.scrollback = session.scrollback.slice(session.scrollback.length - SCROLLBACK_SIZE);
+            }
+            if (session.ws && session.ws.readyState === 1) {
+              session.ws.send(JSON.stringify({ type: 'data', data: data.toString('base64') }));
+            }
           });
 
           stream.on('close', () => {
-            if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'close' }));
-            ws.close();
+            console.log('[session] SSH stream closed: ' + sessionId);
+            if (session.ws && session.ws.readyState === 1) {
+              session.ws.send(JSON.stringify({ type: 'close', sessionId }));
+            }
+            sessions.delete(sessionId);
           });
         });
       });
 
       sshClient.on('error', (err) => {
         if (ws.readyState === 1) ws.send(JSON.stringify({ type: 'error', message: err.message }));
-        sshClient = null;
+        sessions.delete(sessionId);
       });
 
       sshClient.on('keyboard-interactive', (name, instructions, lang, prompts, finish) => {
-        // Auto-respond with password for keyboard-interactive auth
         finish([msg.password || '']);
       });
 
       sshClient.connect({
-        host: msg.host,
-        port: msg.port || 22,
-        username: msg.username,
-        password: msg.password,
-        tryKeyboard: true,
-        readyTimeout: 10000,
+        host: msg.host, port: msg.port || 22,
+        username: msg.username, password: msg.password,
+        tryKeyboard: true, readyTimeout: 10000,
       });
     }
 
-    if (msg.type === 'input' && stream) {
-      stream.write(Buffer.from(msg.data, 'base64'));
+    // --- Reattach to existing session ---
+    if (msg.type === 'attach') {
+      const session = sessions.get(msg.sessionId);
+      if (!session) {
+        ws.send(JSON.stringify({ type: 'error', message: 'Session not found' }));
+        return;
+      }
+      // Detach previous WS if any
+      session.ws = ws;
+      session.detachedAt = null;
+      attachedSessionId = msg.sessionId;
+      // Replay scrollback
+      if (session.scrollback.length > 0) {
+        ws.send(JSON.stringify({ type: 'scrollback', data: session.scrollback.toString('base64') }));
+      }
+      ws.send(JSON.stringify({ type: 'attached', sessionId: msg.sessionId, host: session.host, username: session.username }));
+      console.log('[session] Reattached ' + msg.sessionId);
     }
 
-    if (msg.type === 'resize' && stream) {
-      stream.setWindow(msg.rows, msg.cols, 0, 0);
+    // --- Keyboard input ---
+    if (msg.type === 'input' && attachedSessionId) {
+      const session = sessions.get(attachedSessionId);
+      if (session && session.stream) session.stream.write(Buffer.from(msg.data, 'base64'));
+    }
+
+    // --- Terminal resize ---
+    if (msg.type === 'resize' && attachedSessionId) {
+      const session = sessions.get(attachedSessionId);
+      if (session && session.stream) {
+        session.cols = msg.cols; session.rows = msg.rows;
+        session.stream.setWindow(msg.rows, msg.cols, 0, 0);
+      }
+    }
+
+    // --- Explicit disconnect (kill session) ---
+    if (msg.type === 'disconnect') {
+      const id = msg.sessionId || attachedSessionId;
+      if (id) { destroySession(id); attachedSessionId = null; }
     }
   });
 
+  // WS closed — just detach, do NOT kill session
   ws.on('close', () => {
-    if (stream) try { stream.close(); } catch {}
-    if (sshClient) try { sshClient.end(); } catch {}
-    stream = null;
-    sshClient = null;
+    if (attachedSessionId) {
+      const session = sessions.get(attachedSessionId);
+      if (session && session.ws === ws) {
+        session.ws = null;
+        session.detachedAt = Date.now();
+        console.log('[session] Detached ' + attachedSessionId + ' (timeout in 10min)');
+      }
+    }
   });
 });
 
 server.listen(PORT, '0.0.0.0', () => {
   console.log('SSH Client running on http://0.0.0.0:' + PORT);
+  console.log('Sessions persist across page refreshes (10min timeout when detached)');
 });`,
   containerConfig: {
     port: 3001,
