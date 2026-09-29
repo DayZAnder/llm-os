@@ -7,10 +7,11 @@ import { generate, generateProcess, getProviders, evolve, complete, extractManif
 import { loadTheme, saveTheme, resetTheme, validateTheme } from './kernel/theme.js';
 import { loadLayout, saveLayout, resetLayout, validateLayout, PRESETS as DESKTOP_PRESETS } from './kernel/desktop.js';
 import { checkApiRequest } from './kernel/http-guard.js';
+import { bootReport, formatText as formatBootText } from './kernel/boot.js';
 import * as vfs from './kernel/vfs.js';
 import { request as netRequest } from './kernel/net.js';
 import { analyze, analyzeDockerfile } from './kernel/analyzer.js';
-import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType, initTokenKey, verifyToken } from './kernel/capabilities.js';
+import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType, initTokenKey, verifyToken, tokenKeyReady } from './kernel/capabilities.js';
 import { dockerPing } from './kernel/docker/client.js';
 import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses, syncRunningContainers } from './kernel/docker/process-manager.js';
 import { findHandlers, getLineage, publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, rateApp, updateSpec, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
@@ -63,6 +64,21 @@ function serveStatic(url, res) {
 
   res.writeHead(200, { 'Content-Type': mime });
   res.end(content);
+}
+
+function bootDeps() {
+  return {
+    listModels: listUpgradeModels,
+    ollamaUrl: process.env.OLLAMA_URL || '',
+    cloudConfigured: Object.entries(getProviders()).filter(([n, p]) => n !== 'ollama' && p.available).map(([n]) => n),
+    registryStats: getStats,
+    dockerEnabled: config.docker.enabled,
+    dockerPing,
+    schedulerEnabled: config.scheduler.enabled,
+    tokenKeyReady: tokenKeyReady(),
+    theme: loadTheme().name,
+    desktop: loadLayout().name,
+  };
 }
 
 function sendJson(res, status, data) {
@@ -360,6 +376,42 @@ async function handleAPI(method, fullUrl, body, res) {
         result.capabilities = [...new Set([...result.capabilities, ...proposed])];
         return result;
       });
+      return;
+    }
+
+    // GET /api/boot — service report for the boot splash, /status and the VM
+    // console (?format=text gives systemd-style lines)
+    if (method === 'GET' && url === '/api/boot') {
+      const report = await bootReport(bootDeps());
+      if (new URL(`http://x${fullUrl}`).searchParams.get('format') === 'text') {
+        res.writeHead(200, { 'Content-Type': 'text/plain; charset=utf-8' });
+        res.end(formatBootText(report));
+      } else {
+        sendJson(res, 200, report);
+      }
+      return;
+    }
+
+    // POST /api/boot/explain — { id }: ask the model to explain one failing
+    // service. Only the check's own name, detail and fix are sent — no logs.
+    if (method === 'POST' && url === '/api/boot/explain') {
+      const { id } = JSON.parse(body);
+      const report = await bootReport(bootDeps());
+      const svc = report.services.find(s => s.id === id);
+      if (!svc || svc.status === 'ok' || svc.status === 'off') { sendJson(res, 400, { error: 'Nothing to explain' }); return; }
+      try {
+        const prompt = `An LLM OS status check reported a problem.
+Service: ${svc.name}
+Status: ${svc.status}
+Detail: ${svc.detail}
+Suggested fix: ${svc.fix || '(none)'}
+
+Explain in two or three short sentences what this means for the user and exactly what to do. Plain text, no markdown.`;
+        const out = await complete({ appId: 'system:boot', prompt, maxTokens: 400 });
+        sendJson(res, 200, { text: out.text, model: out.model });
+      } catch (err) {
+        sendJson(res, 502, { error: err.message });
+      }
       return;
     }
 

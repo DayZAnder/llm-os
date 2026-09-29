@@ -1,12 +1,12 @@
 #!/bin/sh
 # LLM OS Micro — auto-login status screen
 
+VER=$(grep '"version"' /opt/llm-os/package.json 2>/dev/null | head -n 1 | cut -d'"' -f4)
+
 clear
 echo ""
-echo "  ╔══════════════════════════════════════╗"
-echo "  ║       LLM OS Micro v0.2.3            ║"
-echo "  ║       AI-native operating system      ║"
-echo "  ╚══════════════════════════════════════╝"
+echo "  LLM OS Micro ${VER:+v$VER}"
+echo "  An operating system with no apps until you ask for one."
 echo ""
 
 # Wait briefly for network
@@ -26,12 +26,26 @@ else
     echo "  SSH:      will be available when network is ready"
 fi
 
+# Service report from the kernel (the same list the desktop shows at boot)
+echo ""
+REPORT=""
+i=0
+while [ $i -lt 15 ] && [ -z "$REPORT" ]; do
+    REPORT=$(wget -qO- "http://127.0.0.1:3000/api/boot?format=text" 2>/dev/null)
+    [ -z "$REPORT" ] && sleep 1
+    i=$((i + 1))
+done
+if [ -n "$REPORT" ]; then
+    echo "  Services:"
+    echo "$REPORT" | sed 's/^/  /'
+else
+    echo "  Services: LLM OS kernel not answering — see /var/log/llmos.log"
+fi
+
 echo ""
 echo "  Config:   vi /var/lib/llmos/.env   (user data: /var/lib/llmos)"
 echo "  Logs:     tail -f /var/log/llmos.log"
-echo "  Services: /etc/init.d/S99llmos {start|stop|restart|status}"
-echo ""
-echo "  Note: This is the micro variant (no Docker, iframe apps only)"
+echo "  Kernel:   /etc/init.d/S99llmos {start|stop|restart|status}"
 echo ""
 
 exec /bin/sh -l

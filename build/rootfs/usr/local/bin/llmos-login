@@ -33,6 +33,20 @@ else
     echo "not running — try: rc-service llmos start"
 fi
 
+# Service report from the kernel (the same list the desktop shows at boot)
+REPORT=""
+i=0
+while [ $i -lt 15 ] && [ -z "$REPORT" ]; do
+    REPORT=$(wget -qO- "http://127.0.0.1:3000/api/boot?format=text" 2>/dev/null)
+    [ -z "$REPORT" ] && sleep 1
+    i=$((i + 1))
+done
+if [ -n "$REPORT" ]; then
+    echo ""
+    echo "  Services:"
+    echo "$REPORT" | sed 's/^/  /'
+fi
+
 printf "  Claude:  "
 if command -v claude >/dev/null 2>&1; then
     if grep -q 'ANTHROPIC_API_KEY=.\+' "${LLMOS_ENV:-/var/lib/llmos/.env}" 2>/dev/null; then

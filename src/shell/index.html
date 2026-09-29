@@ -216,6 +216,27 @@
   .boot-status { font: 13px var(--font-mono); color: var(--text-secondary); min-height: 20px; }
   .boot-status b { color: var(--text-primary); font-weight: 500; }
   .boot-status.err { color: var(--danger); }
+  .boot-services { display: none; width: min(760px, 92vw); max-height: 62vh; overflow: auto; color-scheme: dark; }
+  .boot-splash.details .boot-services { display: block; }
+  .boot-splash.details { justify-content: flex-start; padding-top: 5vh; gap: 14px; }
+  .boot-splash.details .boot-stage { transform: scale(.5); margin: -60px 0; }
+  .boot-splash.details .boot-orbit { display: none; }
+  .boot-continue { display: block; margin: 14px auto 0; background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 8px 22px; font: 14px var(--font-sans); cursor: pointer; }
+  .svc-list { display: flex; flex-direction: column; gap: 2px; font-size: 13px; }
+  .svc { display: grid; grid-template-columns: 22px 220px 1fr auto; gap: 4px 10px; align-items: baseline; padding: 7px 10px; border-radius: 6px; }
+  .svc:hover { background: var(--bg-tertiary); }
+  .svc-icon { font-weight: 700; text-align: center; }
+  .svc-ok .svc-icon { color: var(--success); }
+  .svc-warn .svc-icon { color: var(--warning); }
+  .svc-error .svc-icon { color: var(--danger); }
+  .svc-off { opacity: .6; }
+  .svc-name { color: var(--text-primary); }
+  .svc-detail { color: var(--text-secondary); font-family: var(--font-mono); font-size: 12px; overflow-wrap: anywhere; }
+  .svc-fix, .svc-explain { grid-column: 2 / -1; font-size: 12px; color: var(--text-primary); }
+  .svc-explain { color: var(--text-secondary); border-left: 2px solid var(--accent); padding-left: 8px; }
+  .svc-ask { grid-column: 4; grid-row: 1; background: none; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 5px; font-size: 11px; padding: 2px 8px; cursor: pointer; }
+  .svc-ask:hover { color: var(--text-primary); border-color: var(--accent); }
+  .status-modal { width: min(760px, 94vw); }
   @media (prefers-reduced-motion: reduce) {
     .boot-orbit { display: none; }
     .boot-mark { animation: none; }
@@ -2931,6 +2952,7 @@ async function generateApp(prompt, options = {}) {
   if (generating) return;
   const themeCmd = prompt.match(/^\/theme\b\s*(.*)$/i);
   if (themeCmd) return themeCommand(themeCmd[1].trim());
+  if (/^\/status\s*$/i.test(prompt)) return statusCommand();
   const deskCmd = prompt.match(/^\/desktop\b\s*(.*)$/i);
   if (deskCmd) return desktopCommand(deskCmd[1].trim());
   generating = true;
@@ -3890,6 +3912,134 @@ function connectShellReload() {
 }
 
 // --- Init ---
+// --- Service report (boot splash, /status) ---
+
+const BOOT_ICON = { ok: '✓', warn: '⚠', error: '✗', off: '–' };
+
+/** Render the service list into `container` (plain DOM, text nodes only). */
+function renderServices(container, report) {
+  const list = document.createElement('div');
+  list.className = 'svc-list';
+  for (const s of report.services) {
+    const row = document.createElement('div');
+    row.className = `svc svc-${s.status}`;
+    const icon = document.createElement('span');
+    icon.className = 'svc-icon';
+    icon.textContent = BOOT_ICON[s.status] || '?';
+    const name = document.createElement('span');
+    name.className = 'svc-name';
+    name.textContent = s.name;
+    const detail = document.createElement('span');
+    detail.className = 'svc-detail';
+    detail.textContent = s.detail || '';
+    row.append(icon, name, detail);
+    if (s.fix) {
+      const fix = document.createElement('div');
+      fix.className = 'svc-fix';
+      fix.textContent = '→ ' + s.fix;
+      row.appendChild(fix);
+    }
+    if (s.status === 'warn' || s.status === 'error') {
+      // Opt-in only: sends this check's name, detail and fix to the model
+      const ask = document.createElement('button');
+      ask.className = 'svc-ask';
+      ask.textContent = 'Ask AI';
+      ask.title = 'Send this check (not your logs or data) to the AI model for an explanation';
+      ask.onclick = async () => {
+        ask.disabled = true;
+        ask.textContent = 'Asking…';
+        const out = document.createElement('div');
+        out.className = 'svc-explain';
+        try {
+          const res = await fetch('/api/boot/explain', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: s.id }) });
+          const data = await res.json();
+          out.textContent = data.text || data.error || 'No answer';
+        } catch (err) {
+          out.textContent = err.message;
+        }
+        row.appendChild(out);
+        ask.remove();
+      };
+      row.appendChild(ask);
+    }
+    list.appendChild(row);
+  }
+  container.replaceChildren(list);
+}
+
+// Problems the user has already seen don't pop the list open on every boot
+const problemKey = (report) => report.services.filter(s => s.status === 'warn' || s.status === 'error').map(s => `${s.id}:${s.status}:${s.detail}`).join('|');
+
+/**
+ * Show the service report on the boot splash. Resolves when the splash may
+ * close: immediately, or after "Continue" if there are new problems.
+ */
+async function bootServices() {
+  let report;
+  try { report = await fetch('/api/boot').then(r => r.json()); } catch { return; }
+  const ok = report.services.filter(s => s.status === 'ok').length;
+  const counted = report.services.filter(s => s.status !== 'off').length;
+  bootStatus('checking', 'services', `${ok} of ${counted} ok`);
+
+  const splash = document.getElementById('boot-splash');
+  if (!splash) return;
+  const panel = document.createElement('div');
+  panel.className = 'boot-services';
+  renderServices(panel, report);
+  splash.appendChild(panel);
+
+  const key = problemKey(report);
+  let seen = '';
+  try { seen = localStorage.getItem('llmos-boot-ack') || ''; } catch {}
+  const expand = () => splash.classList.add('details');
+  // Any key or a click on the splash shows the details while booting
+  document.addEventListener('keydown', expand, { once: true });
+  splash.addEventListener('click', expand, { once: true });
+
+  if (!key || key === seen) return;
+  // New problems: open the list and wait for the user
+  expand();
+  await new Promise((resolve) => {
+    const btn = document.createElement('button');
+    btn.className = 'boot-continue';
+    btn.textContent = 'Continue';
+    btn.onclick = () => {
+      try { localStorage.setItem('llmos-boot-ack', key); } catch {}
+      resolve();
+    };
+    splash.appendChild(btn);
+    btn.focus({ preventScroll: true });
+  });
+}
+
+/** /status — the same report, any time. */
+async function statusCommand() {
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  const modal = document.createElement('div');
+  modal.className = 'modal status-modal';
+  const h = document.createElement('h3');
+  h.textContent = 'System status';
+  const body = document.createElement('div');
+  body.textContent = 'Checking…';
+  const row = document.createElement('div');
+  row.className = 'btn-row';
+  const close = document.createElement('button');
+  close.className = 'btn-deny';
+  close.textContent = 'Close';
+  row.appendChild(close);
+  modal.append(h, body, row);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  const done = () => overlay.remove();
+  close.onclick = done;
+  overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) done(); });
+  overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') done(); });
+  try { renderServices(body, await fetch('/api/boot').then(r => r.json())); }
+  catch (err) { body.textContent = err.message; }
+  close.focus();
+}
+
 // --- Boot splash ---
 // Status lines are built from text nodes: names can come from the model.
 function bootStatus(verb, what, detail) {
@@ -3982,12 +4132,8 @@ async function boot() {
     bootStatus('arranging', 'desktop', layout.name);
     applyDesktop(layout);
   } catch (err) { console.warn('[desktop]', err); }
-  try {
-    // Models that actually answer (local ones are probed), not just configured ones
-    const models = await fetch('/api/models').then(r => r.json());
-    const names = models.slice(0, 3).map(m => m.label);
-    bootStatus('checking', 'models', names.length ? names.join(', ') + (models.length > 3 ? ` +${models.length - 3}` : '') : 'none reachable — apps can still run');
-  } catch {}
+  // Services (data, models, apps, sandbox, …): may pause on new problems
+  await bootServices();
 
   initExamples();
   checkLLMStatus();

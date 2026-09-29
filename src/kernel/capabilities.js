@@ -71,6 +71,11 @@ function base64urlDecode(str) {
  * Generate the session HMAC key. Must be called once at startup
  * before any grantCapabilities() call.
  */
+/** True once the session signing key exists (boot report). */
+export function tokenKeyReady() {
+  return !!_hmacKey;
+}
+
 export async function initTokenKey() {
   _hmacKey = await crypto.subtle.generateKey(
     { name: 'HMAC', hash: 'SHA-256' },
