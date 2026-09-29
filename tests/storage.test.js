@@ -184,6 +184,22 @@ storageFlushAll();
 // Should NOT create a directory outside data/apps/
 assert(!existsSync(join(TEST_DATA_DIR, '..', '..', '..', 'etc', 'store.json')), 'path traversal blocked');
 
+// --- Robustness ---
+console.log('\nRobustness:');
+const r1 = storageSet('test-app-1', 'undef', undefined);
+assert(!r1.ok, 'undefined value rejected');
+assert(storageSet('test-app-1', 'after', 1).ok && storageUsage('test-app-1').bytes > 0, 'store still works after an undefined write');
+storageSet('test-app-quota', 'keep', 'original');
+const big = 'x'.repeat(6 * 1024 * 1024);
+assert(!storageSet('test-app-quota', 'keep', big).ok, 'over-quota overwrite rejected');
+assert(storageGet('test-app-quota', 'keep') === 'original', 'over-quota overwrite keeps the old value');
+const keysBefore = storageKeys('test-app-import').length;
+assert(!storageImport('test-app-import', { a: 1, huge: big }).ok, 'over-quota import rejected');
+assert(storageKeys('test-app-import').length === keysBefore && storageGet('test-app-import', 'a') === null, 'rejected import applies nothing');
+storageSet('test.app.dots', 'k', 'v1');
+assert(storageGet('test_app_dots', 'k') === 'v1', 'ids that map to the same directory share one store');
+storageDelete('test.app.dots');
+
 // --- Cleanup ---
 console.log('\nCleanup:');
 for (const appId of TEST_APPS) {

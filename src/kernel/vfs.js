@@ -46,6 +46,13 @@ export function normalizePath(p) {
     if (seg === '' || seg === '.') continue;
     if (seg === '..') throw new Error('Path traversal not allowed');
     if (seg.length > 255) throw new Error('Path segment too long');
+    if (/[\x00-\x1f]/.test(seg)) throw new Error('Invalid path');
+    // On Windows "a.txt:x" is a hidden alternate data stream (invisible to
+    // the quota), and CON/NUL/… or a trailing dot/space aren't real files.
+    if (process.platform === 'win32' &&
+        (/[:*?"<>|]/.test(seg) || /[. ]$/.test(seg) || /^(con|prn|aux|nul|com\d|lpt\d)(\.|$)/i.test(seg))) {
+      throw new Error('Invalid file name on this system');
+    }
     parts.push(seg);
   }
   return '/' + parts.join('/');
@@ -143,8 +150,13 @@ export function write(vpath, content) {
   mkdirSync(dirname(real), { recursive: true });
   // Write-then-rename so a crash never leaves a half-written file
   const tmp = `${real}.tmp-${process.pid}`;
-  writeFileSync(tmp, content, 'utf-8');
-  renameSync(tmp, real);
+  try {
+    writeFileSync(tmp, content, 'utf-8');
+    renameSync(tmp, real);
+  } catch (err) {
+    rmSync(tmp, { force: true }); // a failed write must not leave uncounted data behind
+    throw err;
+  }
   return entryInfo(norm, statSync(real));
 }
 

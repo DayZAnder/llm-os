@@ -112,6 +112,14 @@ function sendJson(res, status, data) {
 // is the second, independent check.
 const FS_OP_CAPS = { list: 'fs:read', read: 'fs:read', stat: 'fs:read', write: 'fs:write', mkdir: 'fs:write', remove: 'fs:write' };
 
+// Node's fs errors carry the real host path (user name, install dir); an app
+// only gets told what went wrong in terms of its own virtual path.
+const FS_ERRNO = { ENOENT: 'No such file or directory', EEXIST: 'A file is in the way', ENOTDIR: 'Not a directory', EISDIR: 'Is a directory', ENOTEMPTY: 'Directory not empty', EACCES: 'Permission denied', EPERM: 'Permission denied', ENOSPC: 'Disk full', EINVAL: 'Invalid path', ENAMETOOLONG: 'Path too long' };
+function fsErrorMessage(err, vpath) {
+  if (!err.code) return err.message; // our own messages already use virtual paths
+  return `${FS_ERRNO[err.code] || 'File system error'}: ${String(vpath || '/').slice(0, 200)}`;
+}
+
 /**
  * Run a generation job and reply either as one JSON document or, when
  * streaming, as NDJSON with batched text deltas followed by the result.
@@ -533,7 +541,7 @@ Explain in two or three short sentences what this means for the user and exactly
         }
         sendJson(res, 200, { result });
       } catch (err) {
-        sendJson(res, 400, { error: err.message });
+        sendJson(res, 400, { error: fsErrorMessage(err, path) });
       }
       return;
     }
@@ -1045,8 +1053,12 @@ Explain in two or three short sentences what this means for the user and exactly
     res.end('API not found');
   } catch (err) {
     console.error('[server] API error:', err);
-    res.writeHead(500);
-    res.end(err.message);
+    if (res.headersSent) { res.end(); return; }
+    // Bad JSON is the caller's mistake; system errors stay in the log (they
+    // can contain host paths), the caller gets a generic message.
+    const status = err instanceof SyntaxError ? 400 : 500;
+    res.writeHead(status, { 'Content-Type': 'text/plain' });
+    res.end(status === 400 ? 'Invalid JSON' : err.code ? 'Internal error' : err.message);
   }
 }
 

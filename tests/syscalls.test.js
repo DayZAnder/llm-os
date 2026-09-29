@@ -60,6 +60,11 @@ throws(() => vfs.normalizePath('/a/../../etc/passwd'), 'rejects ..');
 throws(() => vfs.normalizePath('C:/Windows'), 'rejects drive letters');
 throws(() => vfs.normalizePath('/a\\b'), 'rejects backslashes');
 throws(() => vfs.normalizePath('/a\0b'), 'rejects NUL');
+throws(() => vfs.normalizePath('/a\nb'), 'rejects control characters');
+if (process.platform === 'win32') {
+  throws(() => vfs.normalizePath('/a.txt:hidden'), 'rejects NTFS alternate data streams');
+  throws(() => vfs.normalizePath('/docs/CON'), 'rejects reserved device names');
+}
 vfs.write('/notes/todo.md', '# hi');
 assert(vfs.read('/notes/todo.md') === '# hi', 'write then read');
 assert(vfs.stat('/notes/todo.md').mime === 'text/markdown', 'stat reports mime');

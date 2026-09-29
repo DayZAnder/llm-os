@@ -2,7 +2,7 @@
 // Stores data as JSON files in data/apps/<appId>/store.json
 // Isolated by appId — one app cannot read another's data
 
-import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync, statSync } from 'fs';
+import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync, statSync, renameSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { dataPath } from './paths.js';
@@ -20,17 +20,23 @@ const cache = new Map(); // appId → { data: Map, dirty: false }
 const writeTimers = new Map();
 const WRITE_DELAY = 500; // ms
 
+// Sanitized id: prevents path traversal, and is also the cache key — two ids
+// that map to the same directory must share one in-memory store, or the
+// last flush would overwrite the other's data.
+function safeId(appId) {
+  return String(appId).replace(/[^a-zA-Z0-9_-]/g, '_');
+}
+
 function appDir(appId) {
-  // Sanitize appId to prevent path traversal
-  const safe = String(appId).replace(/[^a-zA-Z0-9_-]/g, '_');
-  return join(DATA_DIR, safe);
+  return join(DATA_DIR, safeId(appId));
 }
 
 function storePath(appId) {
   return join(appDir(appId), 'store.json');
 }
 
-function loadStore(appId) {
+function loadStore(rawId) {
+  const appId = safeId(rawId);
   if (cache.has(appId)) return cache.get(appId);
 
   const path = storePath(appId);
@@ -41,7 +47,8 @@ function loadStore(appId) {
       const raw = JSON.parse(readFileSync(path, 'utf-8'));
       data = new Map(Object.entries(raw));
     } catch {
-      // Corrupted file — start fresh
+      // Unreadable: keep it for recovery instead of overwriting it on the next save
+      try { renameSync(path, `${path}.corrupt-${Date.now()}`); } catch {}
     }
   }
 
@@ -50,12 +57,14 @@ function loadStore(appId) {
   return entry;
 }
 
-function scheduleSave(appId) {
+function scheduleSave(rawId) {
+  const appId = safeId(rawId);
   if (writeTimers.has(appId)) clearTimeout(writeTimers.get(appId));
   writeTimers.set(appId, setTimeout(() => flushApp(appId), WRITE_DELAY));
 }
 
-function flushApp(appId) {
+function flushApp(rawId) {
+  const appId = safeId(rawId);
   const entry = cache.get(appId);
   if (!entry || !entry.dirty) return;
 
@@ -63,7 +72,10 @@ function flushApp(appId) {
   mkdirSync(dir, { recursive: true });
 
   const obj = Object.fromEntries(entry.data);
-  writeFileSync(storePath(appId), JSON.stringify(obj, null, 2));
+  // Write-then-rename: a crash mid-write never leaves a cut-off store.json
+  const tmp = `${storePath(appId)}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(obj, null, 2));
+  renameSync(tmp, storePath(appId));
   entry.dirty = false;
   writeTimers.delete(appId);
 }
@@ -80,13 +92,16 @@ export function storageGet(appId, key) {
  * Set a value in app storage. Returns { ok, error? }.
  */
 export function storageSet(appId, key, value) {
+  if (value === undefined) return { ok: false, error: 'value is required (use remove to delete a key)' };
   const store = loadStore(appId);
 
-  // Check quota before writing
+  // Check quota before writing; on failure the old value stays
+  const had = store.data.has(key);
+  const previous = store.data.get(key);
   store.data.set(key, value);
   const size = calcSize(store.data);
   if (size > DEFAULT_QUOTA) {
-    store.data.delete(key); // rollback
+    if (had) store.data.set(key, previous); else store.data.delete(key);
     return { ok: false, error: `Storage quota exceeded (${formatBytes(DEFAULT_QUOTA)} limit)` };
   }
 
@@ -144,7 +159,8 @@ export function storageClear(appId) {
 /**
  * Delete all storage data for an app (including the directory).
  */
-export function storageDelete(appId) {
+export function storageDelete(rawId) {
+  const appId = safeId(rawId);
   cache.delete(appId);
   if (writeTimers.has(appId)) {
     clearTimeout(writeTimers.get(appId));
@@ -169,15 +185,18 @@ export function storageExport(appId) {
  */
 export function storageImport(appId, data) {
   const store = loadStore(appId);
-  for (const [key, value] of Object.entries(data)) {
-    store.data.set(key, value);
+  const merged = new Map(store.data);
+  for (const [key, value] of Object.entries(data || {})) {
+    if (value !== undefined) merged.set(key, value);
   }
 
-  const size = calcSize(store.data);
+  const size = calcSize(merged);
   if (size > DEFAULT_QUOTA) {
+    // Nothing applied: the store stays as it was
     return { ok: false, error: `Import would exceed quota (${formatBytes(size)} > ${formatBytes(DEFAULT_QUOTA)})` };
   }
 
+  store.data = merged;
   store.dirty = true;
   scheduleSave(appId);
   return { ok: true, keys: store.data.size };
@@ -219,7 +238,7 @@ export function storageFlushAll() {
 function calcSize(dataMap) {
   let size = 2; // {}
   for (const [key, value] of dataMap) {
-    size += JSON.stringify(key).length + JSON.stringify(value).length + 4; // "key":value,
+    size += JSON.stringify(key).length + (JSON.stringify(value) ?? 'null').length + 4; // "key":value,
   }
   return size;
 }
