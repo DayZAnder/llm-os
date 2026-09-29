@@ -55,6 +55,17 @@ Per GPL v2 Section 3(b), source code for all GPL components can be obtained from
 | DejaVu Fonts | Alpine package | Bitstream Vera | Desktop | https://dejavu-fonts.github.io |
 | zlib | Buildroot package | Zlib | Micro | https://zlib.net |
 
+## Native renderer (`native/renderer`, source only — not yet in the VM images)
+
+| Crate | License | Upstream |
+|-------|---------|----------|
+| taffy | MIT | https://github.com/DioxusLabs/taffy |
+| tiny-skia | BSD-3-Clause | https://github.com/linebender/tiny-skia |
+| fontdue | MIT OR Apache-2.0 OR Zlib | https://github.com/mooman219/fontdue |
+| serde_json | MIT OR Apache-2.0 | https://github.com/serde-rs/json |
+
+Transitive dependencies and their licenses are pinned in `native/renderer/Cargo.lock`. The renderer loads system fonts at runtime and ships none.
+
 ## Build Tools (not distributed)
 
 Buildroot (GPL-2.0), GCC (GPL-3.0), and Debian build containers are used during the build process but are **not included** in the distributed VM images.

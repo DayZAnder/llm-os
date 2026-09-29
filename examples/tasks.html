@@ -1,0 +1,60 @@
+<!-- capabilities: ["ui:window", "storage:local"] -->
+<!-- app: {"name": "Tasks", "icon": "✅", "handles": [], "ui": "portable"} -->
+<script>
+const { column, row, scroll, text, button, input, checkbox, spacer, divider } = LLMOS.ui.c;
+
+const FILTERS = ['all', 'open', 'done'];
+const save = (tasks) => LLMOS.storage.set('tasks', tasks).catch(() => {});
+
+LLMOS.ui.app({
+  state: { tasks: [], draft: '', filter: 'all', loaded: false },
+
+  async init(set) {
+    const tasks = (await LLMOS.storage.get('tasks').catch(() => null)) || [];
+    set({ tasks, loaded: true });
+  },
+
+  view(s, set) {
+    const update = (tasks) => { set({ tasks }); save(tasks); };
+    const add = () => {
+      const title = s.draft.trim();
+      if (!title) return;
+      update([...s.tasks, { id: Date.now().toString(36), title, done: false }]);
+      set({ draft: '' });
+    };
+    const toggle = (id, done) => update(s.tasks.map(t => (t.id === id ? { ...t, done } : t)));
+    const remove = (id) => update(s.tasks.filter(t => t.id !== id));
+    const clearDone = () => update(s.tasks.filter(t => !t.done));
+
+    const open = s.tasks.filter(t => !t.done).length;
+    const shown = s.tasks.filter(t => s.filter === 'all' || (s.filter === 'done') === t.done);
+
+    return column({ padding: 16, gap: 12, height: 'fill' },
+      row({ align: 'center', gap: 8 },
+        text({ size: 'xl', weight: 'bold', grow: 1 }, 'Tasks'),
+        text({ tone: 'muted' }, s.tasks.length ? `${open} open` : ''),
+      ),
+      row({ gap: 8 },
+        input({ grow: 1, value: s.draft, placeholder: 'Add a task and press Enter', onChange: (v) => set({ draft: v }), onSubmit: add }),
+        button({ variant: 'primary', onPress: add, disabled: !s.draft.trim() }, 'Add'),
+      ),
+      row({ gap: 4 },
+        ...FILTERS.map(f => button({ key: f, variant: s.filter === f ? 'secondary' : 'ghost', onPress: () => set({ filter: f }) },
+          f[0].toUpperCase() + f.slice(1))),
+        spacer(),
+        button({ variant: 'ghost', disabled: !s.tasks.some(t => t.done), onPress: clearDone }, 'Clear done'),
+      ),
+      divider(),
+      scroll({ grow: 1, gap: 2 },
+        !s.loaded ? text({ tone: 'muted' }, 'Loading…')
+          : shown.length === 0 ? text({ tone: 'muted' }, s.tasks.length ? 'Nothing here.' : 'No tasks yet. Add one above.')
+          : shown.map(t => row({ key: t.id, align: 'center', gap: 8, padding: 6, surface: 'card' },
+              checkbox({ checked: t.done, onChange: (v) => toggle(t.id, v) }),
+              text({ grow: 1, tone: t.done ? 'muted' : 'normal' }, t.title),
+              button({ variant: 'ghost', onPress: () => remove(t.id) }, 'Remove'),
+            )),
+      ),
+    );
+  },
+});
+</script>

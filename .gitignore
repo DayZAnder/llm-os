@@ -12,3 +12,6 @@ data/
 
 # Build output artifacts
 build/output/
+
+# Rust build output
+native/*/target/

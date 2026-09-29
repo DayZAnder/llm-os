@@ -3,8 +3,9 @@ import { readFileSync, existsSync } from 'fs';
 import { join, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './kernel/config.js';
-import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme } from './kernel/gateway.js';
+import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme, generateDesktop } from './kernel/gateway.js';
 import { loadTheme, saveTheme, resetTheme, validateTheme } from './kernel/theme.js';
+import { loadLayout, saveLayout, resetLayout, validateLayout, PRESETS as DESKTOP_PRESETS } from './kernel/desktop.js';
 import { checkApiRequest } from './kernel/http-guard.js';
 import * as vfs from './kernel/vfs.js';
 import { request as netRequest } from './kernel/net.js';
@@ -385,6 +386,45 @@ async function handleAPI(method, fullUrl, body, res) {
         saveTheme(theme);
         return theme;
       });
+      return;
+    }
+
+    // GET /api/desktop — current desktop layout (+ preset names)
+    if (method === 'GET' && url === '/api/desktop') {
+      sendJson(res, 200, { ...loadLayout(), presets: Object.keys(DESKTOP_PRESETS) });
+      return;
+    }
+
+    // POST /api/desktop — { preset } picks a built-in layout, { description, stream? }
+    // asks the model, { layout } sets one directly. Always validated.
+    if (method === 'POST' && url === '/api/desktop') {
+      const input = JSON.parse(body);
+      if (input.preset) {
+        if (!DESKTOP_PRESETS[input.preset]) { sendJson(res, 400, { error: `Unknown preset: ${input.preset}` }); return; }
+        const layout = { ...validateLayout(DESKTOP_PRESETS[input.preset], DESKTOP_PRESETS[input.preset]).layout, preset: input.preset };
+        saveLayout(layout);
+        sendJson(res, 200, layout);
+        return;
+      }
+      if (input.layout) {
+        const base = DESKTOP_PRESETS[input.layout.base] || DESKTOP_PRESETS.windows;
+        const { layout, problems } = validateLayout(input.layout, base);
+        if (problems.length) { sendJson(res, 400, { error: 'Layout rejected', problems }); return; }
+        saveLayout({ ...layout, preset: input.layout.base || 'windows' });
+        sendJson(res, 200, layout);
+        return;
+      }
+      await respond(res, input.stream, async (onText, onReset) => {
+        const layout = await generateDesktop(input.description, { onText, onReset });
+        saveLayout(layout);
+        return layout;
+      });
+      return;
+    }
+
+    // POST /api/desktop/reset — back to the classic shell
+    if (method === 'POST' && url === '/api/desktop/reset') {
+      sendJson(res, 200, resetLayout());
       return;
     }
 

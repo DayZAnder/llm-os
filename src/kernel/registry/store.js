@@ -10,6 +10,7 @@ import { normalizePrompt, trigramSimilarity } from '../utils/normalize.js';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = join(__dirname, '..', '..', '..', 'data');
 const REGISTRY_FILE = join(DATA_DIR, 'registry.json');
+const SEEDED_FILE = join(DATA_DIR, 'seeded-examples.json'); // example file → hash last seeded
 const EXAMPLES_DIR = join(__dirname, '..', '..', '..', 'examples');
 
 // Community registry URL (GitHub raw)
@@ -91,7 +92,10 @@ function load() {
     console.log(`[registry] Loaded ${apps.size} apps`);
   } catch (err) {
     console.warn('[registry] Failed to load:', err.message);
+    return;
   }
+  // Existing installs still get new and updated built-in apps
+  seedFromExamples();
 }
 
 // Auto-seed registry from examples/ on first boot
@@ -100,9 +104,19 @@ function seedFromExamples() {
   try {
     const files = readdirSync(EXAMPLES_DIR).filter(f => f.endsWith('.html'));
     if (files.length === 0) return;
+    let seeded = {};
+    try { seeded = JSON.parse(readFileSync(SEEDED_FILE, 'utf-8')); } catch {}
+    let count = 0;
 
     for (const file of files) {
       const code = readFileSync(join(EXAMPLES_DIR, file), 'utf-8');
+      const hash = contentHash(code);
+      // Already seeded this exact version — even if the user deleted it since
+      if (seeded[file] === hash) continue;
+      // An updated built-in replaces the previous version in the lineage
+      const parentHash = seeded[file] && apps.has(seeded[file]) ? seeded[file] : undefined;
+      seeded[file] = hash;
+      count++;
       const name = file.replace(/\.html$/, '').replace(/[-_]/g, ' ');
       // Extract capabilities from HTML comment
       const capMatch = code.match(/<!--\s*capabilities:\s*(\[.*?\])\s*-->/);
@@ -118,6 +132,7 @@ function seedFromExamples() {
       if (genMatch) { try { generated = JSON.parse(genMatch[1]); } catch {} }
       const str = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null);
       publishApp({
+        parentHash,
         manifest,
         prompt: str(generated?.prompt) || (manifest?.name ? `${manifest.name} (built-in app)` : `a ${name}`),
         code,
@@ -127,7 +142,10 @@ function seedFromExamples() {
         provider: str(generated?.provider) || 'built-in',
       });
     }
-    console.log(`[registry] Seeded ${files.length} app(s) from examples/`);
+    if (count === 0) return;
+    mkdirSync(DATA_DIR, { recursive: true });
+    writeFileSync(SEEDED_FILE, JSON.stringify(seeded, null, 2));
+    console.log(`[registry] Seeded ${count} built-in app(s) from examples/`);
   } catch (err) {
     console.warn('[registry] Failed to seed from examples:', err.message);
   }
@@ -147,7 +165,7 @@ function sanitizeManifest(m) {
   const handles = Array.isArray(m.handles)
     ? m.handles.filter(h => typeof h === 'string').map(h => h.toLowerCase().slice(0, 64)).slice(0, 20)
     : [];
-  return { name: str(m.name, 40), icon: str(m.icon, 8), handles };
+  return { name: str(m.name, 40), icon: str(m.icon, 8), handles, ...(m.ui === 'portable' ? { ui: 'portable' } : {}) };
 }
 
 /**

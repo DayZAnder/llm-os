@@ -1,0 +1,197 @@
+<!-- capabilities: ["ui:window", "network:http", "storage:local"] -->
+<!-- app: {"name": "Reader", "icon": "🌐", "handles": []} -->
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  .app { display: flex; flex-direction: column; height: 100%; }
+  .bar { display: flex; gap: 6px; align-items: center; padding: 8px 10px; background: var(--llmos-surface); border-bottom: 1px solid var(--llmos-border); }
+  .nav { background: none; border: 1px solid transparent; color: var(--llmos-fg); width: 32px; height: 32px; border-radius: 6px; cursor: pointer; font-size: 15px; }
+  .nav:hover:not(:disabled) { background: var(--llmos-surface-2); }
+  .nav:disabled { opacity: .35; cursor: default; }
+  .url { flex: 1; min-width: 0; height: 32px; padding: 0 12px; background: var(--llmos-bg); color: var(--llmos-fg); border: 1px solid var(--llmos-border); border-radius: 16px; font: 13px var(--llmos-font); }
+  .url:focus { outline: none; border-color: var(--llmos-accent); }
+  .view { flex: 1; overflow: auto; }
+  article { max-width: 720px; margin: 0 auto; padding: 28px 24px 64px; font: 17px/1.7 Georgia, 'Times New Roman', serif; color: var(--llmos-fg); overflow-wrap: anywhere; }
+  article h1, article h2, article h3, article h4 { font-family: var(--llmos-font); line-height: 1.25; margin: 1.4em 0 .5em; }
+  article h1 { font-size: 30px; margin-top: 0; }
+  article .site { font: 12px var(--llmos-mono); color: var(--llmos-muted); margin-bottom: 18px; }
+  article a { color: var(--llmos-accent); text-decoration: none; border-bottom: 1px solid color-mix(in srgb, var(--llmos-accent) 40%, transparent); cursor: pointer; }
+  article blockquote { margin: 1em 0; padding: 2px 16px; border-left: 3px solid var(--llmos-border); color: var(--llmos-muted); }
+  article pre { font: 13px/1.5 var(--llmos-mono); background: var(--llmos-surface); padding: 12px; border-radius: 6px; overflow: auto; white-space: pre-wrap; }
+  article code { font: 14px var(--llmos-mono); }
+  article .img { font: 12px var(--llmos-font); color: var(--llmos-muted); border: 1px dashed var(--llmos-border); border-radius: 6px; padding: 6px 10px; margin: 1em 0; }
+  .result { padding: 14px 0; border-bottom: 1px solid var(--llmos-border); }
+  .result .t { font: 600 17px var(--llmos-font); }
+  .result .u { font: 12px var(--llmos-mono); color: var(--llmos-success); margin: 2px 0 4px; }
+  .result .s { font: 14px/1.5 var(--llmos-font); color: var(--llmos-muted); }
+  .home { text-align: center; padding-top: 18vh; font-family: var(--llmos-font); color: var(--llmos-muted); }
+  .home h2 { color: var(--llmos-fg); font-size: 22px; margin-bottom: 6px; }
+  .status { padding: 4px 12px; font: 12px var(--llmos-mono); color: var(--llmos-muted); background: var(--llmos-surface); border-top: 1px solid var(--llmos-border); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .status.err { color: var(--llmos-danger); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="bar">
+    <button class="nav" id="back" title="Back (Alt+←)">←</button>
+    <button class="nav" id="fwd" title="Forward (Alt+→)">→</button>
+    <button class="nav" id="reload" title="Reload">↻</button>
+    <input class="url" id="url" placeholder="Search or enter an address" spellcheck="false">
+  </div>
+  <div class="view" id="view"></div>
+  <div class="status" id="status">Reader mode — pages are fetched by the kernel and shown without scripts, trackers or cookies.</div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const view = $('view');
+  const history = [];
+  let pos = -1;
+
+  const el = (tag, props, ...kids) => {
+    const n = document.createElement(tag);
+    if (props) for (const [k, v] of Object.entries(props)) {
+      if (k === 'className') n.className = v; else if (k.startsWith('on')) n.addEventListener(k.slice(2), v); else n.setAttribute(k, v);
+    }
+    for (const k of kids.flat()) if (k != null) n.append(k instanceof Node ? k : document.createTextNode(String(k)));
+    return n;
+  };
+  function status(t, err) { $('status').textContent = t; $('status').className = 'status' + (err ? ' err' : ''); }
+
+  function toUrl(input) {
+    const s = input.trim();
+    if (!s) return null;
+    if (/^https?:\/\//i.test(s)) return s;
+    if (/^[\w-]+(\.[\w-]+)+(\/\S*)?$/.test(s) && !/\s/.test(s)) return 'https://' + s;
+    return 'https://html.duckduckgo.com/html/?q=' + encodeURIComponent(s);
+  }
+
+  // --- Readable content: whitelist only, links routed back into the reader ---
+  const KEEP = new Set(['P', 'H1', 'H2', 'H3', 'H4', 'UL', 'OL', 'LI', 'BLOCKQUOTE', 'PRE', 'CODE', 'STRONG', 'B', 'EM', 'I', 'A', 'BR', 'HR', 'FIGCAPTION', 'TABLE', 'TR', 'TD', 'TH', 'THEAD', 'TBODY', 'DL', 'DT', 'DD']);
+  const DROP = new Set(['SCRIPT', 'STYLE', 'NOSCRIPT', 'IFRAME', 'NAV', 'FOOTER', 'ASIDE', 'FORM', 'BUTTON', 'SVG', 'CANVAS', 'VIDEO', 'AUDIO', 'TEMPLATE', 'HEADER', 'SELECT', 'INPUT']);
+
+  function readable(src, base) {
+    const out = document.createDocumentFragment();
+    const walk = (node, dst) => {
+      for (const n of node.childNodes) {
+        if (n.nodeType === 3) { if (n.nodeValue.trim() || dst.nodeName === 'PRE') dst.append(n.nodeValue); continue; }
+        if (n.nodeType !== 1 || DROP.has(n.tagName)) continue;
+        if (/\b(cookie|consent|newsletter|advert|promo|share|social|comment|navbox|sidebar|infobox|metadata|hatnote|mw-editsection|mw-indicators|noprint|toc|breadcrumbs?)s?\b/i.test((n.className || '') + ' ' + (n.id || ''))) continue;
+        if (n.tagName === 'IMG') {
+          const alt = (n.getAttribute('alt') || '').trim();
+          if (alt) dst.append(el('div', { className: 'img' }, 'Image: ' + alt));
+          continue;
+        }
+        if (!KEEP.has(n.tagName)) { walk(n, dst); continue; }
+        const copy = document.createElement(n.tagName);
+        if (n.tagName === 'A') {
+          let href = null;
+          try { href = new URL(n.getAttribute('href') || '', base).href; } catch {}
+          if (href && /^https?:/.test(href)) {
+            copy.title = href;
+            copy.addEventListener('click', (e) => { e.preventDefault(); go(href); });
+          }
+        }
+        walk(n, copy);
+        if (copy.textContent.trim() || copy.tagName === 'BR' || copy.tagName === 'HR') dst.append(copy);
+      }
+    };
+    walk(src, out);
+    return out;
+  }
+
+  function pickMain(doc) {
+    const candidates = [...doc.querySelectorAll('article, main, [role=main], #content, .content, .post, .entry-content')];
+    let best = candidates.sort((a, b) => b.textContent.length - a.textContent.length)[0];
+    if (!best || best.textContent.trim().length < 400) best = doc.body;
+    return best;
+  }
+
+  function renderSearch(doc, query) {
+    const art = el('article', null, el('div', { className: 'site' }, 'Search results · DuckDuckGo'), el('h1', null, query));
+    const results = [...doc.querySelectorAll('.result')].slice(0, 15);
+    for (const r of results) {
+      const a = r.querySelector('.result__a');
+      if (!a) continue;
+      let href = a.getAttribute('href') || '';
+      try {
+        const u = new URL(href, 'https://duckduckgo.com');
+        href = u.searchParams.get('uddg') || u.href; // unwrap the redirect
+      } catch {}
+      if (!/^https?:/.test(href)) continue;
+      const snippet = (r.querySelector('.result__snippet') || {}).textContent || '';
+      art.append(el('div', { className: 'result' },
+        el('div', { className: 't' }, el('a', { onclick: (e) => { e.preventDefault(); go(href); } }, a.textContent.trim())),
+        el('div', { className: 'u' }, href.replace(/^https?:\/\//, '').slice(0, 90)),
+        el('div', { className: 's' }, snippet.trim())));
+    }
+    if (art.querySelectorAll('.result').length === 0) art.append(el('p', null, 'No results.'));
+    return art;
+  }
+
+  async function load(url) {
+    $('url').value = url.includes('html.duckduckgo.com') ? decodeURIComponent(url.split('q=')[1] || '') : url;
+    updateNav();
+    status('Loading ' + url + ' …');
+    try {
+      const res = await LLMOS.net.request(url, { headers: { accept: 'text/html,application/xhtml+xml' } });
+      if (res.status >= 400) throw new Error('HTTP ' + res.status);
+      const type = res.headers['content-type'] || '';
+      if (res.encoding === 'base64') throw new Error('Not a text page (' + (type || 'binary') + ')');
+      let art;
+      if (/text\/html|xhtml/i.test(type) || /^\s*</.test(res.body)) {
+        const doc = new DOMParser().parseFromString(res.body, 'text/html');
+        if (url.includes('html.duckduckgo.com')) {
+          art = renderSearch(doc, $('url').value);
+        } else {
+          const title = (doc.querySelector('meta[property="og:title"]') || {}).content || doc.title || url;
+          const host = new URL(res.url).hostname;
+          art = el('article', null, el('div', { className: 'site' }, host), el('h1', null, title.trim()));
+          const main = readable(pickMain(doc), res.url);
+          // Don't repeat the title if the page's own <h1> matches it
+          const firstH1 = main.querySelector && main.querySelector('h1');
+          if (firstH1 && firstH1.textContent.trim() === title.trim()) firstH1.remove();
+          art.append(main);
+        }
+        LLMOS.os.setTitle(((doc.title || url).slice(0, 50)) + ' — Reader').catch(() => {});
+      } else {
+        art = el('article', null, el('div', { className: 'site' }, type), el('pre', null, res.body.slice(0, 200000)));
+      }
+      view.replaceChildren(art);
+      view.scrollTop = 0;
+      status(res.url.replace(/^https?:\/\//, '') + ' · ' + Math.round(res.body.length / 1024) + ' KB');
+    } catch (err) {
+      view.replaceChildren(el('div', { className: 'home' }, el('h2', null, 'Could not load the page'), el('p', null, err.message)));
+      status(err.message, true);
+    }
+  }
+
+  function go(url) {
+    history.splice(pos + 1);
+    history.push(url);
+    pos = history.length - 1;
+    LLMOS.storage.set('last', url).catch(() => {});
+    load(url);
+  }
+  function updateNav() { $('back').disabled = pos <= 0; $('fwd').disabled = pos >= history.length - 1; }
+
+  $('url').addEventListener('keydown', (e) => { if (e.key === 'Enter') { const u = toUrl($('url').value); if (u) go(u); } });
+  $('url').addEventListener('focus', () => $('url').select());
+  $('back').onclick = () => { if (pos > 0) load(history[--pos]); };
+  $('fwd').onclick = () => { if (pos < history.length - 1) load(history[++pos]); };
+  $('reload').onclick = () => { if (pos >= 0) load(history[pos]); };
+  document.addEventListener('keydown', (e) => {
+    if (e.altKey && e.key === 'ArrowLeft') $('back').click();
+    if (e.altKey && e.key === 'ArrowRight') $('fwd').click();
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'l') { e.preventDefault(); $('url').focus(); }
+  });
+
+  view.replaceChildren(el('div', { className: 'home' }, el('h2', null, 'Reader'), el('p', null, 'Type an address or a search above.')));
+  updateNav();
+  $('url').focus();
+})();
+</script>
+</body>
+</html>

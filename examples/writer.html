@@ -1,0 +1,273 @@
+<!-- capabilities: ["ui:window", "fs:read", "fs:write", "storage:local"] -->
+<!-- app: {"name": "Writer", "icon": "🖋", "handles": [".html", ".htm", "text/html"]} -->
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  .app { display: flex; flex-direction: column; height: 100%; }
+  .toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 2px; padding: 6px 8px; background: var(--llmos-surface); border-bottom: 1px solid var(--llmos-border); }
+  .tb { background: none; border: 1px solid transparent; color: var(--llmos-fg); font: 13px var(--llmos-font); min-width: 30px; height: 28px; padding: 0 8px; border-radius: 6px; cursor: pointer; }
+  .tb:hover { background: var(--llmos-surface-2); }
+  .tb.on { background: var(--llmos-surface-2); border-color: var(--llmos-border); }
+  .sep { width: 1px; height: 20px; background: var(--llmos-border); margin: 0 6px; }
+  select.tb { padding: 0 6px; }
+  .docname { margin-left: auto; color: var(--llmos-muted); font-size: 12px; padding: 0 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+  .page-wrap { flex: 1; overflow: auto; background: var(--llmos-bg); padding: 28px 16px; }
+  .page { max-width: 760px; min-height: 100%; margin: 0 auto; background: var(--llmos-surface); border: 1px solid var(--llmos-border); border-radius: 4px; padding: 56px 64px; outline: none; font: 16px/1.7 Georgia, 'Times New Roman', serif; color: var(--llmos-fg); box-shadow: 0 8px 30px rgba(0,0,0,.25); }
+  .page:empty::before { content: 'Start writing…'; color: var(--llmos-muted); }
+  .page h1 { font: 600 30px/1.25 var(--llmos-font); margin: 0 0 16px; }
+  .page h2 { font: 600 22px/1.3 var(--llmos-font); margin: 24px 0 10px; }
+  .page p { margin: 0 0 12px; }
+  .page blockquote { margin: 12px 0; padding: 4px 16px; border-left: 3px solid var(--llmos-accent); color: var(--llmos-muted); }
+  .page a { color: var(--llmos-accent); }
+  .status { display: flex; gap: 16px; padding: 4px 12px; font: 12px var(--llmos-mono); color: var(--llmos-muted); background: var(--llmos-surface); border-top: 1px solid var(--llmos-border); }
+  .status .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .status .err { color: var(--llmos-danger); }
+  .sheet { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
+  .panel { background: var(--llmos-surface); border: 1px solid var(--llmos-border); border-radius: 10px; width: min(460px, 92%); padding: 14px; font: 13px var(--llmos-font); }
+  .panel h3 { margin: 0 0 10px; font-size: 14px; }
+  .panel .files { max-height: 240px; overflow: auto; border: 1px solid var(--llmos-border); border-radius: 6px; margin-bottom: 10px; }
+  .panel .f { padding: 6px 10px; cursor: pointer; }
+  .panel .f:hover { background: var(--llmos-surface-2); }
+  .panel input { width: 100%; box-sizing: border-box; padding: 7px 9px; background: var(--llmos-bg); color: var(--llmos-fg); border: 1px solid var(--llmos-border); border-radius: 6px; font: 12px var(--llmos-mono); }
+  .panel .btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 10px; }
+  .btn { background: var(--llmos-surface-2); color: var(--llmos-fg); border: 1px solid var(--llmos-border); border-radius: 6px; padding: 5px 12px; font: inherit; cursor: pointer; }
+  .btn.primary { background: var(--llmos-accent); color: var(--llmos-accent-fg); border-color: var(--llmos-accent); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="toolbar" id="toolbar">
+    <button class="tb" data-act="new" title="New (Ctrl+N)">New</button>
+    <button class="tb" data-act="open" title="Open (Ctrl+O)">Open</button>
+    <button class="tb" data-act="save" title="Save (Ctrl+S)">Save</button>
+    <span class="sep"></span>
+    <select class="tb" id="block" title="Paragraph style">
+      <option value="p">Body</option>
+      <option value="h1">Title</option>
+      <option value="h2">Heading</option>
+      <option value="blockquote">Quote</option>
+    </select>
+    <button class="tb" data-cmd="bold" title="Bold (Ctrl+B)"><b>B</b></button>
+    <button class="tb" data-cmd="italic" title="Italic (Ctrl+I)"><i>I</i></button>
+    <button class="tb" data-cmd="underline" title="Underline (Ctrl+U)"><u>U</u></button>
+    <button class="tb" data-cmd="strikeThrough" title="Strikethrough"><s>S</s></button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="insertUnorderedList" title="Bulleted list">• List</button>
+    <button class="tb" data-cmd="insertOrderedList" title="Numbered list">1. List</button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="justifyLeft" title="Align left">⟸</button>
+    <button class="tb" data-cmd="justifyCenter" title="Center">⟺</button>
+    <button class="tb" data-cmd="justifyRight" title="Align right">⟹</button>
+    <span class="sep"></span>
+    <button class="tb" data-cmd="undo" title="Undo (Ctrl+Z)">↶</button>
+    <button class="tb" data-cmd="redo" title="Redo (Ctrl+Y)">↷</button>
+    <span class="docname" id="docname"></span>
+  </div>
+  <div class="page-wrap"><div class="page" id="page" contenteditable="true" spellcheck="true"></div></div>
+  <div class="status"><span class="grow" id="msg"></span><span id="counts">0 words</span></div>
+</div>
+
+<script>
+(function () {
+  const $ = (id) => document.getElementById(id);
+  const page = $('page');
+  const state = { path: null, saved: '' };
+
+  // --- Sanitizer: documents are data, never code ---
+  // Opening a file must not run anything with this app's file permissions,
+  // so only a small set of formatting tags and attributes survives.
+  const ALLOWED = new Set(['P', 'H1', 'H2', 'H3', 'BLOCKQUOTE', 'B', 'STRONG', 'I', 'EM', 'U', 'S', 'STRIKE', 'UL', 'OL', 'LI', 'BR', 'A', 'DIV', 'SPAN', 'PRE', 'CODE', 'HR']);
+  function sanitize(html) {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const out = document.createDocumentFragment();
+    const walk = (src, dst) => {
+      for (const node of src.childNodes) {
+        if (node.nodeType === 3) { dst.appendChild(document.createTextNode(node.nodeValue)); continue; }
+        if (node.nodeType !== 1) continue;
+        if (!ALLOWED.has(node.tagName)) { walk(node, dst); continue; } // keep the text, drop the tag
+        const el = document.createElement(node.tagName);
+        const align = node.style && node.style.textAlign;
+        if (['left', 'center', 'right', 'justify'].includes(align)) el.style.textAlign = align;
+        if (node.tagName === 'A') {
+          const href = node.getAttribute('href') || '';
+          if (/^https?:\/\//i.test(href)) el.setAttribute('href', href);
+        }
+        walk(node, el);
+        dst.appendChild(el);
+      }
+    };
+    walk(doc.body, out);
+    return out;
+  }
+
+  const serialize = () => page.innerHTML;
+  const dirty = () => serialize() !== state.saved;
+  function msg(t, err) { $('msg').textContent = t || ''; $('msg').className = err ? 'err' : ''; }
+  function updateChrome() {
+    const name = state.path ? state.path.split('/').pop() : 'Untitled';
+    $('docname').textContent = (dirty() ? '● ' : '') + (state.path || 'Untitled — not saved');
+    LLMOS.os.setTitle((dirty() ? '● ' : '') + name + ' — Writer').catch(() => {});
+    const words = (page.innerText.match(/\S+/g) || []).length;
+    $('counts').textContent = `${words} word${words === 1 ? '' : 's'} · ${page.innerText.length} chars`;
+  }
+  let draftTimer = null;
+  function changed() {
+    updateChrome();
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => LLMOS.storage.set('draft', { path: state.path, html: serialize(), saved: state.saved }).catch(() => {}), 500);
+  }
+
+  function load(html, path) {
+    page.replaceChildren(sanitize(html));
+    state.path = path;
+    state.saved = serialize();
+    updateChrome();
+  }
+
+  async function openPath(path) {
+    try {
+      const html = await LLMOS.fs.read(path);
+      // Files written by Writer are full documents; keep only the body
+      const body = html.match(/<body[^>]*>([\s\S]*)<\/body>/i);
+      load(body ? body[1] : html, path);
+      msg('Opened ' + path);
+    } catch (err) { msg('Could not open ' + path + ': ' + err.message, true); }
+  }
+
+  function wrapDocument(bodyHtml) {
+    const title = (page.querySelector('h1') || {}).textContent || (state.path || 'Document').split('/').pop();
+    const esc = (s) => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+    return `<!DOCTYPE html>\n<html><head><meta charset="utf-8"><title>${esc(title)}</title></head>\n<body>\n${bodyHtml}\n</body></html>\n`;
+  }
+
+  async function save(asNew) {
+    let path = state.path;
+    if (!path || asNew) {
+      const first = (page.querySelector('h1') || {}).textContent || 'document';
+      const suggestion = '/documents/' + first.trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 40) + '.html';
+      path = await pick('Save as', suggestion, true);
+      if (!path) return;
+    }
+    try {
+      const dir = path.replace(/\/[^/]*$/, '');
+      if (dir) await LLMOS.fs.mkdir(dir);
+      await LLMOS.fs.write(path, wrapDocument(serialize()));
+      state.path = path;
+      state.saved = serialize();
+      changed();
+      msg('Saved ' + path);
+    } catch (err) { msg('Save failed: ' + err.message, true); }
+  }
+
+  function pick(title, suggested, saving) {
+    return new Promise((resolve) => {
+      const sheet = document.createElement('div');
+      sheet.className = 'sheet';
+      const panel = document.createElement('div');
+      panel.className = 'panel';
+      const h = document.createElement('h3');
+      h.textContent = title;
+      const files = document.createElement('div');
+      files.className = 'files';
+      const input = document.createElement('input');
+      input.value = suggested;
+      const btns = document.createElement('div');
+      btns.className = 'btns';
+      const cancel = document.createElement('button');
+      cancel.className = 'btn'; cancel.textContent = 'Cancel';
+      const ok = document.createElement('button');
+      ok.className = 'btn primary'; ok.textContent = saving ? 'Save' : 'Open';
+      btns.append(cancel, ok);
+      panel.append(h, files, input, btns);
+      sheet.appendChild(panel);
+      document.body.appendChild(sheet);
+      const done = (v) => { sheet.remove(); page.focus(); resolve(v); };
+      cancel.onclick = () => done(null);
+      ok.onclick = () => done(input.value.trim() || null);
+      input.onkeydown = (e) => { if (e.key === 'Enter') done(input.value.trim() || null); if (e.key === 'Escape') done(null); };
+      sheet.onmousedown = (e) => { if (e.target === sheet) done(null); };
+      // List HTML documents in /documents (and the folder of the current file)
+      (async () => {
+        const dirs = [...new Set(['/documents', (state.path || '').replace(/\/[^/]*$/, '')].filter(Boolean))];
+        for (const d of dirs) {
+          const list = await LLMOS.fs.list(d).catch(() => []);
+          for (const e of list.filter(e => e.type === 'file' && /\.html?$/i.test(e.name))) {
+            const f = document.createElement('div');
+            f.className = 'f';
+            f.textContent = e.path;
+            f.onclick = () => { input.value = e.path; };
+            f.ondblclick = () => done(e.path);
+            files.appendChild(f);
+          }
+        }
+        if (!files.children.length) { files.style.display = 'none'; }
+      })();
+      input.focus();
+    });
+  }
+
+  async function confirmDiscard() {
+    return !dirty() || LLMOS.ui.confirm('Discard unsaved changes?');
+  }
+
+  // --- toolbar ---
+  function refreshToolbar() {
+    for (const b of document.querySelectorAll('[data-cmd]')) {
+      let on = false;
+      try { on = document.queryCommandState(b.dataset.cmd); } catch {}
+      b.classList.toggle('on', on);
+    }
+    let block = 'p';
+    try { block = (document.queryCommandValue('formatBlock') || 'p').toLowerCase().replace(/[<>]/g, ''); } catch {}
+    $('block').value = ['h1', 'h2', 'blockquote'].includes(block) ? block : 'p';
+  }
+  $('toolbar').addEventListener('mousedown', (e) => { if (e.target.closest('button')) e.preventDefault(); });
+  $('toolbar').addEventListener('click', async (e) => {
+    const b = e.target.closest('button');
+    if (!b) return;
+    if (b.dataset.cmd) { page.focus(); document.execCommand(b.dataset.cmd); changed(); refreshToolbar(); }
+    else if (b.dataset.act === 'new') { if (await confirmDiscard()) { load('', null); msg('New document'); page.focus(); } }
+    else if (b.dataset.act === 'open') { if (await confirmDiscard()) { const p = await pick('Open document', state.path || '/documents/', false); if (p) openPath(p); } }
+    else if (b.dataset.act === 'save') save(false);
+  });
+  $('block').addEventListener('change', () => {
+    page.focus();
+    document.execCommand('formatBlock', false, $('block').value);
+    changed();
+  });
+  page.addEventListener('input', changed);
+  document.addEventListener('selectionchange', refreshToolbar);
+  // Paste as clean text so foreign formatting and markup never enter the document
+  page.addEventListener('paste', (e) => {
+    e.preventDefault();
+    const t = (e.clipboardData || window.clipboardData).getData('text/plain');
+    document.execCommand('insertText', false, t);
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || document.querySelector('.sheet')) return;
+    const k = e.key.toLowerCase();
+    if (k === 's') { e.preventDefault(); save(e.shiftKey); }
+    else if (k === 'o') { e.preventDefault(); $('toolbar').querySelector('[data-act=open]').click(); }
+    else if (k === 'n') { e.preventDefault(); $('toolbar').querySelector('[data-act=new]').click(); }
+  });
+
+  // --- start ---
+  document.execCommand('defaultParagraphSeparator', false, 'p');
+  (async () => {
+    const arg = LLMOS.os.args && LLMOS.os.args.path;
+    if (arg) return openPath(arg);
+    const draft = await LLMOS.storage.get('draft').catch(() => null);
+    if (draft && typeof draft.html === 'string') {
+      page.replaceChildren(sanitize(draft.html));
+      state.path = draft.path || null;
+      state.saved = draft.saved || '';
+      if (draft.html) msg('Restored your draft');
+    }
+    updateChrome();
+    page.focus();
+  })();
+})();
+</script>
+</body>
+</html>

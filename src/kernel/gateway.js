@@ -50,7 +50,7 @@ Output ONLY the HTML document — no markdown, no code fences, no explanation.
 The first two lines MUST be these comments:
 <!-- capabilities: ["ui:window", ...] -->
 <!-- app: {"name": "Short App Name", "icon": "one emoji", "handles": [".ext", "mime/type"]} -->
-"handles" lists file types the app can open (omit or [] if none). Then <!DOCTYPE html>.
+"handles" lists file types the app can open (omit or [] if none). Portable apps add "ui": "portable" and continue with a single <script>; other apps continue with <!DOCTYPE html>.
 
 # Sandbox
 The window is a sandboxed iframe with a strict CSP: no network, no external scripts, fonts, images or stylesheets, no eval/Function, no parent/top access, no cookies, no localStorage. Everything must be inline. All system services go through the global LLMOS SDK below; every call returns a Promise unless noted, and fails with an Error if the capability was not granted — handle that gracefully (show a message, keep the rest of the app working).
@@ -84,6 +84,20 @@ timer (timer:basic)
 
 Declare every capability the app uses, and no others:
 ui:window, storage:local, fs:read, fs:write, network:http, ai:generate, clipboard:rw, ipc:bus, timer:basic
+
+# Portable UI (preferred for most apps)
+Build forms, lists, tools and dashboards with LLMOS.ui.app instead of HTML/CSS. Such apps can also run on the OS's native renderer (no browser). A portable app is ONLY header comments plus one <script>, with "ui": "portable" in the app manifest, and never touches document/window/DOM.
+  const { column, row, scroll, text, button, input, textarea, checkbox, spacer, divider } = LLMOS.ui.c;
+  LLMOS.ui.app({ state: {...}, async init(set) { /* load data, then set({...}) */ }, view(state, set) { return column(...); } });
+  set(patch) or set(s => patch) merges into state and re-renders. view must be pure: build the tree from state every time.
+Components — c.name(props?, ...children); children are components or strings:
+  column/row/scroll: gap, padding (px), align start|center|end|stretch, justify start|center|end|between, grow, width/height (px or "fill"), surface none|panel|card, row: wrap
+  text: size sm|md|lg|xl, weight normal|bold, tone normal|muted|accent|danger|success, mono, grow
+  button: variant primary|secondary|danger|ghost, disabled, onPress()
+  input: value, placeholder, onChange(v), onSubmit(v)   textarea: value, placeholder, height, mono, onChange(v)
+  checkbox: checked, label, onChange(checked)   spacer: size (omit to fill)   divider
+  Give list items a unique key prop. Scroll long lists with scroll({ grow: 1 }).
+Use HTML/CSS/DOM only when the components can't express the app (canvas drawing, games, rich text editing) — then omit "ui".
 
 # Design system
 The OS injects CSS custom properties; use them instead of hard-coded colors so every app matches the OS theme:
@@ -446,7 +460,7 @@ export function extractManifest(code) {
   const handles = Array.isArray(raw.handles)
     ? raw.handles.filter(h => typeof h === 'string' && /^(\.[a-z0-9]{1,10}|[a-z]+\/[a-z0-9.+-]+)$/i.test(h)).map(h => h.toLowerCase()).slice(0, 20)
     : [];
-  return { name: str(raw.name, 40), icon: str(raw.icon, 8), handles };
+  return { name: str(raw.name, 40), icon: str(raw.icon, 8), handles, ...(raw.ui === 'portable' ? { ui: 'portable' } : {}) };
 }
 
 function extractCapabilities(code) {
@@ -856,4 +870,72 @@ export async function generateTheme(description, options = {}) {
   const err = new Error(`Theme rejected after 2 attempts: ${last.problems.join('; ') || 'invalid JSON'}`);
   err.theme = last;
   throw err;
+}
+
+// --- Desktop layout generation ---
+
+const DESKTOP_SYSTEM = `You are the desktop designer for LLM OS. Turn the user's description into a desktop layout.
+
+Output ONLY a JSON object, no markdown:
+{"base": "windows" | "mac" | "classic",      the closest preset; anything you leave out comes from it
+ "name": "Short Layout Name",
+ "bar": {"position": "top"|"bottom"|"none", "style": "taskbar"|"menubar"|"minimal", "height": 24-64,
+         "launcher": {"label": "up to 16 chars", "icon": "up to 4 chars", "position": "left"|"center"|"right"},
+         "clock": {"show": true, "format": "24h"|"12h", "seconds": false, "date": true, "position": "left"|"center"|"right"},
+         "showWindows": true, "tray": true},
+ "dock": {"position": "bottom"|"left"|"right"|"none", "iconSize": 24-80, "labels": false, "pinned": ["App Name", ...]},
+ "windows": {"controls": "left"|"right"},
+ "promptBar": "visible"|"hidden",
+ "wallpaper": {"type": "solid"|"gradient", "from": "#rrggbb", "to": "#rrggbb"}}
+
+The launcher is the button that opens the prompt, where the user describes apps; never call it Start and never use a vendor logo. Pinned apps are app names; the built-in ones are Files, Notepad, Writer, Reader, Terminal, Tasks — other names are generated when first clicked. Keep wallpapers dark and calm; the system theme draws the windows.`;
+
+/**
+ * Ask the model for a desktop layout, validate it, and allow one
+ * correction round with the validator's findings.
+ */
+export async function generateDesktop(description, options = {}) {
+  const { clean } = sanitizePrompt(String(description || '').slice(0, 500));
+  if (!clean) throw new Error('Describe the desktop you want');
+  const { validateLayout, PRESETS } = await import('./desktop.js');
+
+  const route = await selectBestProvider('simple');
+  const messages = [
+    { role: 'system', content: DESKTOP_SYSTEM },
+    { role: 'user', content: clean },
+  ];
+
+  let last = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const started = Date.now();
+    const { raw, provider, model, usage } = await callWithFallback(route.provider, route.model, messages, { maxTokens: 2000, onText: options.onText, onReset: options.onReset });
+    recordUsage({
+      prompt: `[desktop] ${clean.slice(0, 80)}`,
+      provider, model,
+      ...usageFor(messages, raw, usage),
+      latencyMs: Date.now() - started,
+      cached: false,
+      cacheType: null,
+    });
+    let parsed = null;
+    try {
+      const json = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+      parsed = JSON.parse(json.slice(json.indexOf('{'), json.lastIndexOf('}') + 1));
+    } catch {}
+    const preset = parsed && PRESETS[parsed.base] ? parsed.base : 'windows';
+    const check = validateLayout(parsed, PRESETS[preset]);
+    last = { ...check.layout, preset, description: clean, problems: check.problems, provider, model, attempts: attempt };
+    if (parsed && check.problems.length === 0) return last;
+    Object.defineProperty(last, 'parsed', { value: !!parsed, enumerable: false, configurable: true });
+
+    messages.push({ role: 'assistant', content: raw });
+    messages.push({ role: 'user', content: parsed
+      ? `The layout was rejected by the validator:\n- ${check.problems.join('\n- ')}\nReturn the corrected JSON object only.`
+      : 'That was not a valid JSON object. Return only the JSON object.' });
+    options.onReset?.();
+  }
+  // Second answer still has problems: the validator already replaced every
+  // bad field with the preset's value, so the result is safe to use.
+  if (last && last.parsed) { delete last.parsed; return last; }
+  throw new Error('Desktop layout rejected after 2 attempts: the model did not return valid JSON');
 }

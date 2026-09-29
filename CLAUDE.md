@@ -114,7 +114,22 @@ proxy), `ai` (the OS model), `clipboard`, `os` (launch args, open file, title),
   `stream: true` and answer NDJSON (`delta`, `reset`, `result`, `error`). The
   shell renders the partial app in a script-less sandbox while it is written.
 - **Default apps** live in `examples/` and are seeded into the registry on
-  first boot, manifest included (Files, Notepad).
+  first boot, manifest included (Files, Notepad, Tasks).
+- **Desktop layout** (`kernel/desktop.js`): bar (taskbar/menubar), Prompt
+  launcher, clock, dock, window-button side, wallpaper — as validated data.
+  Presets `windows`, `mac`, `classic` (the original shell); `/desktop <text>`
+  lets the model design one on top of a preset. The shell draws bar, dock,
+  launcher and Alt+Tab switcher with portable UI trees. System hotkeys
+  (Alt+Tab/Alt+`, Super, Ctrl+Space) are forwarded from apps by the SDK
+  (`sys:hotkey`); apps can only trigger that fixed set.
+- **Portable UI** (`src/sdk/ui.js`): apps with `"ui": "portable"` build their
+  interface only from `LLMOS.ui.app` + components (column, row, text, button,
+  input, …) — plain-data trees, no DOM. The browser renders them with keyed
+  reconciliation; `LLMOS.ui.snapshot()` gives the same tree as JSON, which
+  `native/renderer` (Rust: taffy + tiny-skia + fontdue) draws to a PNG or
+  `/dev/fb0` without a browser. New components must be added to `COMPONENTS`
+  in ui.js AND to the native renderer. The analyzer warns when a portable app
+  touches the DOM.
 
 ## How It Works
 

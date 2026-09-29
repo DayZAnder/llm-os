@@ -283,11 +283,42 @@ function runRules(code, rules, skipLine = () => false) {
   };
 }
 
+// Apps that declare "ui": "portable" promise to use only LLMOS.ui.app and
+// its components, so a non-browser renderer can draw them. These rules keep
+// that promise honest. Warnings, not blocks: the app still runs in a browser.
+const PORTABLE_RULES = [
+  {
+    id: 'PORTABLE_DOM',
+    severity: 'WARNING',
+    description: 'Portable app touches the DOM directly (use LLMOS.ui components)',
+    pattern: /\b(?:document|window)\s*\.|\.(?:innerHTML|outerHTML|textContent|appendChild|style)\b|addEventListener\s*\(/g,
+  },
+  {
+    id: 'PORTABLE_MARKUP',
+    severity: 'WARNING',
+    description: 'Portable app ships its own markup or CSS (only a single <script> is portable)',
+    pattern: /<(?:style|div|span|button|input|textarea|canvas|svg|table|ul|p|h[1-6])[\s>]/gi,
+  },
+];
+
+const PORTABLE_MANIFEST = /<!--\s*app\s*:\s*\{[^}]*"ui"\s*:\s*"portable"/;
+
+export function isPortable(code) {
+  return PORTABLE_MANIFEST.test(code);
+}
+
 export function analyze(code) {
-  return runRules(code, RULES, line =>
-    (line.startsWith('<!--') && line.includes('capabilities')) ||
-    line.includes('// LLM-OS SDK')
-  );
+  const skip = line =>
+    (line.startsWith('<!--') && (line.includes('capabilities') || /<!--\s*app\s*:/.test(line))) ||
+    line.includes('// LLM-OS SDK');
+  const result = runRules(code, RULES, skip);
+  if (isPortable(code)) {
+    const portable = runRules(code, PORTABLE_RULES, skip);
+    result.findings.push(...portable.findings);
+    result.warningCount += portable.warningCount;
+    result.portable = true;
+  }
+  return result;
 }
 
 export function analyzeDockerfile(content) {

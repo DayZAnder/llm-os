@@ -30,7 +30,10 @@ export const SYSCALL_CAPS = Object.freeze({
   'os:open': null,
   'os:setTitle': null,
   'sys:error': null,
+  'sys:hotkey': null,
 });
+
+const HOTKEYS = ['switch-next', 'switch-prev', 'alt-up', 'launcher'];
 
 /**
  * Check whether an app may perform a syscall.
@@ -159,6 +162,11 @@ export class SandboxManager {
             app.errors.push(err);
             this.callbacks.onAppError?.(appId, err, app.errors.length);
           }
+          return;
+        case 'sys:hotkey':
+          // Only the fixed set of OS shortcuts; an app can at most open the
+          // switcher or launcher, which the user then controls.
+          if (HOTKEYS.includes(payload.combo)) this.callbacks.onHotkey?.(payload.combo, appId);
           return;
         case 'ipc:subscribe':
           app.topics.add(String(payload.topic).slice(0, 100));

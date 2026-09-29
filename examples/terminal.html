@@ -1,0 +1,165 @@
+<!-- capabilities: ["ui:window", "fs:read", "fs:write", "network:http", "ai:generate", "storage:local"] -->
+<!-- app: {"name": "Terminal", "icon": "›_", "handles": [], "ui": "portable"} -->
+<script>
+const { column, row, scroll, text, input } = LLMOS.ui.c;
+
+// A shell for LLM OS itself: files, network, the model and other apps.
+// It is not a host shell — it can only do what its capabilities allow.
+
+const HELP = [
+  ['help', 'this list'],
+  ['ls [path]', 'list a folder'],
+  ['cd <path>', 'change folder (.. and / work)'],
+  ['pwd', 'current folder'],
+  ['cat <file>', 'print a file'],
+  ['echo <text> [> file | >> file]', 'print, write or append'],
+  ['mkdir <path>', 'create a folder'],
+  ['rm <path>', 'delete a file or folder'],
+  ['open <file>', 'open a file in the app that handles it'],
+  ['curl <url>', 'fetch a URL through the kernel proxy'],
+  ['ai <question>', 'ask the OS model'],
+  ['clear', 'clear the screen'],
+];
+
+function resolve(cwd, p) {
+  if (!p) return cwd;
+  const parts = (p.startsWith('/') ? p : cwd + '/' + p).split('/');
+  const out = [];
+  for (const part of parts) {
+    if (!part || part === '.') continue;
+    if (part === '..') out.pop(); else out.push(part);
+  }
+  return '/' + out.join('/');
+}
+
+// Split a command line into words, honouring "quotes"
+function words(line) {
+  return (line.match(/"[^"]*"|'[^']*'|\S+/g) || []).map(w => w.replace(/^(["'])(.*)\1$/, '$2'));
+}
+
+const fmtSize = (n) => n < 1024 ? `${n}` : n < 1048576 ? `${(n / 1024).toFixed(1)}K` : `${(n / 1048576).toFixed(1)}M`;
+
+LLMOS.ui.app({
+  state: {
+    cwd: '/',
+    lines: [{ t: 'LLM OS Terminal — type help for commands.', tone: 'muted' }],
+    draft: '',
+    history: [],
+    busy: false,
+  },
+
+  async init(set) {
+    const saved = await LLMOS.storage.get('terminal').catch(() => null);
+    if (saved) set({ cwd: saved.cwd || '/', history: saved.history || [] });
+  },
+
+  view(s, set) {
+    const print = (t, tone) => set(st => ({ lines: [...st.lines, { t: String(t), tone }].slice(-500) }));
+
+    async function run(line) {
+      const trimmed = line.trim();
+      set(st => ({
+        draft: '',
+        lines: [...st.lines, { t: `${st.cwd} › ${line}`, tone: 'accent' }],
+        history: trimmed ? [...st.history.filter(h => h !== trimmed), trimmed].slice(-50) : st.history,
+      }));
+      if (!trimmed) return;
+      const [cmd, ...args] = words(trimmed);
+      const cwd = s.cwd;
+      set({ busy: true });
+      try {
+        switch (cmd) {
+          case 'help':
+            for (const [c, d] of HELP) print(`${c.padEnd(32)} ${d}`);
+            break;
+          case 'pwd':
+            print(cwd);
+            break;
+          case 'ls': {
+            const dir = resolve(cwd, args[0]);
+            const list = await LLMOS.fs.list(dir);
+            if (!list.length) print('(empty)', 'muted');
+            for (const e of list) print(e.type === 'dir' ? `${e.name}/` : `${e.name.padEnd(36)} ${fmtSize(e.size).padStart(7)}`, e.type === 'dir' ? 'accent' : undefined);
+            break;
+          }
+          case 'cd': {
+            const dir = resolve(cwd, args[0] || '/');
+            const st = await LLMOS.fs.stat(dir);
+            if (!st || st.type !== 'dir') throw new Error(`no such folder: ${dir}`);
+            set({ cwd: dir });
+            break;
+          }
+          case 'cat':
+            if (!args[0]) throw new Error('usage: cat <file>');
+            print(await LLMOS.fs.read(resolve(cwd, args[0])));
+            break;
+          case 'echo': {
+            const op = args.findIndex(a => a === '>' || a === '>>');
+            if (op === -1) { print(args.join(' ')); break; }
+            const target = resolve(cwd, args[op + 1]);
+            if (!args[op + 1]) throw new Error('missing file after ' + args[op]);
+            let content = args.slice(0, op).join(' ') + '\n';
+            if (args[op] === '>>') content = (await LLMOS.fs.read(target).catch(() => '')) + content;
+            await LLMOS.fs.write(target, content);
+            break;
+          }
+          case 'mkdir':
+            if (!args[0]) throw new Error('usage: mkdir <path>');
+            await LLMOS.fs.mkdir(resolve(cwd, args[0]));
+            break;
+          case 'rm': {
+            if (!args[0]) throw new Error('usage: rm <path>');
+            const target = resolve(cwd, args[0]);
+            if (target === '/') throw new Error('refusing to remove /');
+            if (!(await LLMOS.fs.remove(target))) throw new Error(`no such file: ${target}`);
+            break;
+          }
+          case 'open':
+            if (!args[0]) throw new Error('usage: open <file>');
+            await LLMOS.os.open(resolve(cwd, args[0]));
+            break;
+          case 'curl': {
+            if (!args[0]) throw new Error('usage: curl <url>');
+            const url = /^https?:\/\//.test(args[0]) ? args[0] : 'https://' + args[0];
+            const res = await LLMOS.net.request(url);
+            print(`HTTP ${res.status} · ${res.headers['content-type'] || 'unknown type'} · ${res.body.length} chars`, 'muted');
+            print(res.encoding === 'base64' ? '(binary content)' : res.body.slice(0, 4000) + (res.body.length > 4000 ? '\n…' : ''));
+            break;
+          }
+          case 'ai': {
+            if (!args.length) throw new Error('usage: ai <question>');
+            print('thinking…', 'muted');
+            print(await LLMOS.ai.complete(args.join(' '), { system: 'Answer briefly; plain text only, suitable for a terminal.', maxTokens: 800 }));
+            break;
+          }
+          case 'clear':
+            set({ lines: [] });
+            break;
+          case 'date':
+            print(new Date().toString());
+            break;
+          default:
+            throw new Error(`unknown command: ${cmd} (try help)`);
+        }
+      } catch (err) {
+        print(`${cmd}: ${err.message}`, 'danger');
+      } finally {
+        set(st => {
+          LLMOS.storage.set('terminal', { cwd: st.cwd, history: st.history }).catch(() => {});
+          return { busy: false };
+        });
+      }
+    }
+
+    return column({ height: 'fill', padding: 10, gap: 8 },
+      scroll({ grow: 1, anchor: 'end', gap: 1 },
+        s.lines.map((l, i) => text({ key: String(i), mono: true, size: 'sm', tone: l.tone || 'normal' }, l.t)),
+      ),
+      row({ align: 'center', gap: 8 },
+        text({ mono: true, size: 'sm', tone: 'accent', wrap: false }, `${s.cwd} ›`),
+        input({ grow: 1, value: s.draft, placeholder: s.busy ? 'working…' : 'type a command', onChange: v => set({ draft: v }), onSubmit: run }),
+      ),
+    );
+  },
+});
+</script>

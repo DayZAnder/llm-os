@@ -8,7 +8,7 @@
 <meta property="og:title" content="LLM OS">
 <meta property="og:description" content="An operating system with no apps until you ask for one. Open source, local-first, capability-sandboxed.">
 <meta property="og:type" content="website">
-<meta property="og:image" content="https://llm-os.dev/screenshots/v030_desktop.png">
+<meta property="og:image" content="https://llm-os.dev/screenshots/og.jpg">
 <meta name="theme-color" content="#0c0c0f">
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
@@ -122,6 +122,8 @@
   .changes { list-style: none; margin: 0; padding: 0; }
   .changes li { display: grid; grid-template-columns: 110px 1fr; gap: 20px; padding: 16px 0; border-bottom: 1px solid var(--rule); }
   .changes li:last-child { border-bottom: 0; }
+  .changes li.changes-divider { padding-top: 36px; }
+  .changes li.changes-divider p { color: var(--muted); }
   .changes .kind { font: 500 12px/2 var(--mono); color: var(--muted); text-transform: lowercase; }
   .changes .kind.new { color: var(--ok); }
   .changes .kind.security { color: var(--warn); }
@@ -204,7 +206,7 @@
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#"><img src="favicon.svg" alt="">LLM OS <span class="ver">0.3.0</span></a>
+    <a class="brand" href="#"><img src="favicon.svg" alt="">LLM OS <span class="ver">0.4.0</span></a>
     <nav>
       <a href="#new">What's new</a>
       <a href="#sdk">SDK</a>
@@ -219,7 +221,7 @@
 <main>
   <div class="hero">
     <div class="wrap">
-      <p class="kicker">Version 0.3.0 · September 2026 · <a href="#new">release notes</a></p>
+      <p class="kicker">Version 0.4.0 · September 2026 · <a href="#new">release notes</a></p>
       <h1>An operating system with no apps until you ask for one.</h1>
       <p class="lede">You describe a program. LLM OS writes it, <strong>checks it, sandboxes it and runs it</strong> — and rewrites it when you want something changed or it crashes.</p>
       <div class="actions">
@@ -238,20 +240,30 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
 <span class="ok">Files        v2 swapped into the same window · data kept · 12.5 s</span>
 
 <span class="you">/theme nordic winter night</span>
-<span class="ok">theme        “Nordic Winter Night” · contrast checked · applied to every app</span></div>
+<span class="ok">theme        “Nordic Winter Night” · contrast checked · applied to every app</span>
+
+<span class="you">/desktop menubar on top, clock in the middle, dock on the left</span>
+<span class="ok">desktop      “Night Studio” · 6 pinned apps · Mail not installed yet — click to write it</span></div>
     </div>
   </div>
 
   <section id="new">
     <div class="wrap">
       <div class="section-head">
-        <div class="label">0.3.0</div>
+        <div class="label">0.4.0</div>
         <div>
-          <h2>Apps can now work together, and fix themselves.</h2>
-          <p>Until now every generated app was an island. 0.3.0 gives them a shared filesystem, file associations, a message bus and access to the model itself.</p>
+          <h2>A generated desktop, and a first step out of the browser.</h2>
+          <p>The desktop itself is now something you describe. And apps can be written in a format that doesn’t need a browser at all — a native renderer already draws them.</p>
         </div>
       </div>
       <ul class="changes body-col">
+        <li><span class="kind new">new</span><div><p>Describe your desktop.</p><p><code>/desktop windows</code>, <code>/desktop mac</code>, or any description: taskbar or menubar, dock position, clock, window buttons, wallpaper. The model proposes a layout, the kernel validates every field. Pinned apps that don’t exist yet are written the first time you click them.</p></div></li>
+        <li><span class="kind new">new</span><div><p>A Prompt button instead of a Start menu.</p><p>Search your apps or describe a new one from the same box. Also on the Super/Windows key and Ctrl+Space.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Alt+Tab window switcher.</p><p>Works in kiosk mode and on the native renderer; in a normal browser, where the host OS keeps Alt+Tab, use Alt+` instead. Shortcuts work even while an app has focus.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Terminal, Writer and Reader.</p><p>A shell for the OS itself (files, network, the model), a word processor that saves HTML documents, and a reader-mode browser that shows pages without scripts, trackers or cookies.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Portable UI.</p><p>Apps can describe their interface as plain data — columns, rows, text, buttons, inputs — instead of HTML. The browser renders it today; the same tree can be drawn by anything. Terminal and Tasks are written this way.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Native renderer (spike).</p><p>A 1.4 MB Rust binary lays out and draws portable apps in Full HD in about 2 ms, to a PNG or a Linux framebuffer. No input and no app logic yet — but the layout already matches the browser.</p></div></li>
+        <li class="changes-divider"><span class="kind">0.3.0</span><div><p>Apps that work together, change and heal themselves.</p></div></li>
         <li><span class="kind new">new</span><div><p>Watch the app being written.</p><p>Generation streams from every provider. A preview renders the half-finished app as the code arrives — with scripts disabled, since nothing runs before the analyzer and your approval.</p></div></li>
         <li><span class="kind new">new</span><div><p>Modify a running app from its title bar.</p><p>Describe the change; the model rewrites the app and it is swapped into the same window with its data intact. Every version is kept in the registry with its parent.</p></div></li>
         <li><span class="kind new">new</span><div><p>Self-healing.</p><p>Runtime errors are captured inside the sandbox and shown on the window. One click sends the code and the errors back for a fix.</p></div></li>
@@ -278,8 +290,22 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
         </div>
       </div>
       <figure>
-        <img src="screenshots/v030_desktop.png" alt="The Files app filtering a documents folder next to Notepad showing meeting-notes.md" loading="lazy">
-        <figcaption>Files and Notepad working on the same shared filesystem. Double-click a file and the OS opens it in whichever app declared it can handle that type.</figcaption>
+        <img src="screenshots/v040_desktop_mac.webp" alt="Full HD desktop with a menubar, a dock, and Terminal, Writer and Reader windows" loading="lazy">
+        <figcaption><code>/desktop mac</code> at 1920×1080: menubar with the Prompt launcher, a dock with running-app dots, Terminal, Writer and Reader working on the same files.</figcaption>
+      </figure>
+      <div class="figs">
+        <figure>
+          <img src="screenshots/v040_desktop_windows.webp" alt="The same apps with a Windows-style taskbar at the bottom" loading="lazy">
+          <figcaption><code>/desktop windows</code>: a taskbar with the Prompt button, open windows, status and clock.</figcaption>
+        </figure>
+        <figure>
+          <img src="screenshots/v040_desktop_generated.webp" alt="A desktop designed from a description: menubar with a centered clock and a dock on the left" loading="lazy">
+          <figcaption>Designed from a sentence: clock in the middle, dock on the left. “Mail” isn’t installed, so its ✦ writes it on first click.</figcaption>
+        </figure>
+      </div>
+      <figure style="margin-top:40px">
+        <img src="screenshots/v040_native_vs_browser.png" alt="The Tasks app rendered by the browser on the left and by the native renderer on the right" loading="lazy">
+        <figcaption>The portable Tasks app, left in the browser, right drawn by the native renderer from the same tree — no browser involved.</figcaption>
       </figure>
       <div class="figs">
         <figure>
@@ -360,6 +386,7 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
           <tr><td>LLMOS.net</td><td>HTTP through the kernel. Public internet only; private and metadata addresses are refused.</td><td>network:http</td></tr>
           <tr><td>LLMOS.ipc</td><td>Publish and subscribe between running apps.</td><td>ipc:bus</td></tr>
           <tr><td>LLMOS.clipboard</td><td>Read and write the clipboard.</td><td>clipboard:rw</td></tr>
+          <tr><td>LLMOS.ui.app</td><td>Portable UI: state + a view built from components. Runs in the browser and on the native renderer.</td><td>ui:window</td></tr>
           <tr><td>LLMOS.caps</td><td>Check or request a capability at runtime; the user gets a prompt.</td><td>—</td></tr>
         </table>
       </div>
@@ -431,21 +458,25 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
             <li>Shared files and file handlers</li>
             <li>Live generation view</li>
             <li>Generated system themes</li>
+            <li>Generated desktop layouts</li>
+            <li>Portable UI + native renderer spike</li>
           </ul>
         </div>
         <div>
           <h3>next</h3>
           <ul>
-            <li>Evaluation suite for modify/fix quality across models</li>
+            <li>Keyboard and mouse for the native renderer</li>
+            <li>Run portable apps natively (QuickJS/WASM), no browser in the micro image</li>
+            <li>Mail through a kernel IMAP/SMTP service</li>
             <li>Undo: roll an app back to any earlier version</li>
-            <li>More default apps written against the SDK</li>
-            <li>Settings as an app instead of a panel</li>
+            <li>Evaluation suite for modify/fix quality across models</li>
           </ul>
         </div>
         <div>
           <h3>later</h3>
           <ul>
             <li>Multi-file apps with a backend</li>
+            <li>The whole shell as portable UI, drawn natively</li>
             <li>Shell regenerated at boot from your profile</li>
             <li>WASM as the default app runtime</li>
             <li>Rust microkernel, UEFI boot</li>
@@ -469,7 +500,7 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
 cd llm-os
 cp .env.example .env      <span class="c"># set OLLAMA_URL and/or ANTHROPIC_API_KEY</span>
 node src/server.js        <span class="c"># http://localhost:3000</span>
-npm test                  <span class="c"># 548 tests</span></pre>
+npm test                  <span class="c"># 604 tests</span></pre>
 
         <div class="table-scroll" style="margin-top:40px">
           <table class="plain">
@@ -505,7 +536,7 @@ npm test                  <span class="c"># 548 tests</span></pre>
 
 <footer>
   <div class="wrap">
-    <span>LLM OS 0.3.0 · <a href="https://github.com/DayZAnder/llm-os/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/CONTRIBUTING.md">Contributing</a></span>
+    <span>LLM OS 0.4.0 · <a href="https://github.com/DayZAnder/llm-os/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/CONTRIBUTING.md">Contributing</a></span>
     <span>This site makes no third-party requests and sets no cookies.</span>
   </div>
 </footer>

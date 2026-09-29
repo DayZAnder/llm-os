@@ -54,6 +54,12 @@ jobs:
       - name: Run theme tests
         run: node tests/theme.test.js
 
+      - name: Run portable UI tests
+        run: node tests/portable-ui.test.js
+
+      - name: Run desktop layout tests
+        run: node tests/desktop.test.js
+
   build-vm:
     name: Build VM (${{ matrix.variant }})
     needs: test

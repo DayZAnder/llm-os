@@ -11,6 +11,15 @@
 
   const pendingRequests = new Map();
   let requestId = 0;
+
+  // Portable UI core (src/sdk/ui.js) is injected just before this file
+  const UI = window.__LLMOS_UI__ || null;
+  let portableRenderer = null;
+  if (UI) {
+    const style = document.createElement('style');
+    style.textContent = UI.CSS;
+    document.head.appendChild(style);
+  }
   const post = window.parent.postMessage.bind(window.parent);
 
   // Send a message to the kernel and wait for response
@@ -82,6 +91,27 @@
     reportError(e.error || e.message, e.lineno ? `line ${e.lineno}:${e.colno}` : '');
   });
   window.addEventListener('unhandledrejection', (e) => reportError(e.reason, 'unhandled promise rejection'));
+
+  // --- System hotkeys ---
+  // Keys pressed while an app has focus never reach the shell (the app is a
+  // separate, sandboxed document), so forward the OS shortcuts: window
+  // switcher (Alt+Tab, Alt+`) and launcher (Super/Windows key, Ctrl+Space).
+  let superAlone = false;
+  window.addEventListener('keydown', (e) => {
+    let combo = null;
+    if (e.altKey && (e.key === 'Tab' || e.key === '`')) combo = e.shiftKey ? 'switch-prev' : 'switch-next';
+    else if (e.ctrlKey && e.code === 'Space') combo = 'launcher';
+    superAlone = e.key === 'Meta' || e.key === 'OS';
+    if (combo) {
+      e.preventDefault();
+      kernelSignal('sys:hotkey', { combo });
+    }
+  }, true);
+  window.addEventListener('keyup', (e) => {
+    if (e.key === 'Alt') kernelSignal('sys:hotkey', { combo: 'alt-up' });
+    if ((e.key === 'Meta' || e.key === 'OS') && superAlone) kernelSignal('sys:hotkey', { combo: 'launcher' });
+    superAlone = false;
+  }, true);
   const origConsoleError = console.error.bind(console);
   console.error = function(...args) {
     reportError(args.map(a => (a && a.message) || (typeof a === 'string' ? a : JSON.stringify(a))).join(' '), 'console.error');
@@ -139,6 +169,23 @@
     // Show a confirm dialog
     async confirm(message) {
       return kernelCall('confirm', { message: String(message) }, 120000);
+    },
+
+    // --- Portable UI (see ui.js): renderer-independent component trees ---
+    c: UI ? UI.c : {},
+
+    // Run an app from state + view. Returns { set, get }.
+    app(def) {
+      if (!UI) throw new Error('Portable UI not available');
+      const root = document.getElementById('llmos-root') || document.body;
+      portableRenderer = UI.createDomRenderer(root, document);
+      return UI.createApp(def, portableRenderer, (err) => reportError(err, 'ui.app'));
+    },
+
+    // JSON copy of the current portable tree (what a native renderer draws)
+    snapshot() {
+      const tree = portableRenderer && portableRenderer.tree();
+      return tree ? UI.snapshot(tree) : null;
     },
   };
 

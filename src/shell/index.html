@@ -197,6 +197,45 @@
   .evolve-input { width: 100%; box-sizing: border-box; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font: inherit; resize: vertical; margin-bottom: 12px; }
   .evolve-input:focus { outline: none; border-color: var(--accent); }
   .cap-sensitive { color: var(--warning); }
+  /* --- Desktop layout (bar, dock, launcher, switcher) --- */
+  /* Portable components in the shell use the same tokens as apps */
+  :root {
+    --llmos-bg: var(--bg-primary); --llmos-surface: var(--bg-secondary); --llmos-surface-2: var(--bg-tertiary);
+    --llmos-fg: var(--text-primary); --llmos-muted: var(--text-secondary); --llmos-accent: var(--accent);
+    --llmos-accent-fg: #fff; --llmos-border: var(--border); --llmos-danger: var(--danger); --llmos-success: var(--success);
+    --llmos-radius: 6px; --llmos-font: var(--font-sans); --llmos-mono: var(--font-mono);
+  }
+  .main { position: relative; }
+  .desk-bar { flex-shrink: 0; background: color-mix(in srgb, var(--bg-secondary) 92%, transparent); backdrop-filter: blur(12px); font-family: var(--font-sans); z-index: 5; }
+  .desk-bar.hidden, .desk-dock.hidden { display: none; }
+  body.desk-bar-top .desk-bar { order: -1; border-bottom: 1px solid var(--border); }
+  body.desk-bar-bottom .desk-bar { order: 99; border-top: 1px solid var(--border); }
+  .desk-bar .llu-button { padding: 4px 10px; font-size: 13px; }
+  body.desk-menubar .desk-bar .llu-button { padding: 2px 8px; }
+  body.desk-active .topbar, body.desk-active #taskbar { display: none !important; }
+  body.desk-no-prompt .prompt-bar { display: none; }
+  .desk-dock { position: absolute; z-index: 100000; backdrop-filter: blur(14px); border-radius: 14px; }
+  .desk-dock > .llu { background: color-mix(in srgb, var(--bg-secondary) 80%, transparent) !important; border-radius: 14px !important; }
+  body.desk-dock-bottom .desk-dock { bottom: 10px; left: 50%; transform: translateX(-50%); }
+  body.desk-dock-left .desk-dock { left: 10px; top: 50%; transform: translateY(-50%); }
+  body.desk-dock-right .desk-dock { right: 10px; top: 50%; transform: translateY(-50%); }
+  .desk-dock .llu-button { padding: 4px 6px; line-height: 1; transition: transform .12s; }
+  .desk-dock .llu-button:hover { transform: translateY(-3px) scale(1.06); filter: none; }
+  body.desk-dock-left .desk-dock .llu-button:hover { transform: translateX(3px) scale(1.06); }
+  body.desk-dock-right .desk-dock .llu-button:hover { transform: translateX(-3px) scale(1.06); }
+  .desk-launcher-overlay { position: fixed; inset: 0; z-index: 200000; background: rgba(0,0,0,.35); display: flex; justify-content: center; align-items: flex-start; padding-top: 14vh; }
+  .desk-launcher { width: min(640px, 92vw); background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.55); }
+  .desk-launcher .llu-input { font-size: 17px; padding: 12px 14px; }
+  .desk-launcher .llu-button { text-align: left; }
+  .desk-switcher { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 200001; box-shadow: 0 24px 64px rgba(0,0,0,.55); border-radius: 12px; }
+  .desk-switcher > .llu { background: color-mix(in srgb, var(--bg-secondary) 94%, transparent) !important; }
+  /* Window controls on the left, round like a Mac */
+  /* The last three titlebar buttons are minimize, maximize, close; reorder to close, minimize, maximize */
+  body.desk-controls-left .app-titlebar .title { text-align: center; }
+  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(-n+3) { width: 12px; height: 12px; padding: 0; border-radius: 50%; font-size: 0; margin: 0 3px; }
+  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(1) { order: -3; background: #ed6a5e; margin-left: 0; }
+  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(3) { order: -2; background: #f5bf4f; }
+  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(2) { order: -1; background: #61c554; margin-right: 10px; }
   .gen-live { position: fixed; right: 20px; bottom: 90px; width: min(560px, calc(100vw - 40px)); height: min(460px, 60vh); z-index: 9000; display: grid; grid-template-rows: auto 1fr 150px; background: var(--bg-secondary); border: 1px solid var(--accent-dim); border-radius: 10px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
   .gen-live-head { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; font: 12px var(--font-mono); border-bottom: 1px solid var(--border); }
   .gen-live-title { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1167,8 +1206,12 @@
   <button class="settings-btn" id="settings-btn" title="Self-Improvement Settings">&#9881;</button>
 </div>
 
+<!-- Desktop bar (taskbar / menubar), rendered from the desktop layout -->
+<div class="desk-bar hidden" id="desk-bar"></div>
+
 <!-- Main area -->
 <div class="main">
+  <div class="desk-dock hidden" id="desk-dock"></div>
   <!-- Empty state -->
   <div class="empty-state" id="empty-state">
     <h1>&gt; describe your app</h1>
@@ -1294,6 +1337,7 @@
   </div>
 </div>
 
+<script src="/sdk/ui.js"></script>
 <script type="module">
 import { SandboxManager } from './sandbox.js';
 
@@ -1380,6 +1424,7 @@ const WM = {
       const tb = document.getElementById(`taskbar-${id}`);
       if (tb) tb.classList.toggle('active', id === appId);
     }
+    deskRefresh();
   },
 
   minimize(appId) {
@@ -1552,7 +1597,8 @@ function initExamples() {
 
 // --- Logging ---
 function log(msg, level = 'info') {
-  logPanel.classList.remove('hidden');
+  // With a desktop bar the log is opt-in (tray "Log" button)
+  if (!document.body.classList.contains('desk-active')) logPanel.classList.remove('hidden');
   const line = document.createElement('div');
   line.className = 'log-line' + (level === 'warn' ? ' log-warn' : level === 'error' ? ' log-err' : level === 'ok' ? ' log-ok' : '');
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
@@ -1569,6 +1615,8 @@ async function checkLLMStatus() {
     ollamaStatus.className = 'status-dot ' + (data.ollama ? 'ok' : 'err');
     claudeStatus.className = 'status-dot ' + (data.claude ? 'ok' : 'err');
     dockerStatus.className = 'status-dot ' + (data.docker ? 'ok' : 'err');
+    window.__deskStatus = { llm: Object.values(data.providers || {}).some(p => p.available), docker: !!data.docker };
+    if (deskActive()) renderDeskBar();
   } catch {
     ollamaStatus.className = 'status-dot err';
     claudeStatus.className = 'status-dot err';
@@ -1581,6 +1629,15 @@ function updateDesktopLayout() {
   const iframeCount = sandboxMgr ? sandboxMgr.listApps().length : 0;
   const count = iframeCount + processApps.size;
   appCountEl.textContent = `${count} app${count !== 1 ? 's' : ''}`;
+
+  if (deskActive()) {
+    // Desktop layout: the wallpaper is always visible; the bar/dock replace the taskbar
+    emptyState.style.display = 'none';
+    desktop.style.display = '';
+    taskbar.classList.add('hidden');
+    deskRefresh();
+    return;
+  }
 
   if (count === 0) {
     desktop.style.display = 'none';
@@ -2340,11 +2397,376 @@ async function themeCommand(arg) {
   }
 }
 
+// --- Desktop layout: bar, launcher, clock, dock ---
+// The chrome is data (see kernel/desktop.js) rendered with the same portable
+// component trees apps use (src/sdk/ui.js), so a native renderer can draw
+// the desktop too. "classic" keeps the original shell untouched.
+
+const UIK = window.__LLMOS_UI__;
+{ const st = document.createElement('style'); st.textContent = UIK.CSS; document.head.appendChild(st); }
+let deskLayout = null;
+let deskAppsByName = new Map(); // lower-case app name → registry entry (no code)
+let deskBarRenderer = null;
+let deskDockRenderer = null;
+let deskClockTimer = null;
+let deskLogVisible = false;
+
+const deskActive = () => !!deskLayout && (deskLayout.bar?.position !== 'none' || deskLayout.dock?.position !== 'none');
+
+async function refreshDeskApps() {
+  try {
+    const res = await fetch('/api/registry/browse?limit=500').then(r => r.json());
+    const apps = res.apps || res;
+    deskAppsByName = new Map();
+    // Newest version of each name wins (browse is newest first)
+    for (const a of apps) {
+      if (a.type === 'process') continue;
+      const name = (a.manifest?.name || a.title || '').toLowerCase();
+      if (name && !deskAppsByName.has(name)) deskAppsByName.set(name, a);
+    }
+  } catch {}
+}
+
+function runningWindows() {
+  return [...WM.windows.entries()].map(([id, w]) => {
+    const info = openIframeApps.get(id);
+    const titleEl = document.getElementById(`title-${id}`);
+    return {
+      id,
+      title: info?.title || titleEl?.textContent || id,
+      icon: info?.icon || '',
+      focused: w.el.classList.contains('focused') && w.state !== 'minimized',
+      minimized: w.state === 'minimized',
+    };
+  });
+}
+
+function toggleWindow(id) {
+  const w = WM.windows.get(id);
+  if (!w) return;
+  if (w.state === 'minimized') WM.restore(id);
+  else if (w.el.classList.contains('focused')) WM.minimize(id);
+  else WM.raise(id);
+}
+
+/** Launch an app by name: focus it if running, start it if installed, write it if not. */
+async function launchByName(name) {
+  const key = name.toLowerCase();
+  const running = runningWindows().find(w => w.title.toLowerCase() === key);
+  if (running) { WM.windows.get(running.id).state === 'minimized' ? WM.restore(running.id) : WM.raise(running.id); return; }
+  const entry = deskAppsByName.get(key);
+  if (entry) {
+    const app = await fetch(`/api/registry/${entry.hash}`).then(r => r.json());
+    await launchRegistryApp(app);
+    return;
+  }
+  log(`"${name}" isn't installed yet — writing it now`);
+  generateApp(`${name} app`);
+}
+
+function clockText(clock) {
+  const now = new Date();
+  const time = now.toLocaleTimeString([], {
+    hour: '2-digit', minute: '2-digit',
+    second: clock.seconds ? '2-digit' : undefined,
+    hour12: clock.format === '12h',
+  });
+  if (!clock.date) return time;
+  const date = now.toLocaleDateString([], { weekday: 'short', day: 'numeric', month: 'short' });
+  return `${date}  ${time}`;
+}
+
+function renderDeskBar() {
+  const bar = deskLayout?.bar;
+  if (!bar || bar.position === 'none') return;
+  const { row, text, button } = UIK.c;
+  const menubar = bar.style === 'menubar';
+  const slots = { left: [], center: [], right: [] };
+
+  slots[bar.launcher.position].push(button({
+    key: 'launcher', variant: menubar ? 'ghost' : 'primary', onPress: () => openLauncher(),
+  }, `${bar.launcher.icon} ${bar.launcher.label}`.trim()));
+
+  if (menubar) {
+    const focused = runningWindows().find(w => w.focused);
+    if (focused) slots.left.push(text({ key: 'active', weight: 'bold', size: 'sm' }, focused.title));
+  }
+  if (bar.showWindows) {
+    for (const w of runningWindows()) {
+      slots.left.push(button({
+        key: 'win-' + w.id, variant: w.focused ? 'secondary' : 'ghost', onPress: () => toggleWindow(w.id),
+      }, `${w.icon ? w.icon + ' ' : ''}${w.title}`.slice(0, 28)));
+    }
+  }
+  if (bar.tray) {
+    const status = window.__deskStatus || {};
+    slots.right.push(
+      text({ key: 'st-llm', size: 'sm', tone: status.llm ? 'success' : 'danger' }, status.llm ? '● model' : '● no model'),
+      button({ key: 'log', variant: deskLogVisible ? 'secondary' : 'ghost', onPress: toggleDeskLog }, 'Log'),
+      button({ key: 'apps', variant: 'ghost', onPress: () => openRegistry() }, 'Apps'),
+      button({ key: 'settings', variant: 'ghost', onPress: () => openSettings() }, '⚙'),
+    );
+  }
+  if (bar.clock.show) slots[bar.clock.position].push(text({ key: 'clock', size: 'sm', mono: true, wrap: false }, clockText(bar.clock)));
+
+  deskBarRenderer.render(row({ align: 'center', padding: 4, height: 'fill' },
+    row({ grow: 1, width: 0, align: 'center', gap: 4 }, slots.left),
+    row({ align: 'center', gap: 8, justify: 'center' }, slots.center),
+    row({ grow: 1, width: 0, align: 'center', gap: 6, justify: 'end' }, slots.right),
+  ));
+}
+
+function renderDeskDock() {
+  const dock = deskLayout?.dock;
+  if (!dock || dock.position === 'none') return;
+  const { row, column, text, button } = UIK.c;
+  const vertical = dock.position !== 'bottom';
+  const running = runningWindows();
+  const names = [...dock.pinned];
+  // Running apps that aren't pinned also get a dock slot
+  for (const w of running) if (!names.some(n => n.toLowerCase() === w.title.toLowerCase())) names.push(w.title);
+
+  const items = names.map(name => {
+    const entry = deskAppsByName.get(name.toLowerCase());
+    const isRunning = running.some(w => w.title.toLowerCase() === name.toLowerCase());
+    const icon = entry?.manifest?.icon || running.find(w => w.title.toLowerCase() === name.toLowerCase())?.icon || '✦';
+    return button({ key: 'dock-' + name, variant: 'ghost', onPress: () => launchByName(name) },
+      column({ align: 'center', gap: 2 },
+        text({ size: dock.iconSize * 0.62, wrap: false }, icon),
+        dock.labels ? text({ size: 'sm', tone: 'muted', wrap: false }, name) : null,
+        text({ size: 8, tone: isRunning ? 'accent' : 'muted', wrap: false }, isRunning ? '●' : (entry ? ' ' : '+')),
+      ));
+  });
+  const Box = vertical ? column : row;
+  deskDockRenderer.render(Box({ gap: 2, padding: 6, align: 'center', surface: 'panel' }, items));
+  // Tooltips: the portable tree has no title prop; add them on the DOM side
+  const buttons = document.querySelectorAll('#desk-dock .llu-button');
+  names.forEach((n, i) => { if (buttons[i]) buttons[i].title = deskAppsByName.has(n.toLowerCase()) ? n : `${n} — not installed, click to generate`; });
+}
+
+function deskRefresh() {
+  if (!deskActive()) return;
+  renderDeskBar();
+  renderDeskDock();
+}
+
+function toggleDeskLog() {
+  deskLogVisible = !deskLogVisible;
+  logPanel.classList.toggle('hidden', !deskLogVisible);
+  renderDeskBar();
+}
+
+function applyDesktop(layout) {
+  deskLayout = layout;
+  const body = document.body;
+  const barEl = document.getElementById('desk-bar');
+  const dockEl = document.getElementById('desk-dock');
+  body.classList.remove('desk-active', 'desk-bar-top', 'desk-bar-bottom', 'desk-menubar', 'desk-controls-left',
+    'desk-dock-bottom', 'desk-dock-left', 'desk-dock-right', 'desk-no-prompt');
+  clearInterval(deskClockTimer);
+  document.querySelector('.main').style.background = '';
+
+  if (!deskActive()) {
+    barEl.classList.add('hidden');
+    dockEl.classList.add('hidden');
+    updateDesktopLayout();
+    return;
+  }
+  body.classList.add('desk-active');
+  if (layout.bar.position !== 'none') {
+    body.classList.add(`desk-bar-${layout.bar.position}`);
+    if (layout.bar.style === 'menubar') body.classList.add('desk-menubar');
+    barEl.style.height = layout.bar.height + 'px';
+    barEl.classList.remove('hidden');
+    deskBarRenderer = deskBarRenderer || UIK.createDomRenderer(barEl, document);
+  } else barEl.classList.add('hidden');
+  if (layout.dock.position !== 'none') {
+    body.classList.add(`desk-dock-${layout.dock.position}`);
+    dockEl.classList.remove('hidden');
+    deskDockRenderer = deskDockRenderer || UIK.createDomRenderer(dockEl, document);
+  } else dockEl.classList.add('hidden');
+  if (layout.windows.controls === 'left') body.classList.add('desk-controls-left');
+  if (layout.promptBar === 'hidden') body.classList.add('desk-no-prompt');
+  if (layout.wallpaper) {
+    const { type, from, to } = layout.wallpaper;
+    document.querySelector('.main').style.background = type === 'gradient' ? `linear-gradient(135deg, ${from}, ${to})` : from;
+  }
+  logPanel.classList.toggle('hidden', !deskLogVisible);
+  updateDesktopLayout();
+  deskRefresh();
+  const tick = layout.bar.clock?.seconds ? 1000 : 10000;
+  deskClockTimer = setInterval(renderDeskBar, tick);
+  refreshDeskApps().then(deskRefresh);
+}
+
+async function desktopCommand(arg) {
+  let layout;
+  try {
+    if (/^(reset|classic)$/i.test(arg)) {
+      layout = await fetch('/api/desktop/reset', { method: 'POST' }).then(r => r.json());
+    } else if (/^(windows|mac)$/i.test(arg)) {
+      layout = await fetch('/api/desktop', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ preset: arg.toLowerCase() }),
+      }).then(r => r.json());
+    } else if (!arg) {
+      log('Usage: /desktop windows | mac | classic | <describe your desktop>', 'warn');
+      return;
+    } else {
+      log(`Designing desktop: "${arg}"`);
+      const live = openLivePanel(`Desktop: ${arg.slice(0, 60)}`);
+      try { layout = await streamJob('/api/desktop', { description: arg }, live); }
+      finally { live.close(); }
+    }
+    applyDesktop(layout);
+    log(`Desktop "${layout.name}" applied${layout.model ? ` (${layout.provider}/${layout.model})` : ''}`, 'ok');
+  } catch (err) {
+    log(`Desktop failed: ${err.message}`, 'error');
+  }
+}
+
+// --- Launcher: the "Prompt" button ---
+
+function openLauncher() {
+  if (document.getElementById('desk-launcher')) return closeLauncher();
+  const overlay = document.createElement('div');
+  overlay.id = 'desk-launcher';
+  overlay.className = 'desk-launcher-overlay';
+  const panel = document.createElement('div');
+  panel.className = 'desk-launcher';
+  overlay.appendChild(panel);
+  overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) closeLauncher(); });
+  document.body.appendChild(overlay);
+
+  const { column, row, text, button, input, scroll } = UIK.c;
+  const renderer = UIK.createDomRenderer(panel, document);
+  let selected = 0;
+  const results = (q) => {
+    const all = [...deskAppsByName.values()];
+    const query = q.trim().toLowerCase();
+    const apps = (query
+      ? all.filter(a => (a.manifest?.name || a.title).toLowerCase().includes(query) || (a.prompt || '').toLowerCase().includes(query))
+      : all).slice(0, 8);
+    const out = apps.map(a => ({ kind: 'app', label: a.manifest?.name || a.title, icon: a.manifest?.icon || '▫', hint: a.model }));
+    if (query) out.push({ kind: 'generate', label: `Write a new app: “${q.trim()}”`, icon: '✦', hint: 'generate' });
+    return out;
+  };
+  const activate = (item, q) => {
+    closeLauncher();
+    if (!item) return;
+    if (item.kind === 'app') launchByName(item.label);
+    else if (q.trim().startsWith('/')) generateApp(q.trim());
+    else generateApp(q.trim());
+  };
+  const app = UIK.createApp({
+    state: { q: '' },
+    view: (s, set) => {
+      const items = results(s.q);
+      if (selected >= items.length) selected = Math.max(0, items.length - 1);
+      return column({ gap: 10, padding: 14 },
+        input({ key: 'q', value: s.q, placeholder: 'Describe an app, or search your apps…', onChange: (v) => { selected = 0; set({ q: v }); }, onSubmit: (v) => activate(results(v)[selected], v) }),
+        scroll({ gap: 2, height: Math.min(360, Math.max(1, items.length) * 44) },
+          items.length === 0 ? text({ tone: 'muted' }, 'No apps yet — type what you need.') :
+          items.map((it, i) => button({ key: it.kind + it.label, variant: i === selected ? 'secondary' : 'ghost', onPress: () => activate(it, s.q) },
+            row({ gap: 10, align: 'center' },
+              text({ size: 'lg', wrap: false }, it.icon),
+              text({ grow: 1, wrap: false }, it.label),
+              text({ size: 'sm', tone: 'muted', wrap: false }, it.hint || ''))))),
+        text({ size: 'sm', tone: 'muted' }, '↑↓ to choose · Enter to open · Esc to close · /theme and /desktop work here too'),
+      );
+    },
+  }, renderer);
+  overlay.addEventListener('keydown', (e) => {
+    const n = results(app.get().q).length;
+    if (e.key === 'Escape') closeLauncher();
+    else if (e.key === 'ArrowDown') { selected = Math.min(n - 1, selected + 1); app.rerender(); e.preventDefault(); }
+    else if (e.key === 'ArrowUp') { selected = Math.max(0, selected - 1); app.rerender(); e.preventDefault(); }
+  });
+  refreshDeskApps().then(() => app.rerender());
+  setTimeout(() => panel.querySelector('.llu-input')?.focus(), 0);
+}
+
+function closeLauncher() {
+  document.getElementById('desk-launcher')?.remove();
+}
+
+// --- System hotkeys: window switcher and launcher ---
+// Alt+Tab / Alt+` cycles windows (Alt+Tab only reaches us in kiosk mode or a
+// native renderer — a host OS keeps it for itself), Super/Windows or
+// Ctrl+Space opens the launcher. Apps forward these via the SDK.
+
+let switcher = null; // { order: [appId], index, renderer, el, timer }
+
+function switcherOrder() {
+  // Most recently used first (highest z-index)
+  return [...WM.windows.entries()].sort((a, b) => b[1].z - a[1].z).map(([id]) => id);
+}
+
+function renderSwitcher() {
+  const { row, column, text } = UIK.c;
+  const wins = runningWindows();
+  switcher.renderer.render(row({ gap: 8, padding: 14, surface: 'panel' },
+    switcher.order.map((id, i) => {
+      const w = wins.find(x => x.id === id);
+      return column({ key: id, align: 'center', gap: 6, padding: 10, width: 128, surface: i === switcher.index ? 'card' : 'none' },
+        text({ size: 36, wrap: false }, w?.icon || '▫'),
+        text({ size: 'sm', tone: i === switcher.index ? 'normal' : 'muted', wrap: false }, (w?.title || id).slice(0, 18)));
+    })));
+}
+
+function switchWindows(step) {
+  if (!switcher) {
+    const order = switcherOrder();
+    if (order.length === 0) return;
+    if (order.length === 1) { WM.restore(order[0]); return; }
+    const el = document.createElement('div');
+    el.className = 'desk-switcher';
+    document.body.appendChild(el);
+    switcher = { order, index: 0, el, renderer: UIK.createDomRenderer(el, document), timer: null };
+  }
+  const n = switcher.order.length;
+  switcher.index = (switcher.index + step + n) % n;
+  renderSwitcher();
+  // Browsers don't always deliver Alt's keyup after Alt+`; commit after a pause
+  clearTimeout(switcher.timer);
+  switcher.timer = setTimeout(commitSwitch, 1500);
+}
+
+function commitSwitch() {
+  if (!switcher) return;
+  clearTimeout(switcher.timer);
+  const id = switcher.order[switcher.index];
+  switcher.el.remove();
+  switcher = null;
+  if (id && WM.windows.has(id)) WM.restore(id);
+}
+
+function handleHotkey(combo) {
+  if (combo === 'switch-next') switchWindows(1);
+  else if (combo === 'switch-prev') switchWindows(-1);
+  else if (combo === 'alt-up') commitSwitch();
+  else if (combo === 'launcher') { if (!switcher) openLauncher(); }
+}
+
+let shellSuperAlone = false;
+document.addEventListener('keydown', (e) => {
+  if (e.altKey && (e.key === 'Tab' || e.key === '`')) { e.preventDefault(); handleHotkey(e.shiftKey ? 'switch-prev' : 'switch-next'); }
+  else if (e.ctrlKey && e.code === 'Space') { e.preventDefault(); handleHotkey('launcher'); }
+  shellSuperAlone = e.key === 'Meta' || e.key === 'OS';
+}, true);
+document.addEventListener('keyup', (e) => {
+  if (e.key === 'Alt') handleHotkey('alt-up');
+  if ((e.key === 'Meta' || e.key === 'OS') && shellSuperAlone) handleHotkey('launcher');
+  shellSuperAlone = false;
+}, true);
+
 // --- Generation Flow ---
 async function generateApp(prompt, options = {}) {
   if (generating) return;
   const themeCmd = prompt.match(/^\/theme\b\s*(.*)$/i);
   if (themeCmd) return themeCommand(themeCmd[1].trim());
+  const deskCmd = prompt.match(/^\/desktop\b\s*(.*)$/i);
+  if (deskCmd) return desktopCommand(deskCmd[1].trim());
   generating = true;
   generateBtn.disabled = true;
   generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
@@ -3304,8 +3726,9 @@ function connectShellReload() {
 // --- Init ---
 async function init() {
   // Load SDK code for injection into sandboxes
-  const sdkRes = await fetch('/sdk/sdk.js');
-  sdkCode = await sdkRes.text();
+  // Portable UI core first, then the SDK that exposes it as LLMOS.ui.app
+  const [uiCore, sdk] = await Promise.all(['/sdk/ui.js', '/sdk/sdk.js'].map(u => fetch(u).then(r => r.text())));
+  sdkCode = uiCore + '\n' + sdk;
 
   // Create sandbox manager
   sandboxMgr = new SandboxManager(desktop, sdkCode, {
@@ -3341,6 +3764,7 @@ async function init() {
       return window.confirm(`[${appId}]: ${message}`);
     },
     onSyscall: handleSyscall,
+    onHotkey: handleHotkey,
     onCapRequest: requestCapability,
     onAppError(appId, err, count) {
       updateErrorBadge(appId);
@@ -3350,6 +3774,8 @@ async function init() {
 
   // System theme (generated or default) for the shell and every app
   try { applyTheme(await fetch('/api/theme').then(r => r.json())); } catch {}
+  // Desktop layout (classic = the original shell)
+  try { applyDesktop(await fetch('/api/desktop').then(r => r.json())); } catch (err) { console.warn('[desktop]', err); }
 
   initExamples();
   checkLLMStatus();

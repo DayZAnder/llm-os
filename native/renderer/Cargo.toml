@@ -1,0 +1,13 @@
+[package]
+name = "llmos-render"
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+description = "Native renderer for LLM OS portable UI trees"
+publish = false
+
+[dependencies]
+fontdue = "0.9.4"
+serde_json = "1.0.151"
+taffy = "0.14.0"
+tiny-skia = "0.12.0"

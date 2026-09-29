@@ -1,0 +1,10 @@
+# Static Linux build for the LLM OS images (no C toolchain needed):
+#   cargo build --release --target x86_64-unknown-linux-musl
+[target.x86_64-unknown-linux-musl]
+linker = "rust-lld"
+
+[profile.release]
+opt-level = "s"
+lto = true
+strip = true
+codegen-units = 1
