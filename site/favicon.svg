@@ -1,5 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <rect x="1.5" y="1.5" width="29" height="29" rx="7" fill="#0c0c0f" stroke="#7c74ff" stroke-width="3"/>
-  <path d="M9 11.5l5 4.5-5 4.5" fill="none" stroke="#7c74ff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
-  <path d="M16.5 21h7" stroke="#e8e6e1" stroke-width="3" stroke-linecap="round"/>
+  <!-- The LLM OS launcher mark: a solid tile with a spark (same geometry as src/sdk/ui.js LOGO_SPARK) -->
+  <rect width="32" height="32" rx="8" fill="#6c63ff"/>
+  <path d="M14 5C14.9 11.6 17.4 14.1 24 15 17.4 15.9 14.9 18.4 14 25 13.1 18.4 10.6 15.9 4 15 10.6 14.1 13.1 11.6 14 5Z" fill="#fff"/>
+  <path d="M23.5 18.5C23.9 21 24.8 21.9 27.5 22.5 24.8 23.1 23.9 24 23.5 26.5 23.1 24 22.2 23.1 19.5 22.5 22.2 21.9 23.1 21 23.5 18.5Z" fill="#fff" opacity=".85"/>
 </svg>
