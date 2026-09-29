@@ -127,6 +127,7 @@
   .changes .kind { font: 500 12px/2 var(--mono); color: var(--muted); text-transform: lowercase; }
   .changes .kind.new { color: var(--ok); }
   .changes .kind.security { color: var(--warn); }
+  .changes .kind.fix { color: var(--accent); }
   .changes p { margin: 0; }
   .changes p + p { margin-top: 4px; color: var(--muted); font-size: 15px; }
 
@@ -207,7 +208,7 @@
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#"><img src="favicon.svg" alt="">LLM OS <span class="ver">0.4.0</span></a>
+    <a class="brand" href="#"><img src="favicon.svg" alt="">LLM OS <span class="ver">0.4.2</span></a>
     <nav>
       <a href="#new">What's new</a>
       <a href="#sdk">SDK</a>
@@ -222,7 +223,7 @@
 <main>
   <div class="hero">
     <div class="wrap">
-      <p class="kicker">Version 0.4.0 · September 2026 · <a href="#new">release notes</a></p>
+      <p class="kicker">Version 0.4.2 · September 2026 · <a href="#new">release notes</a></p>
       <h1>An operating system with no apps until you ask for one.</h1>
       <p class="lede">You describe a program. LLM OS writes it, <strong>checks it, sandboxes it and runs it</strong> — and rewrites it when you want something changed or it crashes.</p>
       <div class="actions">
@@ -251,13 +252,26 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
   <section id="new">
     <div class="wrap">
       <div class="section-head">
-        <div class="label">0.4.0</div>
+        <div class="label">0.4.2</div>
         <div>
-          <h2>A generated desktop, and a first step out of the browser.</h2>
-          <p>The desktop itself is now something you describe. And apps can be written in a format that doesn’t need a browser at all — a native renderer already draws them.</p>
+          <h2>It tells you what’s running, and it keeps what you made.</h2>
+          <p>A boot screen that lists the services and what to do when one is missing, user data that survives upgrades and hard power-offs — and a security review of the whole sandbox boundary, with every finding fixed.</p>
         </div>
       </div>
       <ul class="changes body-col">
+        <li><span class="kind new">new</span><div><p>A boot screen, and a list of what’s running.</p><p>Your data, AI models, apps, sandbox, background apps, self-improvement — each with its state and, when something is missing, the one thing to do about it. <code>/status</code> shows it again; the VM console prints the same list, systemd-style.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Move an older install’s data to its own disk.</p><p><code>llmos-data-move</code> copies apps, files and settings from a 0.4.0 VM to the data disk, so the next upgrade is a disk swap. A data disk attached to a running install is filled automatically on the next boot.</p></div></li>
+        <li><span class="kind fix">fix</span><div><p>Settings and app data survive a hard power-off.</p><p>Found by booting the released image: files written in the last ~30 seconds came back empty after a VM was stopped. Every write of your data is now flushed to disk before it counts as saved, and the VMs power off cleanly when the hypervisor asks them to.</p></div></li>
+        <li><span class="kind">change</span><div><p>Desktop layouts have neutral names.</p><p><code>/desktop taskbar</code> and <code>/desktop dock</code>; the old names still work. Window buttons on the left have their own look.</p></div></li>
+        <li><span class="kind security">security</span><div><p>An app can no longer hand its window to a web page.</p><p>A sandboxed app could navigate its own frame to any site, and the page there kept the app’s permissions. The browser now refuses such pages, and an app that tries is closed.</p></div></li>
+        <li><span class="kind security">security</span><div><p>Apps can’t impersonate the OS to each other, or inherit another app’s data.</p><p>One app could answer another app’s pending requests with fake data. And after a fresh browser profile, a new app could get the private storage of an old one.</p></div></li>
+        <li><span class="kind security">security</span><div><p>Permission prompts can’t be ambushed.</p><p>An app could time a permission request to catch your next Enter key. Prompts now default to “no”, “Allow” unlocks after a moment, a “no” is remembered, and taking a permission away takes effect at once.</p></div></li>
+        <li><span class="kind security">security</span><div><p>Websites can’t crash or frame the OS; apps can’t reach your network through IPv6 tricks.</p><p>Plus: stricter checks on apps from the community registry, which is no longer contacted at startup unless you turn it on.</p></div></li>
+        <li class="changes-divider"><span class="kind">0.4.1</span><div><p>Your data on its own disk, and upgrades that keep your changes.</p></div></li>
+        <li><span class="kind new">new</span><div><p>A separate data disk for the VMs.</p><p>Apps, files and settings live on <code>llmos-data</code>; upgrading means replacing the OS disk.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Your version of an app wins.</p><p>When a new release ships a newer built-in app, the one you changed is still the one that opens.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Upgrade an app with a bigger model.</p><p>⇪ in the title bar or Ctrl+Alt+U: pick any installed or cloud model and let it improve the running app.</p></div></li>
+        <li class="changes-divider"><span class="kind">0.4.0</span><div><p>A generated desktop, and a first step out of the browser.</p></div></li>
         <li><span class="kind new">new</span><div><p>Describe your desktop.</p><p><code>/desktop taskbar</code>, <code>/desktop dock</code>, or any description: a taskbar at the bottom (Windows-like) or a menu bar with a dock (Mac-like), dock position, clock, window buttons, wallpaper. The model proposes a layout, the kernel validates every field. Pinned apps that don’t exist yet are written the first time you click them.</p></div></li>
         <li><span class="kind new">new</span><div><p>A Prompt button instead of a Start menu.</p><p>Search your apps or describe a new one from the same box. Also on the Super/Windows key and Ctrl+Space.</p></div></li>
         <li><span class="kind new">new</span><div><p>Alt+Tab window switcher.</p><p>Works in kiosk mode and on the native renderer; in a normal browser, where the host OS keeps Alt+Tab, use Alt+` instead. Shortcuts work even while an app has focus.</p></div></li>
@@ -301,7 +315,7 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
         </figure>
         <figure>
           <img src="screenshots/v040_desktop_generated.webp" alt="A desktop designed from a description: menubar with a centered clock and a dock on the left" loading="lazy">
-          <figcaption>Designed from a sentence: clock in the middle, dock on the left. “Mail” isn’t installed, so its ✦ writes it on first click.</figcaption>
+          <figcaption>Designed from a sentence: clock in the middle, dock on the left. “Mail” isn’t installed, so its ◌ writes it on first click.</figcaption>
         </figure>
       </div>
       <div class="figs" style="margin-top:40px">
@@ -513,12 +527,12 @@ npm test                  <span class="c"># 604 tests</span></pre>
         <div class="table-scroll" style="margin-top:40px">
           <table class="plain">
             <tr><th>Image</th><th>Contents</th><th>Size</th><th>Download</th></tr>
-            <tr><td>Micro</td><td>Buildroot, Node.js, Dropbear. Sandboxed apps only.</td><td class="m">~50 MB</td><td class="m"><a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.0/llmos-0.4.0-micro.qcow2">qcow2</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.0/llmos-0.4.0-micro.vhdx">vhdx</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.0/llmos-0.4.0-micro.ova">ova</a></td></tr>
-            <tr><td>Server</td><td>Alpine, Docker, Node.js. Adds background process apps.</td><td class="m">~700 MB</td><td class="m"><a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.0/llmos-0.4.0-server.qcow2">qcow2</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.0/llmos-0.4.0-server.vhdx">vhdx</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.0/llmos-0.4.0-server.ova">ova</a></td></tr>
-            <tr><td>Desktop</td><td>Server plus a full-screen Chromium kiosk.</td><td class="m">~1 GB</td><td class="m"><a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.0/llmos-0.4.0-desktop.qcow2">qcow2</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.0/llmos-0.4.0-desktop.vhdx">vhdx</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.0/llmos-0.4.0-desktop.ova">ova</a></td></tr>
+            <tr><td>Micro</td><td>Buildroot, Node.js, Dropbear. Sandboxed apps only.</td><td class="m">~50 MB</td><td class="m"><a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-0.4.1-micro.qcow2">qcow2</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-0.4.1-micro.vhdx">vhdx</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-0.4.1-micro.ova">ova</a></td></tr>
+            <tr><td>Server</td><td>Alpine, Docker, Node.js. Adds background process apps.</td><td class="m">~700 MB</td><td class="m"><a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-0.4.1-server.qcow2">qcow2</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-0.4.1-server.vhdx">vhdx</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-0.4.1-server.ova">ova</a></td></tr>
+            <tr><td>Desktop</td><td>Server plus a full-screen Chromium kiosk.</td><td class="m">~1 GB</td><td class="m"><a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-0.4.1-desktop.qcow2">qcow2</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-0.4.1-desktop.vhdx">vhdx</a> · <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-0.4.1-desktop.ova">ova</a></td></tr>
           </table>
         </div>
-        <p class="note">The VM images are from the v0.4.0 release. Log in as <code>root</code> / <code>llmos</code> and change the password, then open <code>http://&lt;vm-ip&gt;:3000</code>. If you reach the VM by IP instead of a localhost port forward, add that address to <code>LLMOS_ALLOWED_HOSTS</code>. qcow2 for Proxmox/KVM, vhdx for Hyper-V, ova for VirtualBox/VMware. <a href="https://github.com/DayZAnder/llm-os/releases">All releases</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/THIRD-PARTY-LICENSES.md">third-party licenses</a>.</p>
+        <p class="note">The VM images are from the v0.4.1 release. Attach <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-data.qcow2">llmos-data</a> (<a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-data.vhdx">vhdx</a>, <a href="https://github.com/DayZAnder/llm-os/releases/download/v0.4.1/llmos-data.vmdk">vmdk</a>) as a second disk so your apps and files survive upgrades. Log in as <code>root</code> / <code>llmos</code> and change the password, then open <code>http://&lt;vm-ip&gt;:3000</code>. If you reach the VM by IP instead of a localhost port forward, add that address to <code>LLMOS_ALLOWED_HOSTS</code>. qcow2 for Proxmox/KVM, vhdx for Hyper-V, ova for VirtualBox/VMware. <a href="https://github.com/DayZAnder/llm-os/releases">All releases</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/THIRD-PARTY-LICENSES.md">third-party licenses</a>.</p>
       </div>
     </div>
   </section>
@@ -544,7 +558,7 @@ npm test                  <span class="c"># 604 tests</span></pre>
 
 <footer>
   <div class="wrap">
-    <span>LLM OS 0.4.0 · <a href="https://github.com/DayZAnder/llm-os/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/CONTRIBUTING.md">Contributing</a></span>
+    <span>LLM OS 0.4.2 · <a href="https://github.com/DayZAnder/llm-os/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/CONTRIBUTING.md">Contributing</a></span>
     <span>This site makes no third-party requests and sets no cookies.</span>
     <span class="tm">Windows is a trademark of Microsoft; macOS of Apple. LLM OS is not affiliated with either.</span>
   </div>
