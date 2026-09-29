@@ -4023,6 +4023,8 @@ const BOOT_ICON = { ok: '✓', warn: '⚠', error: '✗', off: '–' };
 function renderServices(container, report) {
   const list = document.createElement('div');
   list.className = 'svc-list';
+  // Asking the model needs a model: with none reachable the button could only fail
+  const modelsUp = report.services.find(s => s.id === 'models')?.status === 'ok';
   for (const s of report.services) {
     const row = document.createElement('div');
     row.className = `svc svc-${s.status}`;
@@ -4042,7 +4044,7 @@ function renderServices(container, report) {
       fix.textContent = '→ ' + s.fix;
       row.appendChild(fix);
     }
-    if (s.status === 'warn' || s.status === 'error') {
+    if (modelsUp && (s.status === 'warn' || s.status === 'error')) {
       // Opt-in only: sends this check's name, detail and fix to the model
       const ask = document.createElement('button');
       ask.className = 'svc-ask';
