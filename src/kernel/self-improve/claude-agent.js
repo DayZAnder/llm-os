@@ -8,10 +8,11 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from '../config.js';
+import { DATA_DIR as BASE_DATA_DIR } from '../paths.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const PROJECT_ROOT = join(__dirname, '..', '..', '..');
-const DATA_DIR = join(PROJECT_ROOT, 'data');
+const DATA_DIR = BASE_DATA_DIR;
 const QUEUE_FILE = join(DATA_DIR, 'claude-tasks.json');
 
 // --- Queue management ---

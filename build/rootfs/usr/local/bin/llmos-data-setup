@@ -1,0 +1,54 @@
+#!/bin/sh
+# llmos-data-setup — prepare the user data location and print its path.
+#
+# User data (generated apps, files, app storage, theme, desktop, custom
+# shells, .env with API keys) lives apart from the OS in /opt/llm-os, so an
+# upgrade can replace the OS without touching it.
+#
+#   1. If a disk labelled LLMOSDATA is attached, mount it at the data path.
+#      Keep that disk and swap only the OS disk to upgrade.
+#   2. Otherwise the data path is a plain directory on the system disk
+#      (still separate from /opt/llm-os).
+#   3. Once, move data from the pre-0.4 layout (/opt/llm-os/data, .env).
+#
+# POSIX sh, BusyBox-compatible. Overridable for tests:
+#   LLMOS_DATA_ROOT (default /var/lib/llmos), LLMOS_APP_DIR (default /opt/llm-os)
+
+DATA="${LLMOS_DATA_ROOT:-/var/lib/llmos}"
+APP="${LLMOS_APP_DIR:-/opt/llm-os}"
+MARK="$DATA/.llmos-data"
+
+mkdir -p "$DATA"
+
+# 1. Data disk
+if [ -z "$LLMOS_SKIP_MOUNT" ] && ! grep -q " $DATA " /proc/mounts 2>/dev/null; then
+    DEV=$(blkid 2>/dev/null | grep 'LABEL="LLMOSDATA"' | head -n 1 | cut -d: -f1)
+    if [ -n "$DEV" ]; then
+        if mount -o noatime "$DEV" "$DATA" 2>/dev/null; then
+            echo "llmos-data-setup: mounted data disk $DEV at $DATA" >&2
+        else
+            echo "llmos-data-setup: could not mount $DEV, using $DATA on the system disk" >&2
+        fi
+    fi
+fi
+
+# 3. One-time migration from the old layout. A data disk that has already
+#    been used carries its own marker, so moving it to a fresh OS disk never
+#    overwrites it with that disk's empty defaults.
+if [ ! -e "$MARK" ]; then
+    if [ -d "$APP/data" ] && [ ! -L "$APP/data" ] && [ -n "$(ls -A "$APP/data" 2>/dev/null)" ]; then
+        cp -a "$APP/data/." "$DATA/" && echo "llmos-data-setup: moved $APP/data to $DATA" >&2
+    fi
+    if [ -f "$APP/.env" ] && [ ! -L "$APP/.env" ] && [ ! -f "$DATA/.env" ]; then
+        cp -a "$APP/.env" "$DATA/.env" && echo "llmos-data-setup: moved $APP/.env to $DATA/.env" >&2
+    fi
+    echo "LLM OS data v1" > "$MARK"
+fi
+
+# Configuration lives with the data; start from the example on first boot
+if [ ! -f "$DATA/.env" ]; then
+    if [ -f "$APP/.env.example" ]; then cp "$APP/.env.example" "$DATA/.env"; else : > "$DATA/.env"; fi
+fi
+chmod 600 "$DATA/.env" 2>/dev/null
+
+echo "$DATA"

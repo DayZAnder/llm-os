@@ -1,4 +1,5 @@
 #!/bin/sh
+LLMOS_ENV="/var/lib/llmos/.env"; [ -f "$LLMOS_ENV" ] || LLMOS_ENV="/opt/llm-os/.env"
 # Auto-login script for tty1 — shows system status, then drops to shell
 
 clear
@@ -34,13 +35,13 @@ fi
 
 printf "  Claude:  "
 if command -v claude >/dev/null 2>&1; then
-    if grep -q 'ANTHROPIC_API_KEY=.\+' /opt/llm-os/.env 2>/dev/null; then
+    if grep -q 'ANTHROPIC_API_KEY=.\+' "${LLMOS_ENV:-/var/lib/llmos/.env}" 2>/dev/null; then
         echo "ready (API key configured)"
     else
         echo "installed (needs API key — see llmos-config)"
     fi
 else
-    if grep -q 'ANTHROPIC_API_KEY=.\+' /opt/llm-os/.env 2>/dev/null; then
+    if grep -q 'ANTHROPIC_API_KEY=.\+' "${LLMOS_ENV:-/var/lib/llmos/.env}" 2>/dev/null; then
         echo "not installed (run: llmos-claude to install + launch)"
     else
         echo "not installed (run: llmos-claude — needs API key)"

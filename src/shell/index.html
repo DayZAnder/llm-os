@@ -197,6 +197,13 @@
   .evolve-input { width: 100%; box-sizing: border-box; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font: inherit; resize: vertical; margin-bottom: 12px; }
   .evolve-input:focus { outline: none; border-color: var(--accent); }
   .cap-sensitive { color: var(--warning); }
+  .upgrade-modal { width: min(560px, 92vw); }
+  .upgrade-models { display: flex; flex-direction: column; gap: 2px; margin: 0 0 12px; max-height: 300px; overflow: auto; }
+  .upgrade-model { display: grid; grid-template-columns: 20px 1fr auto auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
+  .upgrade-model:hover { background: var(--bg-tertiary); }
+  .upgrade-model:has(input:checked) { background: var(--bg-tertiary); outline: 1px solid var(--accent-dim); }
+  .upgrade-model .um-tier { font-size: 10px; letter-spacing: 1px; color: var(--accent); }
+  .upgrade-model .um-price { font: 11px var(--font-mono); color: var(--text-secondary); min-width: 150px; text-align: right; }
   /* --- Desktop layout (bar, dock, launcher, switcher) --- */
   /* Portable components in the shell use the same tokens as apps */
   :root {
@@ -1720,7 +1727,13 @@ function addAppWindow(appId, iframe, title, model, icon = '') {
   modifyBtn.title = 'Modify this app with AI';
   modifyBtn.onclick = (e) => { e.stopPropagation(); openEvolveDialog(appId); };
 
-  titlebar.append(titleEl, modelTag, errBadge, modifyBtn, createTitleButtons(appId, () => closeApp(appId)));
+  const upgradeBtn = document.createElement('button');
+  upgradeBtn.className = 'win-btn';
+  upgradeBtn.textContent = '⇪';
+  upgradeBtn.title = 'Upgrade with a bigger model (Ctrl+Alt+U)';
+  upgradeBtn.onclick = (e) => { e.stopPropagation(); openUpgradeDialog(appId); };
+
+  titlebar.append(titleEl, modelTag, errBadge, modifyBtn, upgradeBtn, createTitleButtons(appId, () => closeApp(appId)));
 
   const body = document.createElement('div');
   body.className = 'app-body';
@@ -2119,7 +2132,7 @@ const evolving = new Set();
  * Ask the LLM for a new version of a running app and hot-swap it into the
  * same window. New capabilities go through the approval dialog.
  */
-async function evolveApp(appId, instruction, { fixErrors = false } = {}) {
+async function evolveApp(appId, instruction, { fixErrors = false, target = null } = {}) {
   const info = openIframeApps.get(appId);
   const running = sandboxMgr.getApp(appId);
   if (!info || !running || evolving.has(appId)) return;
@@ -2134,10 +2147,10 @@ async function evolveApp(appId, instruction, { fixErrors = false } = {}) {
   log(`${info.title}: ${instruction ? `modifying — "${instruction}"` : `fixing ${errors.length} error(s)`}`);
 
   try {
-    const live = openLivePanel(`${instruction ? 'Updating' : 'Fixing'}: ${info.title}`);
+    const live = openLivePanel(target ? `Upgrading ${info.title} with ${target.label}` : `${instruction ? 'Updating' : 'Fixing'}: ${info.title}`);
     let next;
     try {
-      next = await streamJob('/api/evolve', { code: running.code, instruction, errors, prompt: info.prompt }, live);
+      next = await streamJob('/api/evolve', { code: running.code, instruction, errors, prompt: info.prompt, target: target ? { provider: target.provider, model: target.model } : undefined }, live);
     } finally {
       live.close();
     }
@@ -2418,11 +2431,15 @@ async function refreshDeskApps() {
     const res = await fetch('/api/registry/browse?limit=500').then(r => r.json());
     const apps = res.apps || res;
     deskAppsByName = new Map();
-    // Newest version of each name wins (browse is newest first)
+    // Per name: the user's own variant wins over a built-in, then the newest
+    // (browse is newest first). So an OS upgrade never replaces an app the
+    // user changed; the new built-in stays available in the registry.
     for (const a of apps) {
       if (a.type === 'process') continue;
       const name = (a.manifest?.name || a.title || '').toLowerCase();
-      if (name && !deskAppsByName.has(name)) deskAppsByName.set(name, a);
+      if (!name) continue;
+      const have = deskAppsByName.get(name);
+      if (!have || (have.origin === 'builtin' && a.origin !== 'builtin')) deskAppsByName.set(name, a);
     }
   } catch {}
 }
@@ -2741,17 +2758,19 @@ function commitSwitch() {
   if (id && WM.windows.has(id)) WM.restore(id);
 }
 
-function handleHotkey(combo) {
+function handleHotkey(combo, fromAppId) {
   if (combo === 'switch-next') switchWindows(1);
   else if (combo === 'switch-prev') switchWindows(-1);
   else if (combo === 'alt-up') commitSwitch();
   else if (combo === 'launcher') { if (!switcher) openLauncher(); }
+  else if (combo === 'upgrade') { const id = fromAppId || focusedWindowId(); if (id) openUpgradeDialog(id); }
 }
 
 let shellSuperAlone = false;
 document.addEventListener('keydown', (e) => {
   if (e.altKey && (e.key === 'Tab' || e.key === '`')) { e.preventDefault(); handleHotkey(e.shiftKey ? 'switch-prev' : 'switch-next'); }
   else if (e.ctrlKey && e.code === 'Space') { e.preventDefault(); handleHotkey('launcher'); }
+  else if (e.ctrlKey && e.altKey && e.code === 'KeyU') { e.preventDefault(); handleHotkey('upgrade'); }
   shellSuperAlone = e.key === 'Meta' || e.key === 'OS';
 }, true);
 document.addEventListener('keyup', (e) => {
@@ -2759,6 +2778,101 @@ document.addEventListener('keyup', (e) => {
   if ((e.key === 'Meta' || e.key === 'OS') && shellSuperAlone) handleHotkey('launcher');
   shellSuperAlone = false;
 }, true);
+
+// --- Upgrade an app with a model of your choice ---
+// Ctrl+Alt+U or the ⇪ button: pick any available model (local or cloud) and
+// let it rewrite the running app. Same pipeline as ✎ Modify: analyzer,
+// approval for new permissions, hot-swap, new version in the registry.
+
+const UPGRADE_DEFAULT = 'Improve this app with your full ability: fix bugs, handle edge cases, polish the layout and interactions, and add the small features a user would expect. Keep everything that works, and keep stored data and file formats compatible.';
+
+function fmtPrice(m) {
+  if (m.local) return 'local · free';
+  if (!m.price) return 'price unknown';
+  return `${m.price[0]} / ${m.price[1]} per M tokens`;
+}
+
+async function openUpgradeDialog(appId) {
+  const info = openIframeApps.get(appId);
+  if (!info || document.getElementById('upgrade-dialog')) return;
+  let models = [];
+  try { models = await fetch('/api/models').then(r => r.json()); } catch {}
+  if (!models.length) { log('No models available to upgrade with — configure Ollama or an API key', 'warn'); return; }
+
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  overlay.id = 'upgrade-dialog';
+  const modal = document.createElement('div');
+  modal.className = 'modal upgrade-modal';
+  const h = document.createElement('h3');
+  h.textContent = `Upgrade "${info.title}"`;
+  const hint = document.createElement('p');
+  hint.className = 'evolve-hint';
+  hint.textContent = `Now written by ${info.model || 'unknown'}. Pick a model to rewrite it; the app keeps its data and the old version stays in the registry.`;
+
+  const list = document.createElement('div');
+  list.className = 'upgrade-models';
+  // Default choice: the strongest model that isn't the current one
+  let chosen = models.find(m => m.model !== info.model) || models[0];
+  const rows = models.map(m => {
+    const row = document.createElement('label');
+    row.className = 'upgrade-model';
+    const radio = document.createElement('input');
+    radio.type = 'radio';
+    radio.name = 'upgrade-model';
+    radio.checked = m === chosen;
+    radio.onchange = () => { chosen = m; };
+    const name = document.createElement('span');
+    name.className = 'um-name';
+    name.textContent = m.label + (m.model === info.model ? '  (current)' : '');
+    const tier = document.createElement('span');
+    tier.className = 'um-tier';
+    tier.textContent = '▮'.repeat(Math.max(1, Math.round(m.tier / 2))) + '▯'.repeat(Math.max(0, 5 - Math.round(m.tier / 2)));
+    tier.title = `capability tier ${m.tier}`;
+    const price = document.createElement('span');
+    price.className = 'um-price';
+    price.textContent = fmtPrice(m);
+    row.append(radio, name, tier, price);
+    return row;
+  });
+  list.append(...rows);
+
+  const input = document.createElement('textarea');
+  input.className = 'evolve-input';
+  input.rows = 3;
+  input.value = UPGRADE_DEFAULT;
+
+  const row = document.createElement('div');
+  row.className = 'btn-row';
+  const cancel = document.createElement('button');
+  cancel.className = 'btn-deny';
+  cancel.textContent = 'Cancel';
+  const go = document.createElement('button');
+  go.className = 'btn-approve';
+  go.textContent = 'Upgrade';
+  row.append(cancel, go);
+  modal.append(h, hint, list, input, row);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  go.focus();
+
+  const close = () => overlay.remove();
+  cancel.onclick = close;
+  overlay.addEventListener('mousedown', (e) => { if (e.target === overlay) close(); });
+  overlay.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
+  go.onclick = () => {
+    close();
+    evolveApp(appId, input.value.trim() || UPGRADE_DEFAULT, {
+      fixErrors: sandboxMgr.getErrors(appId).length > 0,
+      target: { provider: chosen.provider, model: chosen.model, label: chosen.label },
+    });
+  };
+}
+
+function focusedWindowId() {
+  for (const [id, w] of WM.windows) if (w.el.classList.contains('focused') && w.state !== 'minimized') return id;
+  return null;
+}
 
 // --- Generation Flow ---
 async function generateApp(prompt, options = {}) {

@@ -11,9 +11,10 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 // Single source for the defaults: the sandbox injects the same tokens.
 import { DEFAULT_THEME } from '../shell/sandbox.js';
+import { dataPath } from './paths.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-let themeFile = join(__dirname, '..', '..', 'data', 'theme.json');
+let themeFile = dataPath('theme.json');
 
 export { DEFAULT_THEME };
 

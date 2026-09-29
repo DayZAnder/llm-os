@@ -4,8 +4,8 @@ import { provider as ollamaProvider } from './providers/ollama.js';
 import { provider as claudeProvider } from './providers/claude.js';
 import { provider as openaiProvider } from './providers/openai-compatible.js';
 import { buildContext } from './knowledge.js';
-import { getBestModel } from './resource-monitor.js';
-import { record as recordUsage, calculateCost } from './usage-tracker.js';
+import { getBestModel, getAvailableModels } from './resource-monitor.js';
+import { record as recordUsage, calculateCost, PRICING } from './usage-tracker.js';
 import { estimateTokenCount } from './utils/normalize.js';
 
 // Prompt cache — exact match dedup (in-memory, ephemeral)
@@ -695,7 +695,7 @@ const MAX_EVOLVE_ERRORS = 20;
  * and/or runtime errors (self-healing).
  * @param {{ code: string, instruction?: string, errors?: string[], prompt?: string }} input
  */
-export async function evolve({ code, instruction = '', errors = [], prompt = '' }, options = {}) {
+export async function evolve({ code, instruction = '', errors = [], prompt = '', target = null }, options = {}) {
   const start = Date.now();
   if (typeof code !== 'string' || !code.trim()) throw new Error('Missing code');
 
@@ -707,7 +707,16 @@ export async function evolve({ code, instruction = '', errors = [], prompt = '' 
     .map(e => sanitizePrompt(e.slice(0, 500)).clean);
   if (!clean && cleanErrors.length === 0) throw new Error('Nothing to change: give an instruction or errors');
 
-  const route = await resolveRoute(modelHint, 'complex');
+  // An explicitly chosen model ("upgrade with a bigger model") must be one we offer
+  let route;
+  if (target) {
+    const offered = await listUpgradeModels();
+    const pick = offered.find(m => m.provider === target.provider && m.model === target.model);
+    if (!pick) throw new Error(`Model not available: ${target.provider}/${target.model}`);
+    route = { provider: pick.provider, model: pick.model };
+  } else {
+    route = await resolveRoute(modelHint, 'complex');
+  }
   console.log(`[gateway] Evolving app: provider=${route.provider}${route.model ? ` model=${route.model}` : ''} errors=${cleanErrors.length}`);
 
   let request = '';
@@ -938,4 +947,38 @@ export async function generateDesktop(description, options = {}) {
   // bad field with the preset's value, so the result is safe to use.
   if (last && last.parsed) { delete last.parsed; return last; }
   throw new Error('Desktop layout rejected after 2 attempts: the model did not return valid JSON');
+}
+
+// --- Models offered for "upgrade with a bigger model" ---
+
+// Current Claude models, strongest first (tier: rough capability, higher = stronger)
+const CLAUDE_UPGRADE_MODELS = [
+  { model: 'claude-fable-5-1', label: 'Claude Fable 5.1', tier: 10 },
+  { model: 'claude-opus-5-5', label: 'Claude Opus 5.5', tier: 10 },
+  { model: 'claude-opus-5', label: 'Claude Opus 5', tier: 9 },
+  { model: 'claude-sonnet-5', label: 'Claude Sonnet 5', tier: 8 },
+  { model: 'claude-haiku-4-5', label: 'Claude Haiku 4.5', tier: 6 },
+];
+
+/**
+ * Every model the user can pick to rewrite an app: local Ollama models that
+ * are installed, plus the cloud models whose provider is configured.
+ * @returns {Promise<Array<{provider, model, label, tier, local, price: [in, out]|null}>>}
+ */
+export async function listUpgradeModels() {
+  const out = [];
+  const price = (m) => PRICING[m] || null;
+  let local = [];
+  try { local = (await getAvailableModels()).filter(m => m.provider === 'ollama'); } catch {}
+  for (const m of local) {
+    out.push({ provider: 'ollama', model: m.name, label: m.name, tier: m.tier || 4, local: true, price: [0, 0] });
+  }
+  if (providers.get('claude').isAvailable(getProviderConfig('claude'))) {
+    for (const c of CLAUDE_UPGRADE_MODELS) out.push({ provider: 'claude', ...c, local: false, price: price(c.model) });
+  }
+  const oa = getProviderConfig('openai');
+  if (providers.get('openai').isAvailable(oa) && oa.model) {
+    out.push({ provider: 'openai', model: oa.model, label: oa.model, tier: 7, local: false, price: price(oa.model) });
+  }
+  return out.sort((a, b) => b.tier - a.tier);
 }

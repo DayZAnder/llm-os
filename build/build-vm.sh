@@ -100,6 +100,7 @@ chmod +x "${MOUNT_DIR}/etc/init.d/llmos" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/etc/local.d/llmos-firstboot.start" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/usr/local/bin/llmos-login" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/usr/local/bin/llmos-config" 2>/dev/null || true
+chmod +x "${MOUNT_DIR}/usr/local/bin/llmos-data-setup" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/usr/local/bin/llmos-kiosk" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/etc/init.d/llmos-kiosk" 2>/dev/null || true
 

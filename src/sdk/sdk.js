@@ -101,6 +101,7 @@
     let combo = null;
     if (e.altKey && (e.key === 'Tab' || e.key === '`')) combo = e.shiftKey ? 'switch-prev' : 'switch-next';
     else if (e.ctrlKey && e.code === 'Space') combo = 'launcher';
+    else if (e.ctrlKey && e.altKey && e.code === 'KeyU') combo = 'upgrade';
     superAlone = e.key === 'Meta' || e.key === 'OS';
     if (combo) {
       e.preventDefault();

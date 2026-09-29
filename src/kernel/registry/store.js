@@ -6,9 +6,10 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { normalizePrompt, trigramSimilarity } from '../utils/normalize.js';
+import { DATA_DIR as BASE_DATA_DIR } from '../paths.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const DATA_DIR = join(__dirname, '..', '..', '..', 'data');
+const DATA_DIR = BASE_DATA_DIR;
 const REGISTRY_FILE = join(DATA_DIR, 'registry.json');
 const SEEDED_FILE = join(DATA_DIR, 'seeded-examples.json'); // example file → hash last seeded
 const EXAMPLES_DIR = join(__dirname, '..', '..', '..', 'examples');
@@ -89,6 +90,12 @@ function load() {
   try {
     const data = JSON.parse(readFileSync(REGISTRY_FILE, 'utf-8'));
     apps = new Map(data.map(entry => [entry.hash, entry]));
+    // Registries from before 0.4 have no origin: infer it from what was seeded
+    let seededHashes = new Set();
+    try { seededHashes = new Set(Object.values(JSON.parse(readFileSync(SEEDED_FILE, 'utf-8')))); } catch {}
+    for (const e of apps.values()) {
+      if (!e.origin) e.origin = (seededHashes.has(e.hash) || e.provider === 'built-in') ? 'builtin' : 'user';
+    }
     console.log(`[registry] Loaded ${apps.size} apps`);
   } catch (err) {
     console.warn('[registry] Failed to load:', err.message);
@@ -132,6 +139,7 @@ function seedFromExamples() {
       if (genMatch) { try { generated = JSON.parse(genMatch[1]); } catch {} }
       const str = (v) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, 200) : null);
       publishApp({
+        origin: 'builtin',
         parentHash,
         manifest,
         prompt: str(generated?.prompt) || (manifest?.name ? `${manifest.name} (built-in app)` : `a ${name}`),
@@ -183,7 +191,7 @@ export function findHandlers(path, mime = null) {
       const h = a.manifest?.handles || [];
       return (ext && h.includes(ext)) || (mime && h.includes(mime.toLowerCase()));
     })
-    .sort((a, b) => (b.rating?.up || 0) - (a.rating?.up || 0) || b.launches - a.launches || b.createdAt - a.createdAt);
+    .sort((a, b) => (a.origin === 'user' ? 0 : 1) - (b.origin === 'user' ? 0 : 1) || (b.rating?.up || 0) - (a.rating?.up || 0) || b.launches - a.launches || b.createdAt - a.createdAt);
 }
 
 /** Version lineage of an app, oldest first. */
@@ -203,7 +211,7 @@ export function getLineage(hash) {
  * Save an app to the registry.
  * Returns the hash (content address). Deduplicates by code hash.
  */
-export function publishApp({ prompt, code, dockerfile, type, capabilities, model, provider, manifest, parentHash }) {
+export function publishApp({ prompt, code, dockerfile, type, capabilities, model, provider, manifest, parentHash, origin }) {
   const hash = contentHash(code);
 
   if (apps.has(hash)) {
@@ -231,6 +239,9 @@ export function publishApp({ prompt, code, dockerfile, type, capabilities, model
     launches: 1,
     createdAt: Date.now(),
     tags: extractTags(prompt),
+    // 'builtin' = shipped with the OS (examples/), 'user' = generated or changed by the user.
+    // A user's variant always wins over a newer built-in on upgrade.
+    origin: origin === 'builtin' ? 'builtin' : 'user',
     manifest: cleanManifest,
     parentHash: parent ? parentHash : null,
     version: parent ? (parent.version || 1) + 1 : 1,

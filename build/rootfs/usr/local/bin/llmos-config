@@ -1,7 +1,8 @@
 #!/bin/sh
 # LLM OS configuration helper
 
-ENV_FILE="/opt/llm-os/.env"
+ENV_FILE="${LLMOS_DATA_DIR:-/var/lib/llmos}/.env"
+[ -f "$ENV_FILE" ] || ENV_FILE="/opt/llm-os/.env"  # before first boot of 0.4
 
 echo ""
 echo "  LLM OS Configuration"

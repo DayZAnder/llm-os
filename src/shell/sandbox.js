@@ -33,7 +33,7 @@ export const SYSCALL_CAPS = Object.freeze({
   'sys:hotkey': null,
 });
 
-const HOTKEYS = ['switch-next', 'switch-prev', 'alt-up', 'launcher'];
+const HOTKEYS = ['switch-next', 'switch-prev', 'alt-up', 'launcher', 'upgrade'];
 
 /**
  * Check whether an app may perform a syscall.

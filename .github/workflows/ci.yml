@@ -127,6 +127,19 @@ jobs:
           name: llmos-micro
           path: release/
 
+      # An empty data disk, the same for every version. Attach it as a second
+      # disk: user data lives there (see build/rootfs/usr/local/bin/llmos-data-setup),
+      # so upgrading means swapping only the OS disk.
+      - name: Create empty data disk
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-utils e2fsprogs
+          truncate -s 8G data.img
+          mkfs.ext4 -q -L LLMOSDATA -m 0 data.img
+          qemu-img convert -c -O qcow2 data.img release/llmos-data.qcow2
+          qemu-img convert -O vhdx -o subformat=dynamic data.img release/llmos-data.vhdx
+          qemu-img convert -O vmdk -o subformat=streamOptimized data.img release/llmos-data.vmdk
+          rm data.img
+
       - name: List release files
         run: ls -lh release/
 

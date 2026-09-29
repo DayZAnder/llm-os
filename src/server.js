@@ -3,7 +3,7 @@ import { readFileSync, existsSync } from 'fs';
 import { join, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './kernel/config.js';
-import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme, generateDesktop } from './kernel/gateway.js';
+import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme, generateDesktop, listUpgradeModels } from './kernel/gateway.js';
 import { loadTheme, saveTheme, resetTheme, validateTheme } from './kernel/theme.js';
 import { loadLayout, saveLayout, resetLayout, validateLayout, PRESETS as DESKTOP_PRESETS } from './kernel/desktop.js';
 import { checkApiRequest } from './kernel/http-guard.js';
@@ -360,6 +360,12 @@ async function handleAPI(method, fullUrl, body, res) {
         result.capabilities = [...new Set([...result.capabilities, ...proposed])];
         return result;
       });
+      return;
+    }
+
+    // GET /api/models — models the user can pick to upgrade/rewrite an app
+    if (method === 'GET' && url === '/api/models') {
+      sendJson(res, 200, await listUpgradeModels());
       return;
     }
 

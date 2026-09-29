@@ -8,9 +8,10 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
+import { DATA_DIR as BASE_DATA_DIR } from './paths.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const DATA_DIR = join(__dirname, '..', '..', 'data');
+const DATA_DIR = BASE_DATA_DIR;
 const PROFILE_PATH = join(DATA_DIR, 'profile.yaml');
 const EXAMPLE_PATH = join(DATA_DIR, 'profile.example.yaml');
 const SNAPSHOT_DIR = join(DATA_DIR, 'snapshot');

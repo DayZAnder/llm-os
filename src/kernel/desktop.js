@@ -10,9 +10,10 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
+import { dataPath } from './paths.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-let layoutFile = join(__dirname, '..', '..', 'data', 'desktop.json');
+let layoutFile = dataPath('desktop.json');
 
 export function setLayoutFile(path) { layoutFile = path; }
 

@@ -7,6 +7,7 @@ import { execSync } from 'child_process';
 import { writeFileSync, mkdirSync, existsSync, rmSync } from 'fs';
 import { join } from 'path';
 import { tmpdir, platform } from 'os';
+import { dataPath } from '../paths.js';
 
 const allocatedPorts = new Set();
 const processes = new Map();
@@ -117,7 +118,7 @@ export async function launchContainer(appId, imageName, capabilities = [], conta
   // Build volume bindings
   const binds = [];
   if (hasVolume) {
-    const dataDir = join(process.cwd(), 'data', appId);
+    const dataDir = dataPath(appId);
     if (!existsSync(dataDir)) mkdirSync(dataDir, { recursive: true });
     binds.push(`${dataDir}:/app/data`);
   }

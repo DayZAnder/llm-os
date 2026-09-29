@@ -1,7 +1,7 @@
 // Tests for the app registry
 // Run: node tests/registry.test.js
 
-import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, deleteApp, findSimilar } from '../src/kernel/registry/store.js';
+import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, deleteApp, findSimilar, findHandlers } from '../src/kernel/registry/store.js';
 
 let passed = 0;
 let failed = 0;
@@ -158,6 +158,19 @@ assert(browseApps().total === baselineTotal + 2, 'total reduced after delete');
 // Cleanup remaining test data
 deleteApp(result1.hash);
 deleteApp(result2.hash);
+
+// --- origin: the user's variant wins over a built-in ---
+console.log('\norigin:');
+const base = publishApp({ prompt: 'origin test viewer', code: '<!-- origin test base -->', type: 'iframe', origin: 'builtin', manifest: { name: 'OriginViewer', handles: ['.origintest'] } });
+assert(base.entry.origin === 'builtin', 'seeded app is builtin');
+const mine = publishApp({ prompt: 'origin test viewer', code: '<!-- origin test mine -->', type: 'iframe', parentHash: base.hash, manifest: { name: 'OriginViewer', handles: ['.origintest'] } });
+assert(mine.entry.origin === 'user', 'published apps default to user');
+// An OS upgrade ships a newer built-in on the same lineage
+const upstream = publishApp({ prompt: 'origin test viewer', code: '<!-- origin test upstream v2 -->', type: 'iframe', origin: 'builtin', parentHash: base.hash, manifest: { name: 'OriginViewer', handles: ['.origintest'] } });
+const handlers = findHandlers('/x/file.origintest');
+assert(handlers.length >= 2 && handlers[0].hash === mine.hash, "user's variant is chosen over the newer built-in");
+assert(handlers.some(h => h.hash === upstream.hash), 'the newer built-in is still available');
+for (const h of [upstream.hash, mine.hash, base.hash]) deleteApp(h);
 
 console.log(`\nResults: ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

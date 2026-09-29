@@ -61,6 +61,8 @@ sed -i 's|OLLAMA_URL=.*|OLLAMA_URL=http://localhost:11434|' "${LLMOS_DEST}/.env"
 echo "  Setting permissions..."
 chmod +x "${TARGET_DIR}/etc/init.d/"S* 2>/dev/null || true
 chmod +x "${TARGET_DIR}/usr/local/bin/llmos-login" 2>/dev/null || true
+chmod +x "${TARGET_DIR}/usr/local/bin/llmos-data-setup" 2>/dev/null || true
+cp "${LLMOS_SRC}/.env.example" "${LLMOS_DEST}/.env.example"
 chmod +x "${TARGET_DIR}/etc/profile.d/llmos.sh" 2>/dev/null || true
 
 # --- Create /var directories ---

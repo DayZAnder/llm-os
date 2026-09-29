@@ -5,9 +5,10 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
+import { DATA_DIR as BASE_DATA_DIR } from './paths.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const DATA_DIR = join(__dirname, '..', '..', 'data');
+const DATA_DIR = BASE_DATA_DIR;
 const STATE_FILE = join(DATA_DIR, 'scheduler.json');
 const MAX_HISTORY = 20;
 const CIRCUIT_BREAKER_THRESHOLD = 3;

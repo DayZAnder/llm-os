@@ -9,9 +9,11 @@ case "$1" in
   start)
     printf "Starting LLM OS: "
     cd "${LLMOS_DIR}"
-    # Source environment
-    if [ -f .env ]; then
-      export $(grep -v '^#' .env | grep -v '^$' | xargs)
+    # User data (apps, files, settings, .env) lives apart from the OS so an
+    # upgrade can replace /opt/llm-os; see llmos-data-setup
+    export LLMOS_DATA_DIR="$(/usr/local/bin/llmos-data-setup)"
+    if [ -f "$LLMOS_DATA_DIR/.env" ]; then
+      export $(grep -v '^#' "$LLMOS_DATA_DIR/.env" | grep -v '^$' | xargs)
     fi
     export HOST=0.0.0.0
     export PORT=${PORT:-3000}

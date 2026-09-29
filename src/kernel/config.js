@@ -2,7 +2,10 @@ import { readFileSync, existsSync } from 'fs';
 import { resolve } from 'path';
 
 // Load .env file if it exists
-const envPath = resolve(process.cwd(), '.env');
+// .env belongs to the user: next to their data when LLMOS_DATA_DIR is set
+const envPath = process.env.LLMOS_DATA_DIR && existsSync(resolve(process.env.LLMOS_DATA_DIR, '.env'))
+  ? resolve(process.env.LLMOS_DATA_DIR, '.env')
+  : resolve(process.cwd(), '.env');
 if (existsSync(envPath)) {
   const lines = readFileSync(envPath, 'utf-8').split('\n');
   for (const line of lines) {

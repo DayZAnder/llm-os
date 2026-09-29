@@ -6,9 +6,10 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { estimateTokenCount } from './utils/normalize.js';
+import { dataPath } from './paths.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-let usagePath = join(__dirname, '..', '..', 'data', 'usage.json');
+let usagePath = dataPath('usage.json');
 const MAX_ENTRIES = 2000;
 
 // Prompt-cache pricing relative to the input rate (Anthropic)

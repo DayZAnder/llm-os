@@ -27,7 +27,7 @@ else
 fi
 
 echo ""
-echo "  Config:   vi /opt/llm-os/.env"
+echo "  Config:   vi /var/lib/llmos/.env   (user data: /var/lib/llmos)"
 echo "  Logs:     tail -f /var/log/llmos.log"
 echo "  Services: /etc/init.d/S99llmos {start|stop|restart|status}"
 echo ""

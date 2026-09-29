@@ -8,9 +8,10 @@ import { queueClaudeTask } from './claude-agent.js';
 import { writeFileSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
+import { dataPath } from '../paths.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const REPORTS_DIR = join(__dirname, '..', '..', '..', 'data', 'security-reports');
+const REPORTS_DIR = dataPath('security-reports');
 
 const ATTACK_CATEGORIES = [
   {

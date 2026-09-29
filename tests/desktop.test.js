@@ -82,6 +82,23 @@ mockAnswers(['no json', 'still no json']);
 try { await generateDesktop('x'); assert(false, 'gives up on non-JSON'); }
 catch (err) { assert(/valid JSON/.test(err.message), 'gives up on non-JSON'); }
 
+console.log('\nupgrade with a chosen model:');
+process.env.OLLAMA_URL = 'http://127.0.0.1:1'; // no local models in this test
+const { listUpgradeModels, evolve } = await import('../src/kernel/gateway.js');
+const offered = await listUpgradeModels();
+assert(offered.some(m => m.provider === 'openai') && !offered.some(m => m.provider === 'claude'), 'only configured providers are offered');
+assert(offered.every((m, i) => i === 0 || offered[i - 1].tier >= m.tier), 'strongest models first');
+try {
+  await evolve({ code: '<html></html>', instruction: 'x', target: { provider: 'claude', model: 'claude-opus-5-5' } });
+  assert(false, 'unoffered model rejected');
+} catch (err) {
+  assert(/not available/.test(err.message), 'unoffered model rejected');
+}
+mockAnswers(['<!-- capabilities: ["ui:window"] -->\n<!DOCTYPE html><html><body>v2</body></html>']);
+const pick = offered.find(m => m.provider === 'openai');
+const upgraded = await evolve({ code: '<html></html>', instruction: 'improve', target: { provider: pick.provider, model: pick.model } });
+assert(upgraded.provider === 'openai' && upgraded.model === pick.model && upgraded.code.includes('v2'), 'chosen model does the rewrite');
+
 if (existsSync(file)) rmSync(file);
 console.log(`\nResults: ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

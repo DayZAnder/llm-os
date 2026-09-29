@@ -10,8 +10,9 @@
 
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync, existsSync, renameSync } from 'fs';
 import { join, resolve, sep, dirname, extname } from 'path';
+import { dataPath } from './paths.js';
 
-const DEFAULT_ROOT = resolve(process.cwd(), 'data', 'fs');
+const DEFAULT_ROOT = dataPath('fs');
 const MAX_FILE_BYTES = 10 * 1024 * 1024;     // 10 MB per file
 const MAX_TOTAL_BYTES = 500 * 1024 * 1024;   // 500 MB per filesystem
 

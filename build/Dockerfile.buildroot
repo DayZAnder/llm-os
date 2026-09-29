@@ -40,6 +40,8 @@ RUN wget -q "https://buildroot.org/downloads/buildroot-${BUILDROOT_VERSION}.tar.
 # Copy Buildroot configs (board + defconfig + kernel config)
 # Defconfig uses $(TOPDIR)/../ paths — TOPDIR=/buildroot, so ..=/
 COPY build/buildroot/board/ /board/
+# Shared with the Alpine images: moves user data off the OS disk
+COPY build/rootfs/usr/local/bin/llmos-data-setup /board/llmos/overlay/usr/local/bin/llmos-data-setup
 COPY build/buildroot/configs/ /configs/
 
 # Copy LLM OS source (used by post-build.sh)

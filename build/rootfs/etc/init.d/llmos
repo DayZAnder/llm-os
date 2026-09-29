@@ -26,9 +26,11 @@ start_pre() {
         sleep 1
     done
 
-    # Source .env file
-    if [ -f /opt/llm-os/.env ]; then
-        export $(grep -v '^#' /opt/llm-os/.env | xargs)
+    # User data (apps, files, settings, .env) lives apart from the OS so an
+    # upgrade can replace /opt/llm-os; see llmos-data-setup
+    export LLMOS_DATA_DIR="$(/usr/local/bin/llmos-data-setup)"
+    if [ -f "$LLMOS_DATA_DIR/.env" ]; then
+        export $(grep -v '^#' "$LLMOS_DATA_DIR/.env" | grep -v '^$' | xargs)
     fi
 
     # Bind to all interfaces

@@ -8,8 +8,9 @@
 set -e
 
 # Source API key from .env if not already set
-if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f /opt/llm-os/.env ]; then
-    key=$(grep '^ANTHROPIC_API_KEY=' /opt/llm-os/.env 2>/dev/null | cut -d= -f2-)
+LLMOS_ENV="/var/lib/llmos/.env"; [ -f "$LLMOS_ENV" ] || LLMOS_ENV="/opt/llm-os/.env"
+if [ -z "${ANTHROPIC_API_KEY:-}" ] && [ -f "$LLMOS_ENV" ]; then
+    key=$(grep '^ANTHROPIC_API_KEY=' "$LLMOS_ENV" 2>/dev/null | cut -d= -f2-)
     if [ -n "$key" ]; then
         export ANTHROPIC_API_KEY="$key"
     fi
