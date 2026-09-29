@@ -42,8 +42,9 @@ echo "  Disk: ${LOOP_DISK}"
 LOOP_PART=$(losetup --find --show --offset ${OFFSET} --sizelimit ${PART_SIZE} "${IMAGE_RAW}")
 echo "  Part: ${LOOP_PART}"
 
-# Format root partition
-mkfs.ext4 -L LLMOS -q "${LOOP_PART}"
+# Format root partition. Leave out the newest ext4 features (orphan_file,
+# metadata_csum_seed) so older bootloaders and rescue tools can read it too.
+mkfs.ext4 -L LLMOS -q -O ^orphan_file,^metadata_csum_seed "${LOOP_PART}"
 
 # --- Step 3: Mount and install Alpine ---
 echo "[3/7] Installing Alpine Linux..."
@@ -147,7 +148,11 @@ menuentry "LLM OS v${VERSION} (recovery)" {
 EOF
 
 echo "  Installing GRUB to ${LOOP_DISK}..."
-grub-install --target=i386-pc --boot-directory="${MOUNT_DIR}/boot" --recheck "${LOOP_DISK}"
+# /boot sits on a separate partition loop device, so grub-install can't see
+# the partition table and leaves the modules to read it out of core.img —
+# the image then stops at "grub rescue>" (no such device / unknown
+# filesystem). Embed them explicitly.
+grub-install --target=i386-pc --boot-directory="${MOUNT_DIR}/boot" --modules="part_msdos ext2" --recheck "${LOOP_DISK}"
 echo "  GRUB installed successfully."
 
 echo "  Boot directory contents:"

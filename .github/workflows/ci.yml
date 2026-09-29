@@ -99,6 +99,16 @@ jobs:
       - name: List output
         run: ls -lh build/output/
 
+      # Nothing is released that doesn't boot, keep its data across an
+      # upgrade, and shut down when the hypervisor asks.
+      - name: Boot test (QEMU)
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq qemu-system-x86 qemu-utils e2fsprogs
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules && sudo udevadm trigger --name-match=kvm || true
+          IMG=$(ls build/output/*.qcow2 | head -1)
+          sh build/test/vm-boot-test.sh "$IMG" ${{ matrix.variant == 'micro' && 300 || 900 }}
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:
