@@ -251,6 +251,19 @@ console.log('\nBackward compatibility:');
   assertEq(inferAppType('make me a calculator'), 'iframe', 'inferAppType defaults to iframe');
 }
 
+// --- Re-granting replaces earlier tokens ---
+console.log('\nre-grant:');
+{
+  const first = await grantCapabilities('test-regrant', ['storage:local', 'ui:window']);
+  const second = await grantCapabilities('test-regrant', ['ui:window']);
+  const oldStorage = await verifyToken(first.tokens['storage:local']);
+  assert(!oldStorage.valid && oldStorage.error === 'revoked', 'token for a dropped capability is revoked by the new grant');
+  assert(!checkCapability('test-regrant', 'storage:local'), 'dropped capability no longer checks as granted');
+  assert((await verifyToken(second.tokens['ui:window'])).valid, 'the new grant\'s tokens are valid');
+  revokeAll('test-regrant');
+  assert(!(await verifyToken(second.tokens['ui:window'])).valid, 'revokeAll (window closed) invalidates the rest');
+}
+
 // --- Summary ---
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

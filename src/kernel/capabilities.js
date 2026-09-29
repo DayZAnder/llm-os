@@ -204,6 +204,9 @@ export function proposeCapabilities(prompt) {
  */
 export async function grantCapabilities(appId, capabilities) {
   const valid = capabilities.filter(c => CAPABILITY_TYPES.includes(c));
+  // A new grant replaces the old one: tokens for permissions the user no
+  // longer gives must stop working now, not when they expire.
+  for (const old of appTokenMap.get(appId) || []) revokeToken(old);
   appCaps.set(appId, new Set(valid));
   if (!appStorage.has(appId)) appStorage.set(appId, new Map());
 

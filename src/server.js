@@ -11,7 +11,7 @@ import { bootReport, formatText as formatBootText } from './kernel/boot.js';
 import * as vfs from './kernel/vfs.js';
 import { request as netRequest } from './kernel/net.js';
 import { analyze, analyzeDockerfile } from './kernel/analyzer.js';
-import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType, initTokenKey, verifyToken, tokenKeyReady } from './kernel/capabilities.js';
+import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType, initTokenKey, verifyToken, tokenKeyReady, revokeAll } from './kernel/capabilities.js';
 import { dockerPing } from './kernel/docker/client.js';
 import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses, syncRunningContainers } from './kernel/docker/process-manager.js';
 import { findHandlers, getLineage, publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, rateApp, updateSpec, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
@@ -166,6 +166,7 @@ async function requireCap(appId, token, cap) {
   if (!v.valid) return `capability token rejected (${v.error})`;
   if (v.payload.cap !== cap) return `token is for ${v.payload.cap}, not ${cap}`;
   if (v.payload.appId !== appId) return 'token belongs to another app';
+  if (!checkCapability(appId, cap)) return `${cap} is no longer granted`;
   return null;
 }
 
@@ -635,6 +636,14 @@ Explain in two or three short sentences what this means for the user and exactly
       const result = await grantCapabilities(appId, capabilities);
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
+      return;
+    }
+
+    // POST /api/revoke — an app window closed: its tokens stop working
+    if (method === 'POST' && url === '/api/revoke') {
+      const { appId } = JSON.parse(body);
+      if (typeof appId === 'string') revokeAll(appId);
+      sendJson(res, 200, { ok: true });
       return;
     }
 

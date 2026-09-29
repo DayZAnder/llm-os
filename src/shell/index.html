@@ -1828,6 +1828,7 @@ function addAppWindow(appId, iframe, title, model, icon = '') {
 function closeApp(appId) {
   WM.unregister(appId);
   sandboxMgr.kill(appId);
+  fetch('/api/revoke', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ appId }) }).catch(() => {});
   openIframeApps.delete(appId);
   document.getElementById(`window-${appId}`)?.remove();
   document.getElementById(`taskbar-${appId}`)?.remove();
