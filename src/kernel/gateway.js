@@ -889,7 +889,7 @@ Output ONLY a JSON object, no markdown:
 {"base": "windows" | "mac" | "classic",      the closest preset; anything you leave out comes from it
  "name": "Short Layout Name",
  "bar": {"position": "top"|"bottom"|"none", "style": "taskbar"|"menubar"|"minimal", "height": 24-64,
-         "launcher": {"label": "up to 16 chars", "icon": "up to 4 chars", "position": "left"|"center"|"right"},
+         "launcher": {"label": "up to 16 chars", "icon": "logo" (the OS launcher mark, recommended) or up to 4 chars, "position": "left"|"center"|"right"},
          "clock": {"show": true, "format": "24h"|"12h", "seconds": false, "date": true, "position": "left"|"center"|"right"},
          "showWindows": true, "tray": true},
  "dock": {"position": "bottom"|"left"|"right"|"none", "iconSize": 24-80, "labels": false, "pinned": ["App Name", ...]},

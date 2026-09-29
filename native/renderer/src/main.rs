@@ -275,6 +275,11 @@ fn build(tree: &mut TaffyTree<Measure>, node: &Value, text: &Text, map: &mut Has
             }
             tree.new_leaf(style).unwrap()
         }
+        "logo" => {
+            let px = num(props, "size").unwrap_or(24.0);
+            style.flex_shrink = 0.0;
+            tree.new_leaf_with_context(style, Measure::Fixed(px, px)).unwrap()
+        }
         "divider" => {
             style.size.height = Dimension::length(1.0);
             style.flex_shrink = 0.0;
@@ -432,12 +437,69 @@ impl Painter<'_> {
                 }
             }
             "divider" => fill(pix, x, y, w, 1.0, 0.0, th.border),
+            "logo" => draw_logo(pix, x, y, w.min(h), th),
             _ => {}
         }
 
         for child in self.tree.children(id).unwrap_or_default() {
             self.paint(pix, child, x, y, child_clip);
         }
+    }
+}
+
+// ---------------------------------------------------------------- logo --
+
+// Same shapes as LOGO_SPARK / LOGO_SPARK_SMALL in src/sdk/ui.js (viewBox 32x32)
+const LOGO_SPARK: &str = "M14 5C14.9 11.6 17.4 14.1 24 15 17.4 15.9 14.9 18.4 14 25 13.1 18.4 10.6 15.9 4 15 10.6 14.1 13.1 11.6 14 5Z";
+const LOGO_SPARK_SMALL: &str = "M23.5 18.5C23.9 21 24.8 21.9 27.5 22.5 24.8 23.1 23.9 24 23.5 26.5 23.1 24 22.2 23.1 19.5 22.5 22.2 21.9 23.1 21 23.5 18.5Z";
+
+/// Minimal SVG path reader: absolute M, L, C (with repeated coordinate groups) and Z.
+fn svg_path(d: &str, ox: f32, oy: f32, scale: f32) -> Option<tiny_skia::Path> {
+    let mut pb = PathBuilder::new();
+    let mut nums: Vec<f32> = Vec::new();
+    let mut cmd = ' ';
+    let flush = |cmd: char, nums: &mut Vec<f32>, pb: &mut PathBuilder| {
+        let p = |i: usize, v: &[f32]| (ox + v[i] * scale, oy + v[i + 1] * scale);
+        match cmd {
+            'M' => { for (k, c) in nums.chunks(2).enumerate() { if c.len() == 2 { let (x, y) = p(0, c); if k == 0 { pb.move_to(x, y) } else { pb.line_to(x, y) } } } }
+            'L' => { for c in nums.chunks(2) { if c.len() == 2 { let (x, y) = p(0, c); pb.line_to(x, y); } } }
+            'C' => { for c in nums.chunks(6) { if c.len() == 6 { let (a, b) = p(0, c); let (e, f) = p(2, c); let (g, h) = p(4, c); pb.cubic_to(a, b, e, f, g, h); } } }
+            _ => {}
+        }
+        nums.clear();
+    };
+    let mut token = String::new();
+    for ch in d.chars().chain(std::iter::once(' ')) {
+        if ch.is_ascii_alphabetic() || ch == ' ' || ch == ',' || (ch == '-' && !token.is_empty()) {
+            if !token.is_empty() { nums.push(token.parse().unwrap_or(0.0)); token.clear(); }
+            if ch == '-' { token.push(ch); continue; }
+            if ch.is_ascii_alphabetic() {
+                flush(cmd, &mut nums, &mut pb);
+                if ch == 'Z' || ch == 'z' { pb.close(); cmd = ' '; } else { cmd = ch; }
+            }
+        } else {
+            token.push(ch);
+        }
+    }
+    flush(cmd, &mut nums, &mut pb);
+    pb.finish()
+}
+
+/// The launcher mark: a solid accent tile with a spark.
+fn draw_logo(pix: &mut Pixmap, x: f32, y: f32, size: f32, th: &Theme) {
+    let s = size / 32.0;
+    fill(pix, x, y, size, size, 8.0 * s, th.accent);
+    let mut paint = Paint::default();
+    paint.anti_alias = true;
+    paint.set_color(th.accent_fg);
+    if let Some(path) = svg_path(LOGO_SPARK, x, y, s) {
+        pix.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
+    }
+    let mut small = th.accent_fg;
+    small.set_alpha(0.85);
+    paint.set_color(small);
+    if let Some(path) = svg_path(LOGO_SPARK_SMALL, x, y, s) {
+        pix.fill_path(&path, &paint, FillRule::Winding, Transform::identity(), None);
     }
 }
 

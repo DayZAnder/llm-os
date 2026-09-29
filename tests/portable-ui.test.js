@@ -50,6 +50,9 @@ n = normalize(c.text({ size: 40 }, 'x'));
 assert(n.props.size === 40, 'text takes a pixel size');
 n = normalize(c.text({ size: 'giant' }, 'x'));
 assert(n.props.size === undefined, 'unknown named size dropped');
+n = normalize(c.logo({ size: 48, onPress: () => {} }));
+assert(n.t === 'logo' && n.props.size === 48 && !('onPress' in n.props), 'logo takes a size and nothing else');
+assert(typeof ctx.__LLMOS_UI__.LOGO_SPARK === 'string', 'launcher mark geometry is exported for other renderers');
 n = normalize(c.column({ key: 42 }));
 assert(n.props.key === '42', 'keys are strings');
 

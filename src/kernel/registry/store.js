@@ -94,7 +94,10 @@ function load() {
     let seededHashes = new Set();
     try { seededHashes = new Set(Object.values(JSON.parse(readFileSync(SEEDED_FILE, 'utf-8')))); } catch {}
     for (const e of apps.values()) {
-      if (!e.origin) e.origin = (seededHashes.has(e.hash) || e.provider === 'built-in') ? 'builtin' : 'user';
+      if (!e.origin) {
+        e.origin = e.source === 'community' ? 'community'
+          : (seededHashes.has(e.hash) || e.provider === 'built-in') ? 'builtin' : 'user';
+      }
     }
     console.log(`[registry] Loaded ${apps.size} apps`);
   } catch (err) {
@@ -176,6 +179,12 @@ function sanitizeManifest(m) {
   return { name: str(m.name, 40), icon: str(m.icon, 8), handles, ...(m.ui === 'portable' ? { ui: 'portable' } : {}) };
 }
 
+// Which variant of an app to prefer: the user's own, then what ships with the
+// OS, then community apps
+export function originRank(entry) {
+  return entry.origin === 'user' ? 0 : entry.origin === 'builtin' || !entry.origin ? 1 : 2;
+}
+
 /**
  * Find apps that declare they can open a file, by extension or MIME type.
  * Newest versions and most-launched apps rank first.
@@ -191,7 +200,7 @@ export function findHandlers(path, mime = null) {
       const h = a.manifest?.handles || [];
       return (ext && h.includes(ext)) || (mime && h.includes(mime.toLowerCase()));
     })
-    .sort((a, b) => (a.origin === 'user' ? 0 : 1) - (b.origin === 'user' ? 0 : 1) || (b.rating?.up || 0) - (a.rating?.up || 0) || b.launches - a.launches || b.createdAt - a.createdAt);
+    .sort((a, b) => originRank(a) - originRank(b) || (b.rating?.up || 0) - (a.rating?.up || 0) || b.launches - a.launches || b.createdAt - a.createdAt);
 }
 
 /** Version lineage of an app, oldest first. */
@@ -400,6 +409,7 @@ export async function syncCommunity() {
         if (!appRes.ok) continue;
         const entry = await appRes.json();
         entry.source = 'community';
+        entry.origin = 'community'; // never mistaken for the user's own variant
         entry.launches = apps.get(meta.hash)?.launches || 0; // preserve local launch count
         apps.set(entry.hash, entry);
         communityHashes.add(entry.hash);

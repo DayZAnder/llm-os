@@ -28,6 +28,7 @@
     checkbox: ['key', 'checked', 'label', 'disabled', 'onChange'],
     spacer:   ['key', 'size'],
     divider:  ['key'],
+    logo:     ['key', 'size'],   // the LLM OS mark (same as the favicon), themed
   };
   const ENUMS = {
     align: ['start', 'center', 'end', 'stretch'],
@@ -40,6 +41,10 @@
     anchor: ['start', 'end'],
   };
   const HANDLERS = ['onPress', 'onChange', 'onSubmit'];
+
+  // Launcher mark geometry (viewBox 32x32); native/renderer draws the same shapes
+  const LOGO_SPARK = 'M14 5C14.9 11.6 17.4 14.1 24 15 17.4 15.9 14.9 18.4 14 25 13.1 18.4 10.6 15.9 4 15 10.6 14.1 13.1 11.6 14 5Z';
+  const LOGO_SPARK_SMALL = 'M23.5 18.5C23.9 21 24.8 21.9 27.5 22.5 24.8 23.1 23.9 24 23.5 26.5 23.1 24 22.2 23.1 19.5 22.5 22.2 21.9 23.1 21 23.5 18.5Z';
 
   function isNode(x) { return x && typeof x === 'object' && typeof x.t === 'string'; }
 
@@ -133,6 +138,18 @@
       const el = doc.createElement(tag);
       el.className = 'llu llu-' + node.t;
       el.__llu = { t: node.t, props: {} };
+      if (node.t === 'logo') {
+        // The launcher mark: a solid accent tile with a spark — deliberately
+        // unlike a terminal icon (dark tile, outline, ›_ text)
+        const NS = 'http://www.w3.org/2000/svg';
+        const svg = doc.createElementNS(NS, 'svg');
+        svg.setAttribute('viewBox', '0 0 32 32');
+        const part = (tag, attrs) => { const n = doc.createElementNS(NS, tag); for (const [k, v] of Object.entries(attrs)) n.setAttribute(k, v); svg.appendChild(n); };
+        part('rect', { x: 0, y: 0, width: 32, height: 32, rx: 8, fill: 'var(--llmos-accent)' });
+        part('path', { d: LOGO_SPARK, fill: 'var(--llmos-accent-fg)' });
+        part('path', { d: LOGO_SPARK_SMALL, fill: 'var(--llmos-accent-fg)', opacity: 0.85 });
+        el.appendChild(svg);
+      }
       if (node.t === 'checkbox') {
         const box = doc.createElement('input');
         box.type = 'checkbox';
@@ -206,8 +223,13 @@
         case 'spacer':
           el.style.flex = p.size != null ? `0 0 ${p.size}px` : '1 1 auto';
           break;
+        case 'logo': {
+          const px = (typeof p.size === 'number' ? p.size : 24) + 'px';
+          el.style.width = px; el.style.height = px;
+          break;
+        }
       }
-      if (node.t === 'input' || node.t === 'textarea' || node.t === 'checkbox' || node.t === 'divider') return;
+      if (node.t === 'input' || node.t === 'textarea' || node.t === 'checkbox' || node.t === 'divider' || node.t === 'logo') return;
       reconcileChildren(el, node.children);
     }
 
@@ -299,7 +321,9 @@
 .llu-checkbox { display: flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
 .llu-checkbox input { accent-color: var(--llmos-accent); width: 16px; height: 16px; margin: 0; }
 .llu-divider { border: 0; border-top: 1px solid var(--llmos-border); margin: 0; width: 100%; }
+.llu-logo { flex-shrink: 0; display: inline-flex; }
+.llu-logo svg { width: 100%; height: 100%; display: block; }
 `;
 
-  global.__LLMOS_UI__ = { COMPONENTS, ENUMS, normalize, snapshot, c, createDomRenderer, createApp, CSS };
+  global.__LLMOS_UI__ = { COMPONENTS, ENUMS, normalize, snapshot, c, createDomRenderer, createApp, CSS, LOGO_SPARK, LOGO_SPARK_SMALL };
 })(typeof globalThis !== 'undefined' ? globalThis : this);

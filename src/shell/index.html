@@ -2033,6 +2033,7 @@ async function launchIframeApp({ appId, code, capabilities, title, icon = '', mo
   addAppWindow(appId, iframe, title, model || 'unknown', icon);
   openIframeApps.set(appId, { hash, title, icon, model, provider, prompt, capabilities: [...capabilities], args });
   saveSession();
+  deskRefresh(); // the window existed before its app info; redraw bar/dock with the real title
   return appId;
 }
 
@@ -2439,7 +2440,8 @@ async function refreshDeskApps() {
       const name = (a.manifest?.name || a.title || '').toLowerCase();
       if (!name) continue;
       const have = deskAppsByName.get(name);
-      if (!have || (have.origin === 'builtin' && a.origin !== 'builtin')) deskAppsByName.set(name, a);
+      const rank = (e) => e.origin === 'user' ? 0 : e.origin === 'community' ? 2 : 1; // user > built-in > community
+      if (!have || rank(a) < rank(have)) deskAppsByName.set(name, a);
     }
   } catch {}
 }
@@ -2496,13 +2498,17 @@ function clockText(clock) {
 function renderDeskBar() {
   const bar = deskLayout?.bar;
   if (!bar || bar.position === 'none') return;
-  const { row, text, button } = UIK.c;
+  const { row, text, button, logo } = UIK.c;
   const menubar = bar.style === 'menubar';
   const slots = { left: [], center: [], right: [] };
 
+  // The launcher mark (solid accent tile with a spark) — distinct from the Terminal app's ›_
+  const markIcon = !bar.launcher.icon || bar.launcher.icon === 'logo' || bar.launcher.icon === '›_';
   slots[bar.launcher.position].push(button({
-    key: 'launcher', variant: menubar ? 'ghost' : 'primary', onPress: () => openLauncher(),
-  }, `${bar.launcher.icon} ${bar.launcher.label}`.trim()));
+    key: 'launcher', variant: menubar ? 'ghost' : 'secondary', onPress: () => openLauncher(),
+  }, row({ gap: 8, align: 'center' },
+    markIcon ? logo({ size: menubar ? 16 : 20 }) : text({ wrap: false }, bar.launcher.icon),
+    bar.launcher.label ? text({ wrap: false, weight: 'bold', size: menubar ? 'sm' : 'md' }, bar.launcher.label) : null)));
 
   if (menubar) {
     const focused = runningWindows().find(w => w.focused);
@@ -2536,7 +2542,7 @@ function renderDeskBar() {
 function renderDeskDock() {
   const dock = deskLayout?.dock;
   if (!dock || dock.position === 'none') return;
-  const { row, column, text, button } = UIK.c;
+  const { row, column, text, button, logo } = UIK.c;
   const vertical = dock.position !== 'bottom';
   const running = runningWindows();
   const names = [...dock.pinned];
@@ -2546,7 +2552,8 @@ function renderDeskDock() {
   const items = names.map(name => {
     const entry = deskAppsByName.get(name.toLowerCase());
     const isRunning = running.some(w => w.title.toLowerCase() === name.toLowerCase());
-    const icon = entry?.manifest?.icon || running.find(w => w.title.toLowerCase() === name.toLowerCase())?.icon || '✦';
+    // ◌ = pinned but not installed yet (click writes it). Never ✦: that is the launcher mark.
+    const icon = entry?.manifest?.icon || running.find(w => w.title.toLowerCase() === name.toLowerCase())?.icon || (entry ? '▫' : '◌');
     return button({ key: 'dock-' + name, variant: 'ghost', onPress: () => launchByName(name) },
       column({ align: 'center', gap: 2 },
         text({ size: dock.iconSize * 0.62, wrap: false }, icon),
@@ -2554,11 +2561,18 @@ function renderDeskDock() {
         text({ size: 8, tone: isRunning ? 'accent' : 'muted', wrap: false }, isRunning ? '●' : (entry ? ' ' : '+')),
       ));
   });
+  // First tile: the launcher, like a Start button
+  const launcherTile = button({ key: 'dock-launcher', variant: 'ghost', onPress: () => openLauncher() },
+    column({ align: 'center', gap: 2 },
+      logo({ size: Math.round(dock.iconSize * 0.72) }),
+      dock.labels ? text({ size: 'sm', tone: 'muted', wrap: false }, 'Prompt') : null,
+      text({ size: 8, tone: 'muted', wrap: false }, ' ')));
   const Box = vertical ? column : row;
-  deskDockRenderer.render(Box({ gap: 2, padding: 6, align: 'center', surface: 'panel' }, items));
+  deskDockRenderer.render(Box({ gap: 2, padding: 6, align: 'center', surface: 'panel' }, [launcherTile, ...items]));
   // Tooltips: the portable tree has no title prop; add them on the DOM side
   const buttons = document.querySelectorAll('#desk-dock .llu-button');
-  names.forEach((n, i) => { if (buttons[i]) buttons[i].title = deskAppsByName.has(n.toLowerCase()) ? n : `${n} — not installed, click to generate`; });
+  if (buttons[0]) buttons[0].title = 'Prompt — search apps or describe a new one (Super / Ctrl+Space)';
+  names.forEach((n, i) => { if (buttons[i + 1]) buttons[i + 1].title = deskAppsByName.has(n.toLowerCase()) ? n : `${n} — not installed, click to generate`; });
 }
 
 function deskRefresh() {

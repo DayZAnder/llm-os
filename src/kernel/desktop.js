@@ -30,7 +30,7 @@ export const PRESETS = {
     name: 'Windows style',
     bar: {
       position: 'bottom', style: 'taskbar', height: 44,
-      launcher: { label: 'Prompt', icon: '›_', position: 'left' },
+      launcher: { label: 'Prompt', icon: 'logo', position: 'left' },
       clock: { show: true, format: '24h', seconds: false, date: true, position: 'right' },
       showWindows: true, tray: true,
     },
@@ -43,7 +43,7 @@ export const PRESETS = {
     name: 'Mac style',
     bar: {
       position: 'top', style: 'menubar', height: 30,
-      launcher: { label: 'LLM OS', icon: '›_', position: 'left' },
+      launcher: { label: 'LLM OS', icon: 'logo', position: 'left' },
       clock: { show: true, format: '24h', seconds: false, date: true, position: 'right' },
       showWindows: false, tray: true,
     },
@@ -96,7 +96,7 @@ export function validateLayout(input, base = PRESETS.windows) {
       height: clampInt(b.height, 24, 64, bb.height || 40),
       launcher: {
         label: label(l.label, 16, bl.label || 'Prompt'),
-        icon: label(l.icon, 4, bl.icon || '›_'),
+        icon: label(l.icon, 4, bl.icon || 'logo'),
         position: pick('bar.launcher.position', l.position, POSITIONS.slot, bl.position || 'left'),
       },
       clock: {

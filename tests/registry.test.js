@@ -1,7 +1,7 @@
 // Tests for the app registry
 // Run: node tests/registry.test.js
 
-import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, deleteApp, findSimilar, findHandlers } from '../src/kernel/registry/store.js';
+import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, deleteApp, findSimilar, findHandlers, originRank } from '../src/kernel/registry/store.js';
 
 let passed = 0;
 let failed = 0;
@@ -171,6 +171,7 @@ const handlers = findHandlers('/x/file.origintest');
 assert(handlers.length >= 2 && handlers[0].hash === mine.hash, "user's variant is chosen over the newer built-in");
 assert(handlers.some(h => h.hash === upstream.hash), 'the newer built-in is still available');
 for (const h of [upstream.hash, mine.hash, base.hash]) deleteApp(h);
+assert(originRank({ origin: 'user' }) < originRank({ origin: 'builtin' }) && originRank({ origin: 'builtin' }) < originRank({ origin: 'community' }), 'ranking: user > built-in > community');
 
 console.log(`\nResults: ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);
