@@ -45,8 +45,8 @@ const SANDBOX_WEAKENING_PATTERNS = [
 // === VALUE 2: Empower the user ===
 
 const RESTRICTION_PATTERNS = [
-  { pattern: /(?:premium|pro|paid|subscription|license[_-]?key).*(?:feature|access|unlock)/i, rule: 'NO_PAYWALLS', description: 'Paywall or premium feature gating detected' },
-  { pattern: /(?:disable|block|prevent).*(?:feature|function|capability).*(?:free|basic)/i, rule: 'NO_ARTIFICIAL_LIMITS', description: 'Artificial feature limitation detected' },
+  { pattern: /\b(?:premium|pro|paid|subscription|license[_-]?key)\b.*\b(?:feature|access|unlock)/i, rule: 'NO_PAYWALLS', description: 'Paywall or premium feature gating detected' },
+  { pattern: /\b(?:disable|block|prevent)\b.*\b(?:feature|function|capability)\b.*\b(?:free|basic)\b/i, rule: 'NO_ARTIFICIAL_LIMITS', description: 'Artificial feature limitation detected' },
 ];
 
 // === VALUE 3: Take a piece, leave a piece ===
@@ -90,8 +90,16 @@ function getChangedFiles() {
   try {
     // In CI: diff against base branch
     const base = process.env.GITHUB_BASE_REF || 'master';
-    const diff = execSync(`git diff --name-only ${base}...HEAD 2>/dev/null || git diff --name-only HEAD~1`, { encoding: 'utf-8' });
-    return diff.trim().split('\n').filter(Boolean);
+    const git = (cmd) => { try { return execSync(cmd, { encoding: 'utf-8', stdio: ['ignore', 'pipe', 'ignore'] }).trim(); } catch { return ''; } };
+    // Working on the base branch itself, base...HEAD is empty: compare with
+    // what hasn't been pushed yet instead, plus uncommitted changes.
+    const onBase = git('git rev-parse --abbrev-ref HEAD') === base.replace(/^origin\//, '');
+    const range = onBase ? (git('git rev-parse --abbrev-ref @{upstream}') || 'HEAD~1') : base;
+    const files = new Set([
+      ...git(`git diff --name-only ${range}...HEAD`).split('\n'),
+      ...git('git diff --name-only HEAD').split('\n'),
+    ].filter(Boolean));
+    return [...files];
   } catch {
     // Fallback: check all tracked files
     try {
