@@ -380,6 +380,9 @@
   }
 
   .modal-overlay.hidden { display: none; }
+  .modal-overlay.shell-ask { z-index: 300000; }
+  .modal .shell-ask-msg { font-size: 13px; line-height: 1.5; margin-bottom: 18px; color: var(--text-primary); overflow-wrap: anywhere; }
+  .modal .btn-row button:disabled { opacity: .5; cursor: default; }
 
   .modal {
     background: var(--bg-surface);
@@ -1674,6 +1677,7 @@ function log(msg, level = 'info') {
   const time = new Date().toLocaleTimeString('en-US', { hour12: false });
   line.textContent = `[${time}] ${msg}`;
   logPanel.appendChild(line);
+  while (logPanel.childElementCount > 500) logPanel.firstElementChild.remove();
   logPanel.scrollTop = logPanel.scrollHeight;
 }
 
@@ -2038,7 +2042,7 @@ async function restoreSession() {
       if (entry.windowRect) WM.applyRect(entry.appId, entry.windowRect);
 
       // Update appCounter
-      const num = parseInt(entry.appId.replace(/\D/g, ''), 10);
+      const num = parseInt((/^[a-z]+-(\d+)/.exec(entry.appId) || [])[1], 10);
       if (!isNaN(num) && num >= appCounter) appCounter = num + 1;
     } catch (err) {
       console.warn(`[session] Failed to restore ${entry.appId}:`, err.message);
@@ -2090,7 +2094,10 @@ async function grantTokens(appId, capabilities) {
  * @returns {Promise<string>} appId
  */
 async function launchIframeApp({ appId, code, capabilities, title, icon = '', model, provider, prompt = '', hash = null, args = {} }) {
-  appId = appId || `app-${++appCounter}`;
+  // The id is also the app's private storage key on the kernel, so it must
+  // never be handed out twice — the counter alone resets with a fresh browser
+  // profile or when no windows were open, so add a random part.
+  appId = appId || `app-${++appCounter}-${crypto.getRandomValues(new Uint32Array(1))[0].toString(36)}`;
   const tokens = await grantTokens(appId, capabilities);
   const iframe = sandboxMgr.launch(appId, code, capabilities, title, tokens, args);
   addAppWindow(appId, iframe, title, model || 'unknown', icon);
@@ -2269,7 +2276,7 @@ async function openFile(path) {
   }
   // No app can open this type — the OS writes one
   const ext = (path.match(/\.([a-z0-9]{1,10})$/i) || [])[1] || 'text';
-  const ok = window.confirm(`No app can open .${ext} files yet.\n\nGenerate one now?`);
+  const ok = await shellAsk({ title: 'Open file', message: `No app can open .${ext} files yet. Generate one now?`, ok: 'Generate', cancel: 'Not now' });
   if (!ok) return { opened: false, reason: 'no handler' };
   generateApp(`an app to view and edit .${ext} files from the shared filesystem, declaring "handles": [".${ext}"]`, { args: { path } });
   return { opened: true, generated: true };
@@ -2311,14 +2318,72 @@ async function handleSyscall(appId, type, payload, app) {
   throw new Error(`SDK call not supported: ${type}`);
 }
 
+/**
+ * In-shell yes/no dialog for questions an app can trigger. Unlike
+ * window.confirm it doesn't freeze every window, Enter means "no" (the
+ * safe button has focus), and "yes" only becomes clickable after a moment —
+ * so an app can't time a prompt to catch a keystroke or click meant for
+ * something else. One question per app at a time.
+ */
+const askPending = new Set();
+function shellAsk({ title, message, ok = 'Allow', cancel = 'Deny', owner = null, delayMs = 700 }) {
+  if (owner && askPending.has(owner)) return Promise.resolve(false);
+  if (owner) askPending.add(owner);
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay shell-ask';
+    const box = document.createElement('div');
+    box.className = 'modal';
+    box.setAttribute('role', 'alertdialog');
+    const h = document.createElement('h3');
+    h.textContent = title;
+    const p = document.createElement('p');
+    p.className = 'shell-ask-msg';
+    p.textContent = message;
+    const row = document.createElement('div');
+    row.className = 'btn-row';
+    const no = document.createElement('button');
+    no.className = 'btn-deny';
+    no.textContent = cancel;
+    const yes = document.createElement('button');
+    yes.className = 'btn-approve';
+    yes.textContent = ok;
+    yes.disabled = true;
+    row.append(no, yes);
+    box.append(h, p, row);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+    no.focus();
+    const timer = setTimeout(() => { yes.disabled = false; }, delayMs);
+    const done = (answer) => {
+      clearTimeout(timer);
+      overlay.remove();
+      if (owner) askPending.delete(owner);
+      resolve(answer);
+    };
+    no.onclick = () => done(false);
+    yes.onclick = () => { if (!yes.disabled) done(true); };
+    overlay.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); done(false); }
+    });
+  });
+}
+
 /** Runtime permission prompt (LLMOS.caps.request). */
+const capDenied = new Set(); // `${appId} ${cap}` — denied once, not asked again this session
 async function requestCapability(appId, capability) {
   const info = openIframeApps.get(appId);
   const app = sandboxMgr.getApp(appId);
   if (!info || !app || !CAP_DESCRIPTIONS[capability]) return false;
   if (app.capabilities.includes(capability)) return true;
-  const ok = window.confirm(`"${info.title}" wants to ${CAP_DESCRIPTIONS[capability]} (${capability}).\n\nAllow?`);
-  if (!ok) return false;
+  const key = `${appId} ${capability}`;
+  if (capDenied.has(key)) return false;
+  const ok = await shellAsk({
+    title: `Permission: ${capability}`,
+    message: `"${String(info.title).slice(0, 60)}" (${appId}) wants to ${CAP_DESCRIPTIONS[capability]}.`,
+    owner: appId,
+  });
+  if (!ok) { capDenied.add(key); return false; }
   const approved = [...app.capabilities, capability];
   app.tokens = await grantTokens(appId, approved);
   app.capabilities = approved;
@@ -2835,7 +2900,25 @@ function commitSwitch() {
   if (id && WM.windows.has(id)) WM.restore(id);
 }
 
+// Apps forward system keys the browser gives them instead of the shell. They
+// count only while that app really has keyboard focus (so a background app
+// can't flip windows or pop dialogs), and at a human rate.
+const appHotkeyTimes = new Map();
+function appHotkeyAllowed(appId, combo) {
+  if (combo === 'alt-up' && switcher) return true; // releasing Alt only ends a switch already under way
+  const iframe = sandboxMgr.getApp(appId)?.iframe;
+  if (!iframe || document.activeElement !== iframe) return false;
+  const now = Date.now();
+  const recent = (appHotkeyTimes.get(appId) || []).filter(t => now - t < 1000);
+  if (recent.length >= 12) return false;
+  if (combo === 'upgrade' && recent.some(t => now - t < 1500)) return false;
+  recent.push(now);
+  appHotkeyTimes.set(appId, recent);
+  return true;
+}
+
 function handleHotkey(combo, fromAppId) {
+  if (fromAppId && !appHotkeyAllowed(fromAppId, combo)) return;
   if (combo === 'switch-next') switchWindows(1);
   else if (combo === 'switch-prev') switchWindows(-1);
   else if (combo === 'alt-up') commitSwitch();
@@ -3038,6 +3121,7 @@ async function generateApp(prompt, options = {}) {
   }
 }
 
+let pendingCapModal = null;
 function showCapabilityModal(prompt, genData, analysis, onApprove = null, options = {}) {
   const heading = options.heading || 'Launch';
   const name = genData.manifest?.name || prompt;
@@ -3087,10 +3171,22 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null, option
     modalCaps.appendChild(li);
   }
 
+  // A second request while one is open would otherwise stack click handlers
+  // and one Approve would launch both: the older one is denied instead.
+  if (pendingCapModal) pendingCapModal.deny();
+  const mine = {};
+  pendingCapModal = mine;
   capModal.classList.remove('hidden');
+  modalDeny.focus();
+  if (modalApprove.style.display !== 'none') {
+    modalApprove.disabled = true;
+    setTimeout(() => { if (pendingCapModal === mine) modalApprove.disabled = false; }, 700);
+  }
 
   // Wire up buttons
   const approveHandler = async () => {
+    if (modalApprove.disabled) return;
+    pendingCapModal = null;
     capModal.classList.add('hidden');
     modalApprove.removeEventListener('click', approveHandler);
     modalDeny.removeEventListener('click', denyHandler);
@@ -3123,6 +3219,7 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null, option
   };
 
   const denyHandler = () => {
+    if (pendingCapModal === mine) pendingCapModal = null;
     capModal.classList.add('hidden');
     modalApprove.removeEventListener('click', approveHandler);
     modalDeny.removeEventListener('click', denyHandler);
@@ -3130,6 +3227,7 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null, option
     options.onDeny?.();
   };
 
+  mine.deny = denyHandler;
   modalApprove.addEventListener('click', approveHandler);
   modalDeny.addEventListener('click', denyHandler);
 }
@@ -4110,14 +4208,20 @@ async function boot() {
         .catch(() => []);
     },
     onNotify(appId, message) {
-      log(`[${appId}] ${message}`);
+      log(`[${appId}] ${String(message).slice(0, 500)}`);
     },
     async onConfirm(appId, message) {
-      return window.confirm(`[${appId}]: ${message}`);
+      const title = openIframeApps.get(appId)?.title || appId;
+      return shellAsk({ title: String(title).slice(0, 60), message: String(message).slice(0, 500), ok: 'OK', cancel: 'Cancel', owner: appId, delayMs: 300 });
     },
     onSyscall: handleSyscall,
     onHotkey: handleHotkey,
     onCapRequest: requestCapability,
+    onAppNavigated(appId) {
+      const title = openIframeApps.get(appId)?.title || appId;
+      closeApp(appId);
+      log(`${title} tried to replace itself with another page and was closed.`, 'warn');
+    },
     onAppError(appId, err, count) {
       updateErrorBadge(appId);
       if (count === 1) log(`[${appId}] runtime error: ${err.message} — click \u26a0 on the window to let AI fix it`, 'warn');

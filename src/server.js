@@ -46,7 +46,7 @@ const MIME_TYPES = {
 // generated apps (srcdoc) and local process apps.
 const PAGE_HEADERS = {
   'X-Frame-Options': 'DENY',
-  'Content-Security-Policy': "frame-ancestors 'none'; frame-src 'self' about: data: http://localhost:* http://127.0.0.1:*",
+  'Content-Security-Policy': "frame-ancestors 'none'; frame-src 'self' about: http://localhost:* http://127.0.0.1:*",
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'no-referrer',
 };

@@ -48,6 +48,9 @@
 
   // Listen for kernel responses and events
   window.addEventListener('message', (event) => {
+    // Only the shell speaks for the kernel. Sibling apps can reach this
+    // window through event.source.frames and would otherwise forge replies.
+    if (event.source !== window.parent) return;
     const msg = event.data;
     if (!msg || msg.source !== 'llmos-kernel') return;
 

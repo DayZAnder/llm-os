@@ -72,6 +72,12 @@ function themeCss(theme) {
 
 const MAX_ERRORS_PER_APP = 50;
 
+// The policy every app document runs under. It is also set as the iframe's
+// csp attribute (CSP Embedded Enforcement): if an app navigates its frame
+// away, the browser refuses any page that doesn't adopt this same policy —
+// so a remote page can't take over the window and the app's permissions.
+const APP_CSP = "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:";
+
 export class SandboxManager {
   constructor(containerEl, sdkCode, callbacks = {}) {
     this.container = containerEl;
@@ -215,7 +221,7 @@ export class SandboxManager {
 <html>
 <head>
 <meta charset="utf-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src data: blob:; media-src data: blob:; font-src data:;">
+<meta http-equiv="Content-Security-Policy" content="${APP_CSP}">
 <style>
   :root { ${themeCss(this.theme)} color-scheme: dark; }
   *, *::before, *::after { box-sizing: border-box; }
@@ -244,10 +250,21 @@ ${this._extractBody(code)}
   launch(appId, code, capabilities, title, tokens = {}, args = {}) {
     const iframe = document.createElement('iframe');
     iframe.sandbox = 'allow-scripts';
+    iframe.setAttribute('csp', APP_CSP);
     iframe.style.cssText = 'width:100%;height:100%;border:none;background:var(--llmos-bg, #12121f);';
     iframe.srcdoc = this._buildDocument(appId, code, tokens, args);
 
-    this.apps.set(appId, { iframe, capabilities: [...capabilities], title, tokens, args, errors: [], topics: new Set(), code });
+    const app = { iframe, capabilities: [...capabilities], title, tokens, args, errors: [], topics: new Set(), code, expectedLoads: 1 };
+    this.apps.set(appId, app);
+    // Every document we put in the frame is announced (expectedLoads). A load
+    // we didn't cause means the app navigated its frame somewhere else:
+    // whatever is there now isn't the approved code, so it loses the window.
+    iframe.addEventListener('load', () => {
+      if (this.apps.get(appId) !== app) return;
+      if (app.expectedLoads > 0) { app.expectedLoads--; return; }
+      this.kill(appId);
+      this.callbacks.onAppNavigated?.(appId);
+    });
     return iframe;
   }
 
@@ -263,6 +280,7 @@ ${this._extractBody(code)}
     app.errors = [];
     app.topics = new Set();
     app.code = code;
+    app.expectedLoads++;
     app.iframe.srcdoc = this._buildDocument(appId, code, tokens, app.args);
   }
 
@@ -289,7 +307,9 @@ ${this._extractBody(code)}
       // Models sometimes put scripts after </body> — keep them
       const tail = code.slice(code.search(/<\/body>/i));
       const trailing = tail.match(/<script[^>]*>[\s\S]*?<\/script>/gi) || [];
-      return bodyMatch[1] + trailing.join('\n');
+      return (bodyMatch[1] + trailing.join('\n'))
+        .replace(/<meta[^>]*>/gi, '')
+        .replace(/<base[^>]*>/gi, '');
     }
 
     // Fragment or a document without <body> — strip document-level wrappers
