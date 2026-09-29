@@ -6,6 +6,7 @@ import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './config.js';
 import { DATA_DIR as BASE_DATA_DIR } from './paths.js';
+import { writeFileAtomic } from './fsutil.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = BASE_DATA_DIR;
@@ -40,8 +41,7 @@ function loadState() {
 }
 
 function persist() {
-  mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(STATE_FILE, JSON.stringify(state, null, 2));
+  writeFileAtomic(STATE_FILE, JSON.stringify(state, null, 2));
 }
 
 // --- Task state helpers ---

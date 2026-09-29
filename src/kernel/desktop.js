@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from '
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { dataPath } from './paths.js';
+import { writeFileAtomic } from './fsutil.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 let layoutFile = dataPath('desktop.json');
@@ -177,8 +178,7 @@ export function loadLayout() {
 }
 
 export function saveLayout(layout) {
-  mkdirSync(dirname(layoutFile), { recursive: true });
-  writeFileSync(layoutFile, JSON.stringify({ ...layout, savedAt: Date.now() }, null, 2));
+  writeFileAtomic(layoutFile, JSON.stringify({ ...layout, savedAt: Date.now() }, null, 2));
 }
 
 export function resetLayout() {

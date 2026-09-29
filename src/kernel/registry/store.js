@@ -7,6 +7,7 @@ import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { normalizePrompt, trigramSimilarity } from '../utils/normalize.js';
 import { DATA_DIR as BASE_DATA_DIR } from '../paths.js';
+import { writeFileAtomic } from '../fsutil.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = BASE_DATA_DIR;
@@ -168,7 +169,7 @@ function seedFromExamples() {
     }
     if (count === 0) return;
     mkdirSync(DATA_DIR, { recursive: true });
-    writeFileSync(SEEDED_FILE, JSON.stringify(seeded, null, 2));
+    writeFileAtomic(SEEDED_FILE, JSON.stringify(seeded, null, 2));
     console.log(`[registry] Seeded ${count} built-in app(s) from examples/`);
   } catch (err) {
     console.warn('[registry] Failed to seed from examples:', err.message);
@@ -179,12 +180,8 @@ function save() {
   // A registry we couldn't read is kept as it is: saving now would replace
   // every app the user has with the few touched since start.
   if (loadFailed) return;
-  mkdirSync(DATA_DIR, { recursive: true });
   const data = [...apps.values()].sort((a, b) => b.createdAt - a.createdAt);
-  // Write-then-rename, so a crash mid-write never leaves half a file
-  const tmp = `${REGISTRY_FILE}.tmp-${process.pid}`;
-  writeFileSync(tmp, JSON.stringify(data, null, 2));
-  renameSync(tmp, REGISTRY_FILE);
+  writeFileAtomic(REGISTRY_FILE, JSON.stringify(data, null, 2));
 }
 
 // --- Public API ---

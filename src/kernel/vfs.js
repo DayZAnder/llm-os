@@ -11,6 +11,7 @@
 import { mkdirSync, readFileSync, writeFileSync, readdirSync, statSync, rmSync, existsSync, renameSync } from 'fs';
 import { join, resolve, sep, dirname, extname } from 'path';
 import { dataPath } from './paths.js';
+import { writeFileAtomic } from './fsutil.js';
 
 const DEFAULT_ROOT = dataPath('fs');
 const MAX_FILE_BYTES = 10 * 1024 * 1024;     // 10 MB per file
@@ -147,16 +148,9 @@ export function write(vpath, content) {
   const existing = existsSync(real) ? statSync(real).size : 0;
   if (dirSize(root) - existing + bytes > MAX_TOTAL_BYTES) throw new Error('Filesystem quota exceeded');
 
-  mkdirSync(dirname(real), { recursive: true });
-  // Write-then-rename so a crash never leaves a half-written file
-  const tmp = `${real}.tmp-${process.pid}`;
-  try {
-    writeFileSync(tmp, content, 'utf-8');
-    renameSync(tmp, real);
-  } catch (err) {
-    rmSync(tmp, { force: true }); // a failed write must not leave uncounted data behind
-    throw err;
-  }
+  // Temp file + fsync + rename: never half a file, never an empty one after
+  // a power cut, and a failed write leaves nothing uncounted behind
+  writeFileAtomic(real, content);
   return entryInfo(norm, statSync(real));
 }
 

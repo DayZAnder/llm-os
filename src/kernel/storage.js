@@ -6,6 +6,7 @@ import { readFileSync, writeFileSync, mkdirSync, existsSync, rmSync, readdirSync
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { dataPath } from './paths.js';
+import { writeFileAtomic } from './fsutil.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = dataPath('apps');
@@ -72,10 +73,7 @@ function flushApp(rawId) {
   mkdirSync(dir, { recursive: true });
 
   const obj = Object.fromEntries(entry.data);
-  // Write-then-rename: a crash mid-write never leaves a cut-off store.json
-  const tmp = `${storePath(appId)}.tmp-${process.pid}`;
-  writeFileSync(tmp, JSON.stringify(obj, null, 2));
-  renameSync(tmp, storePath(appId));
+  writeFileAtomic(storePath(appId), JSON.stringify(obj, null, 2));
   entry.dirty = false;
   writeTimers.delete(appId);
 }

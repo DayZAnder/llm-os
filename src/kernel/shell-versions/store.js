@@ -5,6 +5,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { DATA_DIR as BASE_DATA_DIR } from '../paths.js';
+import { writeFileAtomic } from '../fsutil.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = BASE_DATA_DIR;
@@ -31,8 +32,7 @@ function loadIndex() {
 }
 
 function saveIndex() {
-  mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(INDEX_FILE, JSON.stringify(versions, null, 2));
+  writeFileAtomic(INDEX_FILE, JSON.stringify(versions, null, 2));
 }
 
 // --- Pointer (which version is current) ---
@@ -48,8 +48,7 @@ export function getCurrentId() {
 }
 
 export function setCurrentId(id) {
-  mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(POINTER_FILE, JSON.stringify({ id }));
+  writeFileAtomic(POINTER_FILE, JSON.stringify({ id }));
 }
 
 // --- Version CRUD ---
@@ -62,7 +61,7 @@ export function saveVersion({ id, html, source, prompt, diff, parentId }) {
   mkdirSync(VERSIONS_DIR, { recursive: true });
 
   // Write HTML file
-  writeFileSync(join(VERSIONS_DIR, `${id}.html`), html);
+  writeFileAtomic(join(VERSIONS_DIR, `${id}.html`), html);
 
   // Add metadata to index
   const meta = {

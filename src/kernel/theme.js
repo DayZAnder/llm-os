@@ -12,6 +12,7 @@ import { fileURLToPath } from 'url';
 // Single source for the defaults: the sandbox injects the same tokens.
 import { DEFAULT_THEME } from '../shell/sandbox.js';
 import { dataPath } from './paths.js';
+import { writeFileAtomic } from './fsutil.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 let themeFile = dataPath('theme.json');
@@ -99,8 +100,7 @@ export function loadTheme() {
 }
 
 export function saveTheme({ name, description, vars }) {
-  mkdirSync(dirname(themeFile), { recursive: true });
-  writeFileSync(themeFile, JSON.stringify({ name, description, vars, savedAt: Date.now() }, null, 2));
+  writeFileAtomic(themeFile, JSON.stringify({ name, description, vars, savedAt: Date.now() }, null, 2));
 }
 
 export function resetTheme() {

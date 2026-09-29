@@ -11,6 +11,7 @@ import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { DATA_DIR as BASE_DATA_DIR } from './paths.js';
+import { writeFileAtomic } from './fsutil.js';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = BASE_DATA_DIR;
@@ -35,7 +36,7 @@ function load() {
 
 function save() {
   mkdirSync(DATA_DIR, { recursive: true });
-  writeFileSync(KB_PATH, JSON.stringify(_entries, null, 2));
+  writeFileAtomic(KB_PATH, JSON.stringify(_entries, null, 2));
 }
 
 // Trigram-based text similarity (no dependencies needed)
