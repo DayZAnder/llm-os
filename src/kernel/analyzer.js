@@ -6,7 +6,7 @@ const RULES = [
     id: 'EVAL_USAGE',
     severity: 'CRITICAL',
     description: 'Use of eval() or Function() constructor',
-    pattern: /\b(?:eval|Function)\s*\(/g,
+    pattern: /\b(?:eval|Function)\s*(?:\?\.\s*)?\(/g,
   },
   {
     id: 'DYNAMIC_IMPORT',
@@ -36,7 +36,7 @@ const RULES = [
     id: 'SETTIMEOUT_STRING',
     severity: 'CRITICAL',
     description: 'setTimeout/setInterval with string argument (implicit eval)',
-    pattern: /(?:setTimeout|setInterval)\s*\(\s*['"]/g,
+    pattern: /(?:setTimeout|setInterval)\s*(?:\?\.\s*)?\(\s*['"`]/g,
   },
   {
     id: 'ENCODED_PAYLOAD',
@@ -308,9 +308,9 @@ export function isPortable(code) {
 }
 
 export function analyze(code) {
-  const skip = line =>
-    (line.startsWith('<!--') && (line.includes('capabilities') || /<!--\s*app\s*:/.test(line))) ||
-    line.includes('// LLM-OS SDK');
+  // Only a line that is nothing but the manifest/capabilities header comment
+  // is skipped — anything after the comment closes is still analyzed.
+  const skip = line => /^<!--\s*(?:capabilities|app)\s*:(?:(?!-->).)*-->$/.test(line);
   const result = runRules(code, RULES, skip);
   if (isPortable(code)) {
     const portable = runRules(code, PORTABLE_RULES, skip);

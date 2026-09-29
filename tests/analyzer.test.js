@@ -128,6 +128,15 @@ assertClean('const btn = document.createElement("button")', 'createElement butto
 assertClean('el.style.top = "10px"', 'style.top (not top.something)');
 assertClean('JSON.parse(text)', 'JSON.parse');
 
+// --- Header-skip bypasses (a marker on the line must not hide code) ---
+console.log('\nSkip bypasses:');
+assert(!analyze('eval(x) // LLM-OS SDK').passed, 'SDK marker comment does not hide eval');
+assert(!analyze('<!-- capabilities: [] --><script>eval(x)</script>').passed, 'code after the header comment is analyzed');
+assert(!analyze('<!-- app: {"name":"A"} --><script>new Function("x")()</script>').passed, 'code after the manifest comment is analyzed');
+assert(analyze('<!DOCTYPE html>\n<!-- app: {"name":"A","icon":"eval("} -->\n<!-- capabilities: ["storage"] -->\n<p>ok</p>').passed, 'a header line on its own is still skipped');
+assert(!analyze('eval?.(x)').passed, 'optional-call eval');
+assert(analyze('setTimeout(`alert(1)`, 0)').findings.length > 0, 'setTimeout with a template string');
+
 // --- Dockerfile rules ---
 console.log('\nDockerfile rules:');
 
