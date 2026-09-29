@@ -1,6 +1,6 @@
 import { createServer } from 'http';
-import { readFileSync, existsSync } from 'fs';
-import { join, extname } from 'path';
+import { readFileSync, existsSync, statSync } from 'fs';
+import { join, extname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './kernel/config.js';
 import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme, generateDesktop, listUpgradeModels } from './kernel/gateway.js';
@@ -41,28 +41,49 @@ const MIME_TYPES = {
   '.svg': 'image/svg+xml',
 };
 
+// Headers for everything that isn't /api: the shell must not be framed by
+// other sites (clickjacking of permission dialogs), and it may only frame
+// generated apps (srcdoc) and local process apps.
+const PAGE_HEADERS = {
+  'X-Frame-Options': 'DENY',
+  'Content-Security-Policy': "frame-ancestors 'none'; frame-src 'self' about: data: http://localhost:* http://127.0.0.1:*",
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+};
+
+const SHELL_DIR = resolve(__dirname, 'shell');
+const SDK_DIR = resolve(__dirname, 'sdk');
+
+/** Resolve a URL path inside base, or null if it escapes it or isn't a file. */
+function staticFile(base, rel) {
+  let decoded;
+  try { decoded = decodeURIComponent(rel); } catch { return null; }
+  if (decoded.includes('\0')) return null;
+  const p = resolve(base, '.' + '/' + decoded);
+  if (p !== base && !p.startsWith(base + sep)) return null;
+  try { return statSync(p).isFile() ? p : null; } catch { return null; }
+}
+
 function serveStatic(url, res) {
-  // Map URLs to files
   let filePath;
   if (url === '/' || url === '/index.html') {
     filePath = getShellPath();
   } else if (url.startsWith('/sdk/')) {
-    filePath = join(__dirname, '..', 'src', url.slice(1));
+    filePath = staticFile(SDK_DIR, url.slice('/sdk/'.length));
   } else {
-    filePath = join(__dirname, 'shell', url.slice(1));
+    filePath = staticFile(SHELL_DIR, url.slice(1));
   }
 
-  if (!existsSync(filePath)) {
-    res.writeHead(404);
+  let content;
+  try { content = filePath && readFileSync(filePath); } catch { content = null; }
+  if (!content) {
+    res.writeHead(404, PAGE_HEADERS);
     res.end('Not found');
     return;
   }
 
-  const ext = extname(filePath);
-  const mime = MIME_TYPES[ext] || 'application/octet-stream';
-  const content = readFileSync(filePath);
-
-  res.writeHead(200, { 'Content-Type': mime });
+  const mime = MIME_TYPES[extname(filePath)] || 'application/octet-stream';
+  res.writeHead(200, { 'Content-Type': mime, ...PAGE_HEADERS });
   res.end(content);
 }
 

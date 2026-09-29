@@ -19,6 +19,21 @@ const ALLOWED_METHODS = new Set(['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'
 // supplies them itself), but hop-by-hop and host-steering headers are not.
 const BLOCKED_REQUEST_HEADERS = new Set(['host', 'connection', 'content-length', 'transfer-encoding', 'upgrade', 'proxy-authorization']);
 
+/** Eight 16-bit groups of an IPv6 literal (handles :: and a dotted IPv4 tail), or null. */
+function expandIPv6(ip) {
+  let s = ip.toLowerCase().replace(/%.*$/, '');
+  const dotted = s.match(/(\d+)\.(\d+)\.(\d+)\.(\d+)$/);
+  if (dotted) {
+    const [a, b, c, d] = dotted.slice(1).map(Number);
+    s = s.slice(0, dotted.index) + ((a << 8) | b).toString(16) + ':' + ((c << 8) | d).toString(16);
+  }
+  const [head, tail] = s.split('::');
+  const parse = part => (part ? part.split(':').map(x => parseInt(x, 16)) : []);
+  const hi = parse(head), lo = parse(tail);
+  const groups = s.includes('::') ? [...hi, ...Array(8 - hi.length - lo.length).fill(0), ...lo] : hi;
+  return groups.length === 8 && groups.every(g => Number.isInteger(g) && g >= 0 && g <= 0xffff) ? groups : null;
+}
+
 /** True if an IP literal is loopback, private, link-local, CGNAT, multicast or otherwise non-public. */
 export function isPrivateAddress(ip) {
   if (net.isIPv4(ip)) {
@@ -33,11 +48,19 @@ export function isPrivateAddress(ip) {
       a >= 224;                                 // multicast + reserved
   }
   if (net.isIPv6(ip)) {
-    const lower = ip.toLowerCase();
-    if (lower === '::' || lower === '::1') return true;
-    const mapped = lower.match(/^::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-    if (mapped) return isPrivateAddress(mapped[1]);
-    return /^(fc|fd|fe8|fe9|fea|feb|ff)/.test(lower) || lower.startsWith('64:ff9b:') || lower.startsWith('2001:db8');
+    const h = expandIPv6(ip);
+    if (!h) return true;
+    const v4 = (hi, lo) => `${hi >> 8}.${hi & 255}.${lo >> 8}.${lo & 255}`;
+    // Forms that embed an IPv4 address — check the embedded one. The URL
+    // parser turns [::ffff:127.0.0.1] into [::ffff:7f00:1], so the dotted
+    // form can't be relied on.
+    if (h.slice(0, 5).every(x => x === 0) && h[5] === 0xffff) return isPrivateAddress(v4(h[6], h[7]));   // ::ffff:0:0/96 mapped
+    if (h.slice(0, 6).every(x => x === 0)) return true;                                                  // ::, ::1, ::/96 compatible
+    if (h[0] === 0x2002) return isPrivateAddress(v4(h[1], h[2]));                                        // 6to4
+    if (h[0] === 0x2001 && h[1] === 0) return true;                                                      // Teredo
+    if (h[0] === 0x64 && h[1] === 0xff9b) return true;                                                   // NAT64
+    if (h[0] === 0x2001 && h[1] === 0xdb8) return true;                                                  // documentation
+    return (h[0] & 0xfe00) === 0xfc00 || (h[0] & 0xffc0) === 0xfe80 || (h[0] & 0xffc0) === 0xfec0 || (h[0] >> 8) === 0xff;
   }
   return true; // not an IP at all → refuse
 }
@@ -81,6 +104,10 @@ function once(url, { method, headers, body }) {
       res.on('end', () => resolvePromise({ res, buf: Buffer.concat(chunks) }));
       res.on('error', reject);
     });
+    // `timeout` only fires on idle sockets; a server trickling a byte every
+    // few seconds would hold the request forever without an overall deadline.
+    const deadline = setTimeout(() => req.destroy(new Error('Request timed out')), TIMEOUT_MS * 2);
+    req.on('close', () => clearTimeout(deadline));
     req.on('timeout', () => req.destroy(new Error('Request timed out')));
     req.on('error', reject);
     if (body != null) req.write(body);
@@ -107,8 +134,13 @@ export async function request({ url: rawUrl, method = 'GET', headers = {}, body 
   for (let hop = 0; hop <= MAX_REDIRECTS; hop++) {
     const { res, buf } = await once(url, { method, headers: cleanHeaders, body });
     if ([301, 302, 303, 307, 308].includes(res.statusCode) && res.headers.location) {
-      url = validateUrl(new URL(res.headers.location, url).toString());
-      if (res.statusCode === 303) { method = 'GET'; body = null; }
+      const next = validateUrl(new URL(res.headers.location, url).toString());
+      // Credentials the app meant for one site don't follow it to another
+      if (next.origin !== url.origin) { delete cleanHeaders.authorization; delete cleanHeaders.cookie; }
+      url = next;
+      if (res.statusCode === 303 || ((res.statusCode === 301 || res.statusCode === 302) && method === 'POST')) {
+        method = 'GET'; body = null; delete cleanHeaders['content-type'];
+      }
       continue;
     }
     const ctype = res.headers['content-type'] || '';
