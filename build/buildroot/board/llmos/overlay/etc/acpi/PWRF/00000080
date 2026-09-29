@@ -1,0 +1,3 @@
+#!/bin/sh
+# Power button (hypervisor "Shut down"): stop LLM OS cleanly and power off
+exec /sbin/poweroff

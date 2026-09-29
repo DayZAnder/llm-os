@@ -104,9 +104,14 @@ chmod +x "${MOUNT_DIR}/usr/local/bin/llmos-data-setup" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/usr/local/bin/llmos-data-move" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/usr/local/bin/llmos-kiosk" 2>/dev/null || true
 chmod +x "${MOUNT_DIR}/etc/init.d/llmos-kiosk" 2>/dev/null || true
+chmod +x "${MOUNT_DIR}/etc/acpi/PWRF/00000080" 2>/dev/null || true
 
 # Enable LLM OS service
 chroot "${MOUNT_DIR}" rc-update add llmos default
+# Power button (hypervisor "Shut down") → clean poweroff, so the data disk
+# is unmounted properly instead of the VM being cut off
+printf 'button\nevdev\n' >> "${MOUNT_DIR}/etc/modules"
+chroot "${MOUNT_DIR}" rc-update add acpid default
 
 # Enable kiosk mode for desktop variant
 if [ "${VARIANT}" = "desktop" ]; then

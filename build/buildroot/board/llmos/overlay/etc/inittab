@@ -7,6 +7,7 @@
 ::sysinit:/bin/mount -a
 ::sysinit:/sbin/syslogd
 ::sysinit:/sbin/klogd
+::sysinit:/sbin/acpid
 
 # Init scripts
 ::sysinit:/etc/init.d/S40network start

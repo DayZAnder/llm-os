@@ -63,6 +63,7 @@ chmod +x "${TARGET_DIR}/etc/init.d/"S* 2>/dev/null || true
 chmod +x "${TARGET_DIR}/usr/local/bin/llmos-login" 2>/dev/null || true
 chmod +x "${TARGET_DIR}/usr/local/bin/llmos-data-setup" 2>/dev/null || true
 chmod +x "${TARGET_DIR}/usr/local/bin/llmos-data-move" 2>/dev/null || true
+chmod +x "${TARGET_DIR}/etc/acpi/PWRF/00000080" 2>/dev/null || true
 cp "${LLMOS_SRC}/.env.example" "${LLMOS_DEST}/.env.example"
 chmod +x "${TARGET_DIR}/etc/profile.d/llmos.sh" 2>/dev/null || true
 

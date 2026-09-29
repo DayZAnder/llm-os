@@ -37,6 +37,8 @@ BR2_TARGET_SYSLINUX_MBR=y
 # Packages
 BR2_PACKAGE_BUSYBOX=y
 BR2_PACKAGE_BUSYBOX_SHOW_OTHERS=y
+# acpid, so "Shut down" in the hypervisor powers the VM off cleanly
+BR2_PACKAGE_BUSYBOX_CONFIG_FRAGMENT_FILES="$(TOPDIR)/../configs/busybox_micro.fragment"
 
 # SSH server — dropbear (tiny, ~200KB vs OpenSSH ~5MB)
 BR2_PACKAGE_DROPBEAR=y
