@@ -959,7 +959,10 @@ Explain in two or three short sentences what this means for the user and exactly
     // POST /api/registry/publish — save app to registry
     if (method === 'POST' && url === '/api/registry/publish') {
       const data = JSON.parse(body);
-      const result = publishApp(data);
+      if (typeof data.code !== 'string' || !data.code) { sendJson(res, 400, { error: 'code required' }); return; }
+      // Whatever comes over HTTP is the user's: only the seeding code may
+      // publish 'builtin' apps, which rank above community ones.
+      const result = publishApp({ ...data, prompt: String(data.prompt || '').slice(0, 2000), origin: 'user' });
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(result));
       return;

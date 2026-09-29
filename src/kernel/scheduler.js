@@ -90,9 +90,10 @@ function startTimer(id) {
   if (entry.timer) clearInterval(entry.timer);
 
   const taskState = getTaskState(id);
-  const interval = taskState.interval;
+  // Also guards intervals saved by older versions: 1 min … ~24.8 days (setInterval limit)
+  const interval = Math.min(Math.max(Number(taskState.interval) || 21600000, 60000), 2147483647);
 
-  entry.timer = setInterval(() => tick(id), Math.max(interval, 60000)); // min 1 minute
+  entry.timer = setInterval(() => tick(id), interval);
   taskState.nextRun = Date.now() + interval;
   console.log(`[scheduler] Timer started for ${id} (every ${Math.round(interval / 60000)}min)`);
 }
@@ -160,6 +161,9 @@ async function executeTask(id) {
     };
 
     const result = await entry.definition.handler(context);
+    // Tasks that catch their own errors report them this way; they must
+    // count toward the circuit breaker like a throw would.
+    if (result?.success === false) throw new Error(result.error || 'task reported failure');
 
     // Success
     taskState.consecutiveErrors = 0;
@@ -241,7 +245,12 @@ export function enableTask(id, interval) {
   taskState.enabled = true;
   taskState.consecutiveErrors = 0;
   taskState.disabledReason = null;
-  if (interval) taskState.interval = interval;
+  if (interval != null) {
+    // setInterval fires every 1 ms for NaN or anything above 2^31-1 ms
+    const ms = Number(interval);
+    if (!Number.isFinite(ms)) throw new Error('interval must be a number of milliseconds');
+    taskState.interval = Math.min(Math.max(Math.round(ms), 60000), 2147483647);
+  }
 
   startTimer(id);
   persist();

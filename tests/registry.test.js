@@ -173,5 +173,29 @@ assert(handlers.some(h => h.hash === upstream.hash), 'the newer built-in is stil
 for (const h of [upstream.hash, mine.hash, base.hash]) deleteApp(h);
 assert(originRank({ origin: 'user' }) < originRank({ origin: 'builtin' }) && originRank({ origin: 'builtin' }) < originRank({ origin: 'community' }), 'ranking: user > built-in > community');
 
+console.log('\nmanifest + persistence hardening:');
+const badHandles = publishApp({ prompt: 'handles test', code: '<p>handles-test</p>', manifest: { name: 'H', handles: ['.md', '../x', '*', 'text/plain', 'x'.repeat(60)] } });
+assert(JSON.stringify(badHandles.entry.manifest.handles) === '[".md","text/plain"]', 'only extensions and MIME types are accepted as handles');
+deleteApp(badHandles.hash);
+
+// A registry file cut off mid-write must not be saved over: run a fresh
+// process on a temp data dir with a corrupt registry.json.
+{
+  const { mkdtempSync, writeFileSync: wf, readdirSync: rd, readFileSync: rf, rmSync } = await import('fs');
+  const { tmpdir } = await import('os');
+  const { join } = await import('path');
+  const { spawnSync } = await import('child_process');
+  const dir = mkdtempSync(join(tmpdir(), 'llmos-reg-'));
+  wf(join(dir, 'registry.json'), '[{"hash":"abc","code":"<p>my app</p>"');
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', `await import(${JSON.stringify(new URL('../src/kernel/registry/store.js', import.meta.url).href)});`], { env: { ...process.env, LLMOS_DATA_DIR: dir, COMMUNITY_SYNC: '' }, encoding: 'utf-8' });
+  const files = rd(dir);
+  const aside = files.find(f => f.startsWith('registry.json.corrupt-'));
+  assert(r.status === 0 && aside && rf(join(dir, aside), 'utf-8').includes('my app'), 'corrupt registry is moved aside intact, not overwritten');
+  let fresh = [];
+  try { fresh = JSON.parse(rf(join(dir, 'registry.json'), 'utf-8')); } catch {}
+  assert(Array.isArray(fresh) && fresh.length > 0 && fresh.every(a => a.origin === 'builtin'), 'fresh registry starts from the built-in apps');
+  rmSync(dir, { recursive: true, force: true });
+}
+
 console.log(`\nResults: ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

@@ -2,7 +2,7 @@
 // Apps are saved after generation and can be browsed, searched, and launched.
 
 import { createHash } from 'crypto';
-import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, readdirSync, renameSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
 import { normalizePrompt, trigramSimilarity } from '../utils/normalize.js';
@@ -21,6 +21,7 @@ const COMMUNITY_INDEX = `${COMMUNITY_URL}/index.json`;
 // In-memory store, persisted to JSON
 let apps = new Map(); // hash → AppEntry
 let communityHashes = new Set(); // tracks which apps came from community
+let loadFailed = false; // registry file unreadable and could not be moved aside
 
 /**
  * @typedef {Object} AppEntry
@@ -101,7 +102,19 @@ function load() {
     }
     console.log(`[registry] Loaded ${apps.size} apps`);
   } catch (err) {
-    console.warn('[registry] Failed to load:', err.message);
+    // Unreadable (e.g. cut off by a crash in an older version): move it
+    // aside for recovery and start from the built-ins, instead of saving over it.
+    const aside = `${REGISTRY_FILE}.corrupt-${Date.now()}`;
+    try {
+      renameSync(REGISTRY_FILE, aside);
+      console.warn(`[registry] Failed to load (${err.message}); kept the old file as ${aside}`);
+    } catch {
+      loadFailed = true;
+      console.warn(`[registry] Failed to load (${err.message}); not saving until it is fixed`);
+      return;
+    }
+    apps = new Map();
+    seedFromExamples();
     return;
   }
   // Existing installs still get new and updated built-in apps
@@ -163,9 +176,15 @@ function seedFromExamples() {
 }
 
 function save() {
+  // A registry we couldn't read is kept as it is: saving now would replace
+  // every app the user has with the few touched since start.
+  if (loadFailed) return;
   mkdirSync(DATA_DIR, { recursive: true });
   const data = [...apps.values()].sort((a, b) => b.createdAt - a.createdAt);
-  writeFileSync(REGISTRY_FILE, JSON.stringify(data, null, 2));
+  // Write-then-rename, so a crash mid-write never leaves half a file
+  const tmp = `${REGISTRY_FILE}.tmp-${process.pid}`;
+  writeFileSync(tmp, JSON.stringify(data, null, 2));
+  renameSync(tmp, REGISTRY_FILE);
 }
 
 // --- Public API ---
@@ -173,8 +192,9 @@ function save() {
 function sanitizeManifest(m) {
   if (!m || typeof m !== 'object') return { name: '', icon: '', handles: [] };
   const str = (v, max) => (typeof v === 'string' ? v.replace(/[<>]/g, '').trim().slice(0, max) : '');
+  // Same rule as the gateway's manifest parser: an extension or a MIME type
   const handles = Array.isArray(m.handles)
-    ? m.handles.filter(h => typeof h === 'string').map(h => h.toLowerCase().slice(0, 64)).slice(0, 20)
+    ? m.handles.filter(h => typeof h === 'string' && /^(\.[a-z0-9]{1,10}|[a-z]+\/[a-z0-9.+-]+)$/i.test(h)).map(h => h.toLowerCase()).slice(0, 20)
     : [];
   return { name: str(m.name, 40), icon: str(m.icon, 8), handles, ...(m.ui === 'portable' ? { ui: 'portable' } : {}) };
 }
@@ -407,10 +427,31 @@ export async function syncCommunity() {
       try {
         const appRes = await fetch(`${COMMUNITY_URL}/apps/${meta.hash}.json`, { signal: AbortSignal.timeout(5000) });
         if (!appRes.ok) continue;
-        const entry = await appRes.json();
-        entry.source = 'community';
-        entry.origin = 'community'; // never mistaken for the user's own variant
-        entry.launches = apps.get(meta.hash)?.launches || 0; // preserve local launch count
+        const remote = await appRes.json();
+        // Content-addressed: the code must hash to the name it was listed
+        // under, or a remote entry could replace a built-in app's code.
+        if (typeof remote?.code !== 'string' || contentHash(remote.code) !== meta.hash) continue;
+        const prompt = String(remote.prompt || '').slice(0, 2000);
+        const entry = {
+          hash: meta.hash,
+          prompt,
+          normalizedPrompt: normalizePrompt(prompt),
+          title: String(remote.title || '').replace(/[<>]/g, '').slice(0, 60) || extractTitle(prompt),
+          type: 'iframe', // community apps never run as containers
+          code: remote.code,
+          dockerfile: null,
+          capabilities: Array.isArray(remote.capabilities) ? remote.capabilities.filter(c => typeof c === 'string').slice(0, 20) : [],
+          model: String(remote.model || 'unknown').slice(0, 80),
+          provider: String(remote.provider || 'unknown').slice(0, 40),
+          launches: 0,
+          createdAt: Number.isFinite(remote.createdAt) ? remote.createdAt : Date.now(),
+          tags: extractTags(prompt),
+          manifest: sanitizeManifest(remote.manifest),
+          parentHash: null, // must not mark local apps as superseded
+          version: 1,
+          source: 'community',
+          origin: 'community', // never mistaken for the user's own variant
+        };
         apps.set(entry.hash, entry);
         communityHashes.add(entry.hash);
         added++;
@@ -437,5 +478,6 @@ export function isCommunityApp(hash) {
 // Load on import
 load();
 
-// Async community sync (non-blocking)
-syncCommunity().catch(() => {});
+// Contacting GitHub on every start is phoning home: only when the user opted
+// in. The Sync button in the registry panel works either way.
+if (/^(1|true|yes)$/i.test(process.env.COMMUNITY_SYNC || '')) syncCommunity().catch(() => {});

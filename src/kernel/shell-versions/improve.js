@@ -9,6 +9,9 @@ import { provider as openaiProvider } from '../providers/openai-compatible.js';
 import { analyze } from '../analyzer.js';
 import { saveVersion, getCurrentId, setCurrentId, readCurrentShell } from './store.js';
 
+// Longest rewrite we will ask for (the whole shell comes back as output)
+const MAX_SHELL_OUTPUT_TOKENS = 64000;
+
 const providers = new Map();
 providers.set('ollama', ollamaProvider);
 providers.set('claude', claudeProvider);
@@ -89,15 +92,24 @@ export function codeDiffPercent(a, b) {
  * @returns {Promise<string>} - Improved HTML
  */
 export async function generateShellImprovement(currentHtml, prompt) {
-  const userContent = prompt
-    ? `Improvement request: ${prompt}\n\nCurrent shell:\n${currentHtml}`
-    : `Autonomously improve the shell UI with better UX, clearer layout, or missing polish. Keep changes focused and minimal.\n\nCurrent shell:\n${currentHtml}`;
+  // The model rewrites the whole file, so the answer is as long as the shell.
+  // Size the output for it — and refuse up front when it can't fit, rather
+  // than paying for a rewrite that is certain to be cut off.
+  const neededTokens = Math.ceil(currentHtml.length / 3) + 2000;
+  if (neededTokens > MAX_SHELL_OUTPUT_TOKENS) {
+    throw new Error(`The shell is too large for a full rewrite (~${Math.round(neededTokens / 1000)}k tokens of output, limit ${MAX_SHELL_OUTPUT_TOKENS / 1000}k)`);
+  }
 
   // Sanitize the user prompt portion
+  let request = null;
   if (prompt) {
     const { clean, flagged, flags } = sanitizePrompt(prompt);
     if (flagged) console.warn('[shell-improve] Injection patterns stripped:', flags);
+    request = clean;
   }
+  const userContent = request
+    ? `Improvement request: ${request}\n\nCurrent shell:\n${currentHtml}`
+    : `Autonomously improve the shell UI with better UX, clearer layout, or missing polish. Keep changes focused and minimal.\n\nCurrent shell:\n${currentHtml}`;
 
   const messages = [
     { role: 'system', content: SHELL_SYSTEM_PROMPT },
@@ -113,7 +125,7 @@ export async function generateShellImprovement(currentHtml, prompt) {
     throw new Error(`No capable provider available for shell improvement`);
   }
 
-  const raw = await prov.generate(messages, getProviderConfig(providerName), { maxTokens: 16384 });
+  const raw = await prov.generate(messages, getProviderConfig(providerName), { maxTokens: neededTokens });
 
   // Clean response — strip markdown fences if present
   let code = raw.trim();
@@ -155,10 +167,16 @@ export async function improveShell(prompt, source = 'user') {
   const currentHtml = readCurrentShell();
   const newHtml = await generateShellImprovement(currentHtml, prompt);
 
-  // Security analysis
+  // Security analysis. The shell legitimately does things apps may not
+  // (it creates iframes), so it can't be held to "no critical findings" —
+  // but the model's version may not add any the current shell doesn't have.
   const analysis = analyze(newHtml);
-  if (analysis.blocked) {
-    return { error: 'Security analysis blocked the improved shell', analysis };
+  const criticalByRule = (a) => a.findings.filter(f => f.severity === 'CRITICAL')
+    .reduce((m, f) => m.set(f.rule, (m.get(f.rule) || 0) + 1), new Map());
+  const before = criticalByRule(analyze(currentHtml));
+  const added = [...criticalByRule(analysis)].filter(([rule, n]) => n > (before.get(rule) || 0)).map(([rule]) => rule);
+  if (added.length) {
+    return { error: `Security analysis blocked the improved shell (new: ${added.join(', ')})`, analysis };
   }
 
   // Structural validation
@@ -180,6 +198,12 @@ export async function improveShell(prompt, source = 'user') {
   const id = `sv_${Date.now()}`;
   const parentId = getCurrentId();
   const meta = saveVersion({ id, html: newHtml, source, prompt, diff, parentId });
+  // The shell holds every permission; a version nobody asked for is only
+  // offered (Settings → Shell Versions), never switched to on its own.
+  if (source === 'scheduler') {
+    console.log(`[shell-improve] Proposed version ${id} (diff=${diff}%) — waiting for the user to activate it`);
+    return { id, diff, analysis, validation, meta, proposed: true };
+  }
   setCurrentId(id);
   notifyShellReload(id);
 

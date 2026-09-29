@@ -1,14 +1,14 @@
 // Tests for the task scheduler
 // Run: node tests/scheduler.test.js
 
-import { unlinkSync, existsSync } from 'fs';
+import { mkdtempSync, rmSync } from 'fs';
 import { join } from 'path';
-import { fileURLToPath } from 'url';
+import { tmpdir } from 'os';
 
-// Clean up persisted state before importing (so tests start fresh)
-const __dirname = fileURLToPath(new URL('.', import.meta.url));
-const stateFile = join(__dirname, '..', 'data', 'scheduler.json');
-if (existsSync(stateFile)) unlinkSync(stateFile);
+// Fresh, private state: never touch the user's data/scheduler.json
+const testDataDir = mkdtempSync(join(tmpdir(), 'llmos-sched-'));
+process.env.LLMOS_DATA_DIR = testDataDir;
+process.on('exit', () => rmSync(testDataDir, { recursive: true, force: true }));
 
 const {
   registerTask, enableTask, disableTask, runNow,
@@ -241,6 +241,25 @@ try {
 
 const unknownRun = await runNow('nonexistent');
 assert(unknownRun.success === false, 'runNow returns failure for unknown task');
+
+// --- Tasks that report failure, and bad intervals ---
+console.log('\nreported failures + intervals:');
+registerTask({
+  id: 'test-soft-fail', name: 'Soft fail', description: '', category: 'test', requiresLLM: false, defaultInterval: 60000,
+  async handler() { return { success: false, error: 'output was cut off' }; },
+});
+enableTask('test-soft-fail');
+for (let i = 0; i < 3; i++) await runNow('test-soft-fail');
+const soft = getAllTasks().find(t => t.id === 'test-soft-fail').state;
+assert(soft.consecutiveErrors === 3 && soft.lastError?.message === 'output was cut off', '{success:false} counts as a failure');
+assert(soft.enabled === false && soft.disabledReason === 'circuit-breaker', 'repeated reported failures trip the circuit breaker');
+let threw = false;
+try { enableTask('test-dummy', 'abc'); } catch { threw = true; }
+assert(threw, 'non-numeric interval rejected');
+assert(enableTask('test-dummy', 1e12).interval === 2147483647, 'huge interval clamped to the setInterval limit');
+assert(enableTask('test-dummy', 5).interval === 60000, 'tiny interval clamped to one minute');
+disableTask('test-dummy');
+disableTask('test-soft-fail');
 
 // --- Summary ---
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`);
