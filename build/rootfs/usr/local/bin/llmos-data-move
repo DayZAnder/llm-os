@@ -1,0 +1,100 @@
+#!/bin/sh
+# llmos-data-move — copy LLM OS user data onto a data disk (label LLMOSDATA).
+#
+# From 0.4.2 on, attaching a data disk is automatic (llmos-data-setup copies
+# existing data at boot). This script is for installs from BEFORE that, and
+# works standalone on any version:
+#
+#   1. Attach llmos-data.qcow2 (from any release since 0.4.1) as a second disk.
+#   2. On the running LLM OS VM:
+#        wget -O /tmp/llmos-data-move https://raw.githubusercontent.com/DayZAnder/llm-os/master/build/rootfs/usr/local/bin/llmos-data-move
+#        sh /tmp/llmos-data-move
+#   3. Shut down, replace the OS disk with the new release, keep the data disk.
+#
+# Usage: llmos-data-move [device] [--force]
+#   device   the data disk (default: the disk labelled LLMOSDATA)
+#   --force  copy even if the disk already holds LLM OS data (merges, never deletes)
+#
+# POSIX sh, BusyBox-compatible. Test overrides: LLMOS_DATA_ROOT, LLMOS_APP_DIR,
+# LLMOS_NO_SERVICE=1 (don't stop/start the service).
+
+set -e
+DATA="${LLMOS_DATA_ROOT:-/var/lib/llmos}"
+APP="${LLMOS_APP_DIR:-/opt/llm-os}"
+FORCE=""
+DEV=""
+for arg in "$@"; do
+    case "$arg" in
+        --force) FORCE=1 ;;
+        -h|--help) sed -n '2,20p' "$0"; exit 0 ;;
+        *) DEV="$arg" ;;
+    esac
+done
+
+die() { echo "llmos-data-move: $*" >&2; exit 1; }
+say() { echo "llmos-data-move: $*"; }
+
+[ -n "$DEV" ] || DEV=$(blkid 2>/dev/null | grep 'LABEL="LLMOSDATA"' | head -n 1 | cut -d: -f1)
+[ -n "$DEV" ] || die "no data disk found. Attach llmos-data.qcow2 (or .vhdx/.vmdk) from a release as a second disk, or pass the device, e.g. llmos-data-move /dev/vdb"
+[ -b "$DEV" ] || [ -n "$LLMOS_ALLOW_FILE_DEV" ] || die "$DEV is not a block device"
+
+if grep -q "^$DEV $DATA " /proc/mounts 2>/dev/null; then
+    say "$DEV is already mounted at $DATA — nothing to do"
+    exit 0
+fi
+
+# Where the data is now: the 0.4.1+ location on the system disk, or the old layout
+if [ -e "$DATA/.llmos-data" ]; then
+    SRC="$DATA"; ENV_SRC="$DATA/.env"
+elif [ -d "$APP/data" ]; then
+    SRC="$APP/data"; ENV_SRC="$APP/.env"
+else
+    die "no LLM OS data found in $DATA or $APP/data"
+fi
+say "copying $SRC to $DEV"
+
+# Stop the kernel so nothing writes while we copy
+SERVICE=""
+if [ -z "$LLMOS_NO_SERVICE" ]; then
+    if [ -x /etc/init.d/llmos ]; then SERVICE=/etc/init.d/llmos; fi
+    if [ -x /etc/init.d/S99llmos ]; then SERVICE=/etc/init.d/S99llmos; fi
+    [ -n "$SERVICE" ] && "$SERVICE" stop >/dev/null 2>&1 || true
+fi
+restart() { [ -n "$SERVICE" ] && "$SERVICE" start >/dev/null 2>&1 || true; }
+
+STAGE=$(mktemp -d /tmp/llmos-datadisk.XXXXXX)
+cleanup() { umount "$STAGE" 2>/dev/null || true; rmdir "$STAGE" 2>/dev/null || true; }
+if ! mount -o noatime "$DEV" "$STAGE"; then
+    rmdir "$STAGE"; restart
+    die "could not mount $DEV (is it formatted? the release's llmos-data disk is)"
+fi
+
+if [ -e "$STAGE/.llmos-data" ] && [ -z "$FORCE" ]; then
+    cleanup; restart
+    die "$DEV already holds LLM OS data (from another install?). Nothing was changed. Use --force to merge into it."
+fi
+
+if ! cp -a "$SRC/." "$STAGE/"; then
+    cleanup; restart
+    die "copy failed; your data is untouched in $SRC"
+fi
+if [ -f "$ENV_SRC" ] && [ "$ENV_SRC" != "$STAGE/.env" ]; then
+    cp -a "$ENV_SRC" "$STAGE/.env"
+    chmod 600 "$STAGE/.env"
+fi
+[ -e "$STAGE/.llmos-data" ] || echo "LLM OS data v1" > "$STAGE/.llmos-data"
+
+# Verify: every regular file from the source must exist on the disk
+missing=$(cd "$SRC" && find . -type f | while read -r f; do [ -e "$STAGE/$f" ] || echo "$f"; done | head -n 5)
+count=$(cd "$SRC" && find . -type f | wc -l)
+sync
+cleanup
+restart
+[ -z "$missing" ] || die "verification failed, missing on disk: $missing"
+
+say "done: $count files and your settings are on $DEV"
+if command -v llmos-data-setup >/dev/null 2>&1 || [ -x /usr/local/bin/llmos-data-setup ]; then
+    say "reboot to start using the data disk"
+else
+    say "next: shut down, replace the OS disk with a new LLM OS release, and keep this data disk attached"
+fi

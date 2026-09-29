@@ -1,0 +1,6 @@
+# Scripts run on Linux (VM images, CI): keep LF even in Windows working trees
+*.sh text eol=lf
+build/rootfs/** text eol=lf
+build/buildroot/board/** text eol=lf
+build/buildroot/configs/** text eol=lf
+build/Dockerfile.* text eol=lf

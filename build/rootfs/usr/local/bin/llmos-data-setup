@@ -22,11 +22,31 @@ mkdir -p "$DATA"
 
 # 1. Data disk
 if [ -z "$LLMOS_SKIP_MOUNT" ] && ! grep -q " $DATA " /proc/mounts 2>/dev/null; then
-    DEV=$(blkid 2>/dev/null | grep 'LABEL="LLMOSDATA"' | head -n 1 | cut -d: -f1)
+    DEV="${LLMOS_DATA_DEV:-$(blkid 2>/dev/null | grep 'LABEL="LLMOSDATA"' | head -n 1 | cut -d: -f1)}"
     if [ -n "$DEV" ]; then
-        if mount -o noatime "$DEV" "$DATA" 2>/dev/null; then
+        # A data disk attached to an install that already has data on the
+        # system disk: copy that data onto the new disk first. Mounting over
+        # it directly would hide it and look like everything was lost.
+        if [ -e "$MARK" ]; then
+            STAGE=$(mktemp -d /tmp/llmos-newdisk.XXXXXX)
+            if mount -o noatime "$DEV" "$STAGE" 2>/dev/null; then
+                if [ ! -e "$STAGE/.llmos-data" ]; then
+                    if cp -a "$DATA/." "$STAGE/"; then
+                        echo "llmos-data-setup: copied existing data from the system disk to $DEV" >&2
+                    else
+                        echo "llmos-data-setup: copying data to $DEV failed; keeping data on the system disk" >&2
+                        umount "$STAGE"; rmdir "$STAGE"
+                        DEV=""
+                    fi
+                fi
+                [ -n "$DEV" ] && { umount "$STAGE"; rmdir "$STAGE"; }
+            else
+                rmdir "$STAGE"
+            fi
+        fi
+        if [ -n "$DEV" ] && mount -o noatime "$DEV" "$DATA" 2>/dev/null; then
             echo "llmos-data-setup: mounted data disk $DEV at $DATA" >&2
-        else
+        elif [ -n "$DEV" ]; then
             echo "llmos-data-setup: could not mount $DEV, using $DATA on the system disk" >&2
         fi
     fi

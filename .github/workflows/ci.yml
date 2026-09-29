@@ -60,6 +60,9 @@ jobs:
       - name: Run desktop layout tests
         run: node tests/desktop.test.js
 
+      - name: Run data disk tests (real ext4 mounts on loop devices)
+        run: sudo sh tests/vm/data-disk.test.sh
+
   build-vm:
     name: Build VM (${{ matrix.variant }})
     needs: test

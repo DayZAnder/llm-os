@@ -197,6 +197,29 @@
   .evolve-input { width: 100%; box-sizing: border-box; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font: inherit; resize: vertical; margin-bottom: 12px; }
   .evolve-input:focus { outline: none; border-color: var(--accent); }
   .cap-sensitive { color: var(--warning); }
+  /* --- Boot splash: the launcher mark with code glyphs orbiting it (our take
+     on the spinning dots), and a status line showing the real boot steps --- */
+  .boot-splash { position: fixed; inset: 0; z-index: 300000; background: var(--bg-primary); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 34px; transition: opacity .35s ease; }
+  .boot-splash.done { opacity: 0; pointer-events: none; }
+  .boot-stage { position: relative; width: 220px; height: 220px; display: flex; align-items: center; justify-content: center; }
+  .boot-mark { width: 88px; height: 88px; animation: boot-breathe 2.4s ease-in-out infinite; filter: drop-shadow(0 0 24px color-mix(in srgb, var(--accent) 45%, transparent)); }
+  @keyframes boot-breathe { 50% { transform: scale(1.04); filter: drop-shadow(0 0 34px color-mix(in srgb, var(--accent) 70%, transparent)); } }
+  .boot-orbit { position: absolute; inset: 0; animation: boot-orbit 2.6s cubic-bezier(.55,.1,.45,.9) infinite; }
+  .boot-orbit span { position: absolute; left: 50%; top: 0; font: 600 17px var(--font-mono); color: color-mix(in srgb, var(--accent) 65%, var(--text-primary)); animation: boot-upright 2.6s cubic-bezier(.55,.1,.45,.9) infinite; animation-delay: inherit; }
+  .boot-orbit:nth-child(2) { animation-delay: .14s; } .boot-orbit:nth-child(3) { animation-delay: .28s; }
+  .boot-orbit:nth-child(4) { animation-delay: .42s; } .boot-orbit:nth-child(5) { animation-delay: .56s; }
+  .boot-orbit:nth-child(6) { animation-delay: .70s; }
+  @keyframes boot-orbit { 0% { transform: rotate(0deg); opacity: 0; } 8% { opacity: 1; } 80% { opacity: 1; } 100% { transform: rotate(720deg); opacity: 0; } }
+  /* counter-rotate so the glyphs stay upright while they orbit */
+  @keyframes boot-upright { from { transform: translateX(-50%) rotate(0deg); } to { transform: translateX(-50%) rotate(-720deg); } }
+  .boot-name { font: 600 15px var(--font-sans); letter-spacing: .3em; color: var(--text-primary); opacity: .85; }
+  .boot-status { font: 13px var(--font-mono); color: var(--text-secondary); min-height: 20px; }
+  .boot-status b { color: var(--text-primary); font-weight: 500; }
+  .boot-status.err { color: var(--danger); }
+  @media (prefers-reduced-motion: reduce) {
+    .boot-orbit { display: none; }
+    .boot-mark { animation: none; }
+  }
   .upgrade-modal { width: min(560px, 92vw); }
   .upgrade-models { display: flex; flex-direction: column; gap: 2px; margin: 0 0 12px; max-height: 300px; overflow: auto; }
   .upgrade-model { display: grid; grid-template-columns: 20px 1fr auto auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
@@ -1202,6 +1225,21 @@
 </style>
 </head>
 <body>
+
+<!-- Boot splash (shown until the shell has connected and restored the desktop) -->
+<div class="boot-splash" id="boot-splash" role="status" aria-live="polite">
+  <div class="boot-stage" aria-hidden="true">
+    <div class="boot-orbit"><span>{</span></div>
+    <div class="boot-orbit"><span>}</span></div>
+    <div class="boot-orbit"><span>(</span></div>
+    <div class="boot-orbit"><span>)</span></div>
+    <div class="boot-orbit"><span>;</span></div>
+    <div class="boot-orbit"><span>=&gt;</span></div>
+    <svg class="boot-mark" viewBox="0 0 32 32"><rect width="32" height="32" rx="8" fill="#6c63ff"/><path d="M14 5C14.9 11.6 17.4 14.1 24 15 17.4 15.9 14.9 18.4 14 25 13.1 18.4 10.6 15.9 4 15 10.6 14.1 13.1 11.6 14 5Z" fill="#fff"/><path d="M23.5 18.5C23.9 21 24.8 21.9 27.5 22.5 24.8 23.1 23.9 24 23.5 26.5 23.1 24 22.2 23.1 19.5 22.5 22.2 21.9 23.1 21 23.5 18.5Z" fill="#fff" opacity=".85"/></svg>
+  </div>
+  <div class="boot-name">LLM OS</div>
+  <div class="boot-status" id="boot-status">starting</div>
+</div>
 
 <!-- Top Bar -->
 <div class="topbar">
@@ -3852,7 +3890,39 @@ function connectShellReload() {
 }
 
 // --- Init ---
+// --- Boot splash ---
+// Status lines are built from text nodes: names can come from the model.
+function bootStatus(verb, what, detail) {
+  const el = document.getElementById('boot-status');
+  if (!el) return;
+  const b = document.createElement('b');
+  b.textContent = what;
+  el.replaceChildren(verb + ' ', b, ...(detail ? [' · ' + detail] : []));
+}
+
+function hideSplash() {
+  const el = document.getElementById('boot-splash');
+  if (!el) return;
+  el.classList.add('done');
+  setTimeout(() => el.remove(), 400);
+}
+
 async function init() {
+  try {
+    await boot();
+  } catch (err) {
+    // The kernel isn't answering: say so instead of spinning forever
+    console.error('[boot]', err);
+    const el = document.getElementById('boot-status');
+    if (el) { el.textContent = 'cannot reach the LLM OS kernel — retrying…'; el.classList.add('err'); }
+    setTimeout(() => location.reload(), 4000);
+    return;
+  }
+  hideSplash();
+}
+
+async function boot() {
+  bootStatus('loading', 'system services');
   // Load SDK code for injection into sandboxes
   // Portable UI core first, then the SDK that exposes it as LLMOS.ui.app
   const [uiCore, sdk] = await Promise.all(['/sdk/ui.js', '/sdk/sdk.js'].map(u => fetch(u).then(r => r.text())));
@@ -3901,9 +3971,23 @@ async function init() {
   });
 
   // System theme (generated or default) for the shell and every app
-  try { applyTheme(await fetch('/api/theme').then(r => r.json())); } catch {}
+  try {
+    const theme = await fetch('/api/theme').then(r => r.json());
+    bootStatus('applying', 'theme', theme.name);
+    applyTheme(theme);
+  } catch {}
   // Desktop layout (classic = the original shell)
-  try { applyDesktop(await fetch('/api/desktop').then(r => r.json())); } catch (err) { console.warn('[desktop]', err); }
+  try {
+    const layout = await fetch('/api/desktop').then(r => r.json());
+    bootStatus('arranging', 'desktop', layout.name);
+    applyDesktop(layout);
+  } catch (err) { console.warn('[desktop]', err); }
+  try {
+    // Models that actually answer (local ones are probed), not just configured ones
+    const models = await fetch('/api/models').then(r => r.json());
+    const names = models.slice(0, 3).map(m => m.label);
+    bootStatus('checking', 'models', names.length ? names.join(', ') + (models.length > 3 ? ` +${models.length - 3}` : '') : 'none reachable — apps can still run');
+  } catch {}
 
   initExamples();
   checkLLMStatus();
@@ -3915,6 +3999,7 @@ async function init() {
     const statsRes = await fetch('/api/registry/stats');
     const stats = await statsRes.json();
     if (stats.totalApps > 0) browseBtn.textContent = `Browse Apps (${stats.totalApps})`;
+    bootStatus('loading', 'apps', `${stats.totalApps} installed`);
   } catch {}
 
   // Prompt input
@@ -3942,6 +4027,9 @@ async function init() {
   }
 
   // Restore apps from previous session
+  let restoring = 0;
+  try { restoring = (JSON.parse(localStorage.getItem('llmos-session'))?.iframeApps || []).length; } catch {}
+  if (restoring) bootStatus('restoring', 'windows', String(restoring));
   await restoreSession();
 }
 
