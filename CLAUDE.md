@@ -117,7 +117,8 @@ proxy), `ai` (the OS model), `clipboard`, `os` (launch args, open file, title),
   first boot, manifest included (Files, Notepad, Tasks).
 - **Desktop layout** (`kernel/desktop.js`): bar (taskbar/menubar), Prompt
   launcher, clock, dock, window-button side, wallpaper — as validated data.
-  Presets `windows`, `mac`, `classic` (the original shell); `/desktop <text>`
+  Presets `taskbar`, `dock`, `classic` (the original shell; `windows`/`mac`
+  still resolve as aliases but are not shown anywhere); `/desktop <text>`
   lets the model design one on top of a preset. The shell draws bar, dock,
   launcher and Alt+Tab switcher with portable UI trees. System hotkeys
   (Alt+Tab/Alt+`, Super, Ctrl+Space) are forwarded from apps by the SDK

@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 import { config } from './kernel/config.js';
 import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme, generateDesktop, listUpgradeModels } from './kernel/gateway.js';
 import { loadTheme, saveTheme, resetTheme, validateTheme } from './kernel/theme.js';
-import { loadLayout, saveLayout, resetLayout, validateLayout, PRESETS as DESKTOP_PRESETS } from './kernel/desktop.js';
+import { loadLayout, saveLayout, resetLayout, validateLayout, resolvePreset, PRESETS as DESKTOP_PRESETS } from './kernel/desktop.js';
 import { checkApiRequest } from './kernel/http-guard.js';
 import { bootReport, formatText as formatBootText } from './kernel/boot.js';
 import * as vfs from './kernel/vfs.js';
@@ -458,17 +458,18 @@ Explain in two or three short sentences what this means for the user and exactly
     if (method === 'POST' && url === '/api/desktop') {
       const input = JSON.parse(body);
       if (input.preset) {
-        if (!DESKTOP_PRESETS[input.preset]) { sendJson(res, 400, { error: `Unknown preset: ${input.preset}` }); return; }
-        const layout = { ...validateLayout(DESKTOP_PRESETS[input.preset], DESKTOP_PRESETS[input.preset]).layout, preset: input.preset };
+        const name = resolvePreset(input.preset);
+        if (!name) { sendJson(res, 400, { error: `Unknown preset: ${String(input.preset).slice(0, 40)}` }); return; }
+        const layout = { ...validateLayout(DESKTOP_PRESETS[name], DESKTOP_PRESETS[name]).layout, preset: name };
         saveLayout(layout);
         sendJson(res, 200, layout);
         return;
       }
       if (input.layout) {
-        const base = DESKTOP_PRESETS[input.layout.base] || DESKTOP_PRESETS.windows;
-        const { layout, problems } = validateLayout(input.layout, base);
+        const name = resolvePreset(input.layout.base) || 'taskbar';
+        const { layout, problems } = validateLayout(input.layout, DESKTOP_PRESETS[name]);
         if (problems.length) { sendJson(res, 400, { error: 'Layout rejected', problems }); return; }
-        saveLayout({ ...layout, preset: input.layout.base || 'windows' });
+        saveLayout({ ...layout, preset: name });
         sendJson(res, 200, layout);
         return;
       }

@@ -2,7 +2,7 @@
 // window controls, wallpaper.
 //
 // Like themes, a layout can be written by the model from a description
-// ("mac style with a dock on the left"), but the model only proposes: every
+// ("menu bar on top, dock on the left"), but the model only proposes: every
 // field is checked and clamped here, deterministically, before the shell
 // sees it. Unknown fields are dropped; missing ones come from the preset the
 // model started from.
@@ -26,8 +26,8 @@ export const PRESETS = {
     windows: { controls: 'right' },
     promptBar: 'visible',
   },
-  windows: {
-    name: 'Windows style',
+  taskbar: {
+    name: 'Taskbar',
     bar: {
       position: 'bottom', style: 'taskbar', height: 44,
       launcher: { label: 'Prompt', icon: 'logo', position: 'left' },
@@ -39,8 +39,8 @@ export const PRESETS = {
     promptBar: 'hidden',
     wallpaper: { type: 'gradient', from: '#0d0d1a', to: '#1b1640' },
   },
-  mac: {
-    name: 'Mac style',
+  dock: {
+    name: 'Menu bar + dock',
     bar: {
       position: 'top', style: 'menubar', height: 30,
       launcher: { label: 'LLM OS', icon: 'logo', position: 'left' },
@@ -53,6 +53,17 @@ export const PRESETS = {
     wallpaper: { type: 'gradient', from: '#101024', to: '#2a1b4a' },
   },
 };
+
+// Older names (≤0.4.1) still work — saved layouts, typed commands and model
+// answers — but the UI and docs only use the neutral names.
+export const PRESET_ALIASES = { windows: 'taskbar', mac: 'dock' };
+
+/** Canonical preset name for a name or alias, or null. */
+export function resolvePreset(name) {
+  const key = String(name || '').toLowerCase();
+  const canon = PRESET_ALIASES[key] || key;
+  return Object.hasOwn(PRESETS, canon) ? canon : null;
+}
 
 const POSITIONS = {
   bar: ['top', 'bottom', 'none'],
@@ -75,7 +86,7 @@ const color = (v, fallback) => (typeof v === 'string' && /^#[0-9a-f]{6}$/i.test(
  * Validate a proposed layout on top of a base preset.
  * @returns {{ layout: object, problems: string[] }}
  */
-export function validateLayout(input, base = PRESETS.windows) {
+export function validateLayout(input, base = PRESETS.taskbar) {
   const src = input && typeof input === 'object' ? input : {};
   const problems = [];
   const note = (path, v) => problems.push(`${path}: ${JSON.stringify(v)} is not allowed`);
@@ -148,12 +159,18 @@ export function validateLayout(input, base = PRESETS.windows) {
   return { layout, problems };
 }
 
+const OLD_NAMES = { windows: 'Windows style', mac: 'Mac style' };
+
 export function loadLayout() {
   if (!existsSync(layoutFile)) return { ...PRESETS.classic, preset: 'classic' };
   try {
     const data = JSON.parse(readFileSync(layoutFile, 'utf-8'));
-    const base = PRESETS[data.preset] || PRESETS.windows;
-    return { ...validateLayout(data, base).layout, preset: data.preset || null, description: String(data.description || '').slice(0, 300) };
+    const preset = resolvePreset(data.preset);
+    const base = PRESETS[preset || 'taskbar'];
+    const layout = validateLayout(data, base).layout;
+    // A saved preset under its old name gets the new display name too
+    if (preset && data.preset !== preset && data.name === OLD_NAMES[data.preset]) layout.name = base.name;
+    return { ...layout, preset, description: String(data.description || '').slice(0, 300) };
   } catch {
     return { ...PRESETS.classic, preset: 'classic' };
   }

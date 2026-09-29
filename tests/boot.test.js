@@ -29,7 +29,7 @@ const base = {
   schedulerEnabled: false,
   tokenKeyReady: true,
   theme: 'Default',
-  desktop: 'Mac style',
+  desktop: 'Menu bar + dock',
 };
 const by = (report, id) => report.services.find(s => s.id === id);
 

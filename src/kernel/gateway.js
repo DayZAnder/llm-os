@@ -886,7 +886,9 @@ export async function generateTheme(description, options = {}) {
 const DESKTOP_SYSTEM = `You are the desktop designer for LLM OS. Turn the user's description into a desktop layout.
 
 Output ONLY a JSON object, no markdown:
-{"base": "windows" | "mac" | "classic",      the closest preset; anything you leave out comes from it
+{"base": "taskbar" | "dock" | "classic",     the closest preset; anything you leave out comes from it
+                                             (taskbar: one bar at the bottom with launcher, open windows and clock;
+                                              dock: thin menu bar on top plus an app dock; classic: prompt bar only)
  "name": "Short Layout Name",
  "bar": {"position": "top"|"bottom"|"none", "style": "taskbar"|"menubar"|"minimal", "height": 24-64,
          "launcher": {"label": "up to 16 chars", "icon": "logo" (the OS launcher mark, recommended) or up to 4 chars, "position": "left"|"center"|"right"},
@@ -906,7 +908,7 @@ The launcher is the button that opens the prompt, where the user describes apps;
 export async function generateDesktop(description, options = {}) {
   const { clean } = sanitizePrompt(String(description || '').slice(0, 500));
   if (!clean) throw new Error('Describe the desktop you want');
-  const { validateLayout, PRESETS } = await import('./desktop.js');
+  const { validateLayout, PRESETS, resolvePreset } = await import('./desktop.js');
 
   const route = await selectBestProvider('simple');
   const messages = [
@@ -931,7 +933,7 @@ export async function generateDesktop(description, options = {}) {
       const json = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
       parsed = JSON.parse(json.slice(json.indexOf('{'), json.lastIndexOf('}') + 1));
     } catch {}
-    const preset = parsed && PRESETS[parsed.base] ? parsed.base : 'windows';
+    const preset = (parsed && resolvePreset(parsed.base)) || 'taskbar';
     const check = validateLayout(parsed, PRESETS[preset]);
     last = { ...check.layout, preset, description: clean, problems: check.problems, provider, model, attempts: attempt };
     if (parsed && check.problems.length === 0) return last;

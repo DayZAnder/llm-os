@@ -280,13 +280,17 @@
   .desk-launcher .llu-button { text-align: left; }
   .desk-switcher { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 200001; box-shadow: 0 24px 64px rgba(0,0,0,.55); border-radius: 12px; }
   .desk-switcher > .llu { background: color-mix(in srgb, var(--bg-secondary) 94%, transparent) !important; }
-  /* Window controls on the left, round like a Mac */
-  /* The last three titlebar buttons are minimize, maximize, close; reorder to close, minimize, maximize */
+  /* Window controls on the left: the last three titlebar buttons (minimize,
+     maximize, close) move before the title as small rounded tiles in theme
+     colors; glyphs stay faint until the pointer is over the group. */
   body.desk-controls-left .app-titlebar .title { text-align: center; }
-  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(-n+3) { width: 12px; height: 12px; padding: 0; border-radius: 50%; font-size: 0; margin: 0 3px; }
-  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(1) { order: -3; background: #ed6a5e; margin-left: 0; }
-  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(3) { order: -2; background: #f5bf4f; }
-  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(2) { order: -1; background: #61c554; margin-right: 10px; }
+  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(-n+3) { width: 18px; height: 18px; padding: 0; border-radius: 5px; font-size: 11px; line-height: 18px; text-align: center; margin: 0 2px; background: color-mix(in srgb, var(--border) 70%, transparent); color: color-mix(in srgb, var(--text-secondary) 45%, transparent); }
+  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(3) { order: -3; margin-left: 0; }
+  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(2) { order: -2; }
+  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(1) { order: -1; margin-right: 10px; }
+  body.desk-controls-left .app-titlebar:hover .win-btn:nth-last-child(-n+3) { color: var(--text-primary); }
+  body.desk-controls-left .app-titlebar .win-btn:nth-last-child(-n+3):hover { background: var(--accent); color: #fff; }
+  body.desk-controls-left .app-titlebar .win-btn.close-btn:hover { background: var(--danger); color: #fff; }
   .gen-live { position: fixed; right: 20px; bottom: 90px; width: min(560px, calc(100vw - 40px)); height: min(460px, 60vh); z-index: 9000; display: grid; grid-template-rows: auto 1fr 150px; background: var(--bg-secondary); border: 1px solid var(--accent-dim); border-radius: 10px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
   .gen-live-head { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; font: 12px var(--font-mono); border-bottom: 1px solid var(--border); }
   .gen-live-title { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -2694,13 +2698,13 @@ async function desktopCommand(arg) {
   try {
     if (/^(reset|classic)$/i.test(arg)) {
       layout = await fetch('/api/desktop/reset', { method: 'POST' }).then(r => r.json());
-    } else if (/^(windows|mac)$/i.test(arg)) {
+    } else if (/^(taskbar|dock|windows|mac)$/i.test(arg)) {
       layout = await fetch('/api/desktop', {
         method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ preset: arg.toLowerCase() }),
       }).then(r => r.json());
     } else if (!arg) {
-      log('Usage: /desktop windows | mac | classic | <describe your desktop>', 'warn');
+      log('Usage: /desktop taskbar | dock | classic | <describe your desktop>', 'warn');
       return;
     } else {
       log(`Designing desktop: "${arg}"`);

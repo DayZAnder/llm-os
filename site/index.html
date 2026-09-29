@@ -179,6 +179,7 @@
 
   footer { border-top: 1px solid var(--rule); padding: 36px 0 56px; font-size: 14px; color: var(--muted); }
   footer .wrap { display: flex; flex-wrap: wrap; gap: 12px 28px; justify-content: space-between; }
+  footer .tm { flex-basis: 100%; font-size: 13px; }
 
   .lightbox { position: fixed; inset: 0; background: rgba(0,0,0,.88); display: none; align-items: center; justify-content: center; padding: 24px; z-index: 10; cursor: zoom-out; }
   .lightbox.open { display: flex; }
@@ -257,7 +258,7 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
         </div>
       </div>
       <ul class="changes body-col">
-        <li><span class="kind new">new</span><div><p>Describe your desktop.</p><p><code>/desktop windows</code>, <code>/desktop mac</code>, or any description: taskbar or menubar, dock position, clock, window buttons, wallpaper. The model proposes a layout, the kernel validates every field. Pinned apps that don’t exist yet are written the first time you click them.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Describe your desktop.</p><p><code>/desktop taskbar</code>, <code>/desktop dock</code>, or any description: a taskbar at the bottom (Windows-like) or a menu bar with a dock (Mac-like), dock position, clock, window buttons, wallpaper. The model proposes a layout, the kernel validates every field. Pinned apps that don’t exist yet are written the first time you click them.</p></div></li>
         <li><span class="kind new">new</span><div><p>A Prompt button instead of a Start menu.</p><p>Search your apps or describe a new one from the same box. Also on the Super/Windows key and Ctrl+Space.</p></div></li>
         <li><span class="kind new">new</span><div><p>Alt+Tab window switcher.</p><p>Works in kiosk mode and on the native renderer; in a normal browser, where the host OS keeps Alt+Tab, use Alt+` instead. Shortcuts work even while an app has focus.</p></div></li>
         <li><span class="kind new">new</span><div><p>Terminal, Writer and Reader.</p><p>A shell for the OS itself (files, network, the model), a word processor that saves HTML documents, and a reader-mode browser that shows pages without scripts, trackers or cookies.</p></div></li>
@@ -291,12 +292,12 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
       </div>
       <figure>
         <img src="screenshots/v040_desktop_mac.webp" alt="Full HD desktop with a menubar, a dock, and Terminal, Writer and Reader windows" loading="lazy">
-        <figcaption><code>/desktop mac</code> at 1920×1080: menubar with the Prompt launcher, a dock with running-app dots, Terminal, Writer and Reader working on the same files.</figcaption>
+        <figcaption><code>/desktop dock</code> at 1920×1080: menu bar with the Prompt launcher, a dock with running-app dots, Terminal, Writer and Reader working on the same files.</figcaption>
       </figure>
       <div class="figs">
         <figure>
-          <img src="screenshots/v040_desktop_windows.webp" alt="The same apps with a Windows-style taskbar at the bottom" loading="lazy">
-          <figcaption><code>/desktop windows</code>: a taskbar with the Prompt button, open windows, status and clock.</figcaption>
+          <img src="screenshots/v040_desktop_windows.webp" alt="The same apps with a taskbar at the bottom" loading="lazy">
+          <figcaption><code>/desktop taskbar</code>: a taskbar with the Prompt button, open windows, status and clock.</figcaption>
         </figure>
         <figure>
           <img src="screenshots/v040_desktop_generated.webp" alt="A desktop designed from a description: menubar with a centered clock and a dock on the left" loading="lazy">
@@ -545,6 +546,7 @@ npm test                  <span class="c"># 604 tests</span></pre>
   <div class="wrap">
     <span>LLM OS 0.4.0 · <a href="https://github.com/DayZAnder/llm-os/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/CONTRIBUTING.md">Contributing</a></span>
     <span>This site makes no third-party requests and sets no cookies.</span>
+    <span class="tm">Windows is a trademark of Microsoft; macOS of Apple. LLM OS is not affiliated with either.</span>
   </div>
 </footer>
 
