@@ -19,11 +19,11 @@ import { resolve, extname } from 'path';
 const TELEMETRY_PATTERNS = [
   { pattern: /google[\s-]?analytics|gtag|ga\s*\(/i, rule: 'NO_GOOGLE_ANALYTICS', description: 'Google Analytics detected' },
   { pattern: /mixpanel|amplitude|segment\.(?:com|io)|posthog/i, rule: 'NO_ANALYTICS_SERVICE', description: 'Analytics/tracking service detected' },
-  { pattern: /sentry\.io|bugsnag|rollbar|datadog/i, rule: 'NO_ERROR_TRACKING', description: 'Error tracking service detected (use local logging)' },
+  { pattern: /sentry\.io|bugsnag|\brollbar\b|datadog/i, rule: 'NO_ERROR_TRACKING', description: 'Error tracking service detected (use local logging)' },
   { pattern: /beacon\s*\(|navigator\.sendBeacon/i, rule: 'NO_BEACON', description: 'sendBeacon used (silent data exfiltration risk)' },
   { pattern: /\.track\s*\(|\.identify\s*\(|\.page\s*\(/i, rule: 'NO_TRACKING_CALLS', description: 'Tracking method calls detected (.track, .identify, .page)' },
   { pattern: /fingerprint(?:js|2|pro)(?!ing)/i, rule: 'NO_FINGERPRINTING', description: 'Browser fingerprinting library detected' },
-  { pattern: /hotjar|fullstory|logrocket|mouseflow|clarity/i, rule: 'NO_SESSION_RECORDING', description: 'Session recording service detected' },
+  { pattern: /hotjar|fullstory|logrocket|mouseflow|clarity\.ms|microsoft[\s-]*clarity/i, rule: 'NO_SESSION_RECORDING', description: 'Session recording service detected' },
 ];
 
 const PRIVACY_PATTERNS = [
@@ -38,7 +38,8 @@ const SANDBOX_WEAKENING_PATTERNS = [
   { pattern: /sandbox\s*=\s*["'][^"']*allow-top-navigation/i, rule: 'NO_TOP_NAV', description: 'allow-top-navigation lets iframe redirect parent' },
   { pattern: /sandbox\s*=\s*["'][^"']*allow-popups(?!-to-escape)/i, rule: 'NO_POPUPS', description: 'allow-popups enables sandbox escape via popup' },
   { pattern: /Content-Security-Policy[^;]*unsafe-eval/i, rule: 'NO_UNSAFE_EVAL_CSP', description: 'unsafe-eval in CSP defeats code analysis' },
-  { pattern: /\.contentWindow\b(?!\.postMessage)/i, rule: 'NO_CONTENT_WINDOW', description: 'Direct contentWindow access (use postMessage)' },
+  // Allowed: postMessage (incl. optional chaining) and identity checks against event.source
+  { pattern: /\.contentWindow\b(?!\??\.postMessage|\s*===)/i, rule: 'NO_CONTENT_WINDOW', description: 'Direct contentWindow access (use postMessage)' },
 ];
 
 // === VALUE 2: Empower the user ===

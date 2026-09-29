@@ -1,9 +1,15 @@
+import { createHash } from 'crypto';
 import { config } from './config.js';
 import { provider as ollamaProvider } from './providers/ollama.js';
 import { provider as claudeProvider } from './providers/claude.js';
 import { provider as openaiProvider } from './providers/openai-compatible.js';
 import { buildContext } from './knowledge.js';
 import { getBestModel } from './resource-monitor.js';
+import { record as recordUsage, calculateCost } from './usage-tracker.js';
+import { estimateTokenCount } from './utils/normalize.js';
+
+// Prompt cache — exact match dedup (in-memory, ephemeral)
+const promptCache = new Map(); // hash → { result, timestamp }
 
 // Provider registry — add new providers here
 const providers = new Map();
@@ -37,29 +43,55 @@ export function getProviders() {
   return result;
 }
 
-const SYSTEM_PROMPT = `You are the app generator for LLM OS. Generate a SINGLE self-contained app.
+const SYSTEM_PROMPT = `You are the application generator for LLM OS, an operating system whose programs are written by AI on demand. You write ONE complete, self-contained program as a single HTML document that runs inside a sandboxed window.
 
-Output ONLY valid HTML with inline <script> and <style> tags. No markdown, no explanation, no code fences.
+# Output format
+Output ONLY the HTML document — no markdown, no code fences, no explanation.
+The first two lines MUST be these comments:
+<!-- capabilities: ["ui:window", ...] -->
+<!-- app: {"name": "Short App Name", "icon": "one emoji", "handles": [".ext", "mime/type"]} -->
+"handles" lists file types the app can open (omit or [] if none). Then <!DOCTYPE html>.
 
-SDK (available as global LLMOS):
-  LLMOS.ui.render(element) — mount your app's root element to the page
-  LLMOS.ui.h(tag, props, ...children) — create a DOM element
-  LLMOS.storage.get(key) — read from persistent storage (returns Promise)
-  LLMOS.storage.set(key, value) — write to persistent storage (returns Promise)
-  LLMOS.timer.setInterval(fn, ms) — repeating timer, returns id
-  LLMOS.timer.clearInterval(id) — stop a repeating timer
-  LLMOS.timer.setTimeout(fn, ms) — one-shot timer, returns id
+# Sandbox
+The window is a sandboxed iframe with a strict CSP: no network, no external scripts, fonts, images or stylesheets, no eval/Function, no parent/top access, no cookies, no localStorage. Everything must be inline. All system services go through the global LLMOS SDK below; every call returns a Promise unless noted, and fails with an Error if the capability was not granted — handle that gracefully (show a message, keep the rest of the app working).
 
-Rules:
-- Output starts with <!DOCTYPE html> or <html>
-- Do NOT use fetch(), XMLHttpRequest, WebSocket directly
-- Do NOT use eval(), Function(), new Function(), or dynamic imports
-- Do NOT access parent, top, window.parent, or document.cookie
-- Declare required capabilities as a JSON comment on the FIRST line:
-  <!-- capabilities: ["ui:window", "storage:local"] -->
-- Available capabilities: ui:window, storage:local, timer:basic, clipboard:rw, network:http
-- Keep the app simple, functional, and visually clean
-- Use a dark color scheme (dark background, light text)`;
+# LLMOS SDK
+ui (ui:window — always granted)
+  LLMOS.ui.h(tag, props, ...children) → Element   (sync helper; props: className, style object, onClick etc.)
+  LLMOS.ui.render(element)                         (sync; replaces #llmos-root content)
+  LLMOS.ui.notify(message)                         (shows a system notification)
+  LLMOS.ui.confirm(message) → boolean
+storage (storage:local) — private key/value store for this app, survives restarts
+  LLMOS.storage.get(key) → value|null · set(key, value) · remove(key) · keys() → string[]
+fs (fs:read, fs:write) — the user's shared filesystem, visible to every app; paths like "/notes/todo.md"
+  LLMOS.fs.list(dir) → [{path, name, type:"file"|"dir", size, mime, modified}]
+  LLMOS.fs.read(path) → string · write(path, text) · stat(path) → info|null · mkdir(path) · remove(path)
+net (network:http) — HTTP through the kernel proxy (public internet only)
+  LLMOS.net.request(url, {method, headers, body}) → {status, headers, body, encoding}
+  LLMOS.net.json(url) → parsed JSON (GET)
+ai (ai:generate) — ask the OS language model; use it to make the app itself intelligent
+  LLMOS.ai.complete(prompt, {system, maxTokens}) → string
+clipboard (clipboard:rw)
+  LLMOS.clipboard.write(text) · read() → string
+os — integration with the rest of the OS (no capability needed)
+  LLMOS.os.args → object passed at launch, e.g. {path: "/docs/a.csv"} when the user opened a file with this app
+  LLMOS.os.open(path) — open a file in the app that handles its type (the OS may generate one)
+  LLMOS.os.setTitle(text) — change the window title
+ipc (ipc:bus) — publish/subscribe between running apps
+  LLMOS.ipc.publish(topic, data) · LLMOS.ipc.subscribe(topic, (data, fromAppId) => {})
+timer (timer:basic)
+  LLMOS.timer.setTimeout/setInterval/clearTimeout/clearInterval — same as window versions
+
+Declare every capability the app uses, and no others:
+ui:window, storage:local, fs:read, fs:write, network:http, ai:generate, clipboard:rw, ipc:bus, timer:basic
+
+# Design system
+The OS injects CSS custom properties; use them instead of hard-coded colors so every app matches the OS theme:
+--llmos-bg, --llmos-surface, --llmos-surface-2, --llmos-fg, --llmos-muted, --llmos-accent, --llmos-accent-fg, --llmos-border, --llmos-danger, --llmos-success, --llmos-radius, --llmos-font, --llmos-mono
+Body margin/padding is 0. The window can be any size: use a flexible layout (flex/grid, height: 100%), never 100vh, never fixed pixel widths for the main layout. Keep the UI clean, legible and keyboard-friendly (Enter submits, Escape cancels). Use the app's name as a visible heading only if it helps.
+
+# Quality bar
+Write a complete, working program — no placeholders, TODOs or "in a real app" stubs. Persist user data with storage or fs when it makes sense. If the app handles files, read LLMOS.os.args.path on start and open that file. Validate input and show errors in the UI rather than throwing.`;
 
 // --- Model Hint Extraction ---
 // Parse "use opus", "with claude", "using haiku" etc. from user prompts.
@@ -67,10 +99,12 @@ Rules:
 
 const MODEL_ALIASES = {
   // Claude models
-  opus:    { provider: 'claude', model: 'claude-opus-4-6' },
-  sonnet:  { provider: 'claude', model: 'claude-sonnet-4-5-20250929' },
-  haiku:   { provider: 'claude', model: 'claude-haiku-4-5-20251001' },
-  claude:  { provider: 'claude', model: null }, // use configured default
+  fable:     { provider: 'claude', model: 'claude-fable-5-1' },
+  'opus-5.5':{ provider: 'claude', model: 'claude-opus-5-5' },
+  opus:      { provider: 'claude', model: 'claude-opus-5' },
+  sonnet:    { provider: 'claude', model: 'claude-sonnet-5' },
+  haiku:     { provider: 'claude', model: 'claude-haiku-4-5' },
+  claude:    { provider: 'claude', model: null }, // use configured default
   // OpenAI models
   'gpt-4o':  { provider: 'openai', model: 'gpt-4o' },
   'gpt-4':   { provider: 'openai', model: 'gpt-4o' },
@@ -82,24 +116,30 @@ const MODEL_ALIASES = {
   local:   { provider: 'ollama', model: null },
 };
 
+// "opus 5.5", "opus-5.5", "opus5.5" all normalize to the 'opus-5.5' alias
+function normalizeAlias(raw) {
+  const a = raw.toLowerCase().replace(/\s+/g, '');
+  return /^opus-?5\.5$/.test(a) ? 'opus-5.5' : a;
+}
+
 // Patterns: "use opus", "using opus", "with opus", "via claude", "by opus"
 // Also at end: "... make a calculator, opus" or "... make a calculator (opus)"
 const MODEL_HINT_PATTERNS = [
   // "use/using/with/via/by <model>" anywhere in prompt
-  /\b(?:use|using|with|via|by)\s+(opus|sonnet|haiku|claude|openai|ollama|qwen|local|gpt-4o?|o1)\b/i,
+  /\b(?:use|using|with|via|by)\s+(opus[\s-]?5\.5|fable|opus|sonnet|haiku|claude|openai|ollama|qwen|local|gpt-4o?|o1)\b/i,
   // "... , <model>" at end of prompt
-  /,\s*(opus|sonnet|haiku|claude|openai|ollama|qwen|local|gpt-4o?|o1)\s*$/i,
+  /,\s*(opus[\s-]?5\.5|fable|opus|sonnet|haiku|claude|openai|ollama|qwen|local|gpt-4o?|o1)\s*$/i,
   // "... (<model>)" at end of prompt
-  /\(\s*(opus|sonnet|haiku|claude|openai|ollama|qwen|local|gpt-4o?|o1)\s*\)\s*$/i,
+  /\(\s*(opus[\s-]?5\.5|fable|opus|sonnet|haiku|claude|openai|ollama|qwen|local|gpt-4o?|o1)\s*\)\s*$/i,
   // "<model> model" or "<model>-model"
-  /\b(opus|sonnet|haiku)\s*[-]?\s*model\b/i,
+  /\b(opus[\s-]?5\.5|fable|opus|sonnet|haiku)\s*[-]?\s*model\b/i,
 ];
 
 export function extractModelHint(prompt) {
   for (const pattern of MODEL_HINT_PATTERNS) {
     const m = prompt.match(pattern);
     if (m) {
-      const alias = m[1].toLowerCase();
+      const alias = normalizeAlias(m[1]);
       const resolved = MODEL_ALIASES[alias];
       if (resolved) {
         // Strip the hint from the prompt
@@ -332,6 +372,83 @@ async function generateWithProvider(name, messages, options = {}) {
   return prov.generate(messages, getProviderConfig(name), options);
 }
 
+/**
+ * Call a provider (optionally with a model override), falling back to another
+ * available provider on failure. Truncated output is never retried elsewhere —
+ * a smaller model would only truncate sooner.
+ * @returns {Promise<{ raw: string, provider: string, model: string, usage: object|null }>}
+ *   usage is what the provider reported ({inputTokens, outputTokens, ...}), or null.
+ */
+async function callWithFallback(providerName, modelOverride, messages, options = {}) {
+  const prov = providers.get(providerName);
+  const cfg = modelOverride
+    ? { ...getProviderConfig(providerName), model: modelOverride }
+    : getProviderConfig(providerName);
+  let usage = null;
+  const opts = { ...options, onUsage: (u) => { usage = u; } };
+  try {
+    const raw = await prov.generate(messages, cfg, opts);
+    return { raw, provider: providerName, model: cfg.model, usage };
+  } catch (err) {
+    if (err.name === 'TruncatedOutputError' || err.name === 'AbortError') throw err;
+    const fb = getFallbackProvider(providerName);
+    if (!fb) throw err;
+    console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
+    options.onReset?.(); // discard partial output already streamed from the failed provider
+    usage = null;
+    const raw = await generateWithProvider(fb, messages, opts);
+    return { raw, provider: fb, model: getProviderConfig(fb).model, usage };
+  }
+}
+
+/**
+ * Token counts for the usage log: the provider's own numbers when it
+ * reported them, otherwise an estimate over the WHOLE request (system
+ * prompts and app code included), flagged as estimated.
+ */
+export function usageFor(messages, output, reported) {
+  if (reported && (reported.inputTokens || reported.outputTokens)) {
+    return {
+      inputTokens: reported.inputTokens || 0,
+      outputTokens: reported.outputTokens || 0,
+      cacheReadTokens: reported.cacheReadTokens || 0,
+      cacheWriteTokens: reported.cacheWriteTokens || 0,
+      estimated: false,
+    };
+  }
+  const input = messages.map(m => (typeof m.content === 'string' ? m.content : '')).join('\n');
+  return { inputTokens: estimateTokenCount(input), outputTokens: estimateTokenCount(output || ''), estimated: true };
+}
+
+/** Resolve provider/model from an explicit hint or dynamic selection. */
+async function resolveRoute(modelHint, complexity) {
+  if (modelHint) {
+    const prov = providers.get(modelHint.provider);
+    if (prov && prov.isAvailable(getProviderConfig(modelHint.provider))) {
+      console.log(`[gateway] Model hint: "${modelHint.alias}" → ${modelHint.provider}${modelHint.model ? ` (${modelHint.model})` : ''}`);
+      return { provider: modelHint.provider, model: modelHint.model };
+    }
+    console.warn(`[gateway] Requested provider '${modelHint.provider}' (${modelHint.alias}) not available, falling back`);
+  }
+  return selectBestProvider(complexity);
+}
+
+/**
+ * Parse the app manifest comment:
+ *   <!-- app: {"name": "...", "icon": "...", "handles": [".csv"]} -->
+ * Returns a sanitized manifest; never trusts the model for anything but data.
+ */
+export function extractManifest(code) {
+  const m = code.match(/<!--\s*app\s*:\s*(\{[\s\S]*?\})\s*-->/);
+  let raw = {};
+  if (m) { try { raw = JSON.parse(m[1]); } catch {} }
+  const str = (v, max) => (typeof v === 'string' ? v.replace(/[<>]/g, '').trim().slice(0, max) : '');
+  const handles = Array.isArray(raw.handles)
+    ? raw.handles.filter(h => typeof h === 'string' && /^(\.[a-z0-9]{1,10}|[a-z]+\/[a-z0-9.+-]+)$/i.test(h)).map(h => h.toLowerCase()).slice(0, 20)
+    : [];
+  return { name: str(raw.name, 40), icon: str(raw.icon, 8), handles };
+}
+
 function extractCapabilities(code) {
   const match = code.match(/<!--\s*capabilities\s*:\s*(\[.*?\])\s*-->/);
   if (match) {
@@ -340,18 +457,18 @@ function extractCapabilities(code) {
   return ['ui:window']; // default capability
 }
 
-function cleanResponse(raw) {
+export function cleanResponse(raw) {
   let code = raw.trim();
 
   // Strip markdown code fences if LLM wraps them
   code = code.replace(/^```(?:html)?\s*\n?/i, '').replace(/\n?```\s*$/, '');
 
-  // Find the HTML document
-  const htmlStart = code.indexOf('<!DOCTYPE') !== -1
-    ? code.indexOf('<!DOCTYPE')
-    : code.indexOf('<html') !== -1
-      ? code.indexOf('<html')
-      : code.indexOf('<!--');
+  // Drop any chatter before the document. The header comments
+  // (capabilities, app manifest) come BEFORE <!DOCTYPE and must be kept.
+  const starts = [/<!--\s*(?:capabilities|app)\s*:/i, /<!DOCTYPE/i, /<html[\s>]/i]
+    .map(re => code.search(re))
+    .filter(i => i !== -1);
+  const htmlStart = starts.length ? Math.min(...starts) : code.indexOf('<!--');
 
   if (htmlStart > 0) code = code.slice(htmlStart);
 
@@ -415,74 +532,27 @@ export async function generateProcess(prompt) {
   const { clean, flagged, flags } = sanitizePrompt(effectivePrompt);
   if (flagged) console.warn('[gateway] Injection patterns detected:', flags);
 
-  // Model hint overrides default routing; otherwise use dynamic selection
-  let providerName, modelOverride;
-  if (modelHint) {
-    providerName = modelHint.provider;
-    modelOverride = modelHint.model;
-    const prov = providers.get(providerName);
-    if (!prov || !prov.isAvailable(getProviderConfig(providerName))) {
-      console.warn(`[gateway] Requested provider '${providerName}' not available, falling back`);
-      const best = await selectBestProvider('complex');
-      providerName = best.provider;
-      modelOverride = best.model;
-    } else {
-      console.log(`[gateway] Model hint: "${modelHint.alias}" → ${providerName}${modelOverride ? ` (${modelOverride})` : ''}`);
-    }
-  } else {
-    // Dynamic: pick best available for process apps (always complex)
-    const best = await selectBestProvider('complex');
-    providerName = best.provider;
-    modelOverride = best.model;
-  }
-
-  console.log(`[gateway] Generating process app: provider=${providerName}${modelOverride ? ` model=${modelOverride}` : ''}`);
+  // Process apps are always treated as complex
+  const route = await resolveRoute(modelHint, 'complex');
+  console.log(`[gateway] Generating process app: provider=${route.provider}${route.model ? ` model=${route.model}` : ''}`);
 
   const messages = [
     { role: 'system', content: PROCESS_SYSTEM_PROMPT },
     { role: 'user', content: clean },
   ];
-
-  let raw;
-  if (modelOverride) {
-    const origCfg = getProviderConfig(providerName);
-    const overrideCfg = { ...origCfg, model: modelOverride };
-    const prov = providers.get(providerName);
-    try {
-      raw = await prov.generate(messages, overrideCfg);
-    } catch (err) {
-      const fb = getFallbackProvider(providerName);
-      if (fb) {
-        console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
-        raw = await generateWithProvider(fb, messages);
-        providerName = fb;
-        modelOverride = null;
-      } else { throw err; }
-    }
-  } else {
-    try {
-      raw = await generateWithProvider(providerName, messages);
-    } catch (err) {
-      const fb = getFallbackProvider(providerName);
-      if (fb) {
-        console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
-        raw = await generateWithProvider(fb, messages);
-        providerName = fb;
-      } else { throw err; }
-    }
-  }
+  const { raw, provider: usedProvider, model: usedModel } =
+    await callWithFallback(route.provider, route.model, messages);
 
   const { dockerfile, code } = parseProcessResponse(raw);
   const capabilities = extractProcessCapabilities(raw);
-  const cfg = getProviderConfig(providerName);
 
   return {
     type: 'process',
     dockerfile,
     code,
     capabilities,
-    model: modelOverride || cfg.model,
-    provider: providerName,
+    model: usedModel,
+    provider: usedProvider,
     complexity: estimateComplexity(clean),
     generationTime: Date.now() - start,
     sanitization: { flagged, flags },
@@ -518,92 +588,272 @@ export async function generate(prompt, options = {}) {
     };
   }
 
-  // Route to provider — model hint overrides complexity-based routing
+  // Prompt cache — return cached result for identical prompts within TTL.
+  // { fresh: true } skips it: regenerating on purpose must hit the model.
+  if (config.cache.enabled && !options.fresh) {
+    const cacheKey = createHash('sha256').update(clean).digest('hex').slice(0, 16);
+    const cached = promptCache.get(cacheKey);
+    if (cached && (Date.now() - cached.timestamp) < config.cache.ttlMs) {
+      console.log(`[gateway] Cache hit: ${cacheKey} (${clean.slice(0, 40)}...)`);
+      recordUsage({
+        prompt: clean,
+        provider: cached.result.provider,
+        model: cached.result.model,
+        inputTokens: estimateTokenCount(clean),
+        outputTokens: 0,
+        latencyMs: 0,
+        cached: true,
+        cacheType: 'exact',
+      });
+      return { ...cached.result, generationTime: 0, fromCache: true };
+    }
+  }
+
   const complexity = estimateComplexity(clean);
-  let providerName, modelOverride;
-  if (modelHint) {
-    providerName = modelHint.provider;
-    modelOverride = modelHint.model;
-    // Check if provider is available, fall back to auto if not
-    const prov = providers.get(providerName);
-    if (!prov || !prov.isAvailable(getProviderConfig(providerName))) {
-      console.warn(`[gateway] Requested provider '${providerName}' (${modelHint.alias}) not available, falling back`);
-      const best = await selectBestProvider(complexity);
-      providerName = best.provider;
-      modelOverride = best.model;
-    } else {
-      console.log(`[gateway] Model hint: "${modelHint.alias}" → ${providerName}${modelOverride ? ` (${modelOverride})` : ''}`);
-    }
-  } else {
-    // Dynamic: pick best available for this complexity level
-    const best = await selectBestProvider(complexity);
-    providerName = best.provider;
-    modelOverride = best.model;
-  }
+  const route = await resolveRoute(modelHint, complexity);
 
-  console.log(`[gateway] Generating: confidence=${confidence.score} complexity=${complexity} provider=${providerName}${modelOverride ? ` model=${modelOverride}` : ''}`);
+  console.log(`[gateway] Generating: confidence=${confidence.score} complexity=${complexity} provider=${route.provider}${route.model ? ` model=${route.model}` : ''}`);
 
-  // Inject knowledge base context if relevant past generations exist
+  // Stable system prompt first (cacheable), per-request knowledge context second
   const kbContext = buildContext(clean);
-  const systemContent = kbContext
-    ? `${SYSTEM_PROMPT}\n\n${kbContext}`
-    : SYSTEM_PROMPT;
+  const messages = [{ role: 'system', content: SYSTEM_PROMPT }];
+  if (kbContext) messages.push({ role: 'system', content: kbContext });
+  messages.push({ role: 'user', content: clean });
 
-  const messages = [
-    { role: 'system', content: systemContent },
-    { role: 'user', content: clean },
-  ];
-
-  // Build provider config, applying model override if specified
-  const genOptions = {};
-  let effectiveConfig = providerName;
-  if (modelOverride) {
-    // Temporarily override the model in provider config
-    const origCfg = getProviderConfig(providerName);
-    const overrideCfg = { ...origCfg, model: modelOverride };
-    // Use direct provider call with overridden config
-    const prov = providers.get(providerName);
-    try {
-      var raw = await prov.generate(messages, overrideCfg, genOptions);
-    } catch (err) {
-      const fb = getFallbackProvider(providerName);
-      if (fb) {
-        console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
-        raw = await generateWithProvider(fb, messages);
-        effectiveConfig = fb;
-        modelOverride = null;
-      } else {
-        throw err;
-      }
-    }
-  } else {
-    try {
-      var raw = await generateWithProvider(providerName, messages);
-    } catch (err) {
-      const fb = getFallbackProvider(providerName);
-      if (fb) {
-        console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
-        raw = await generateWithProvider(fb, messages);
-        effectiveConfig = fb;
-      } else {
-        throw err;
-      }
-    }
-  }
+  const { raw, provider: usedProvider, model: usedModel, usage } =
+    await callWithFallback(route.provider, route.model, messages, { onText: options.onText, onReset: options.onReset });
 
   const code = cleanResponse(raw);
   const capabilities = extractCapabilities(code);
-  const usedProvider = typeof effectiveConfig === 'string' ? effectiveConfig : providerName;
-  const cfg = getProviderConfig(usedProvider);
+  const genTime = Date.now() - start;
 
-  return {
+  const result = {
     code,
     capabilities,
-    model: modelOverride || cfg.model,
+    manifest: extractManifest(code),
+    model: usedModel,
     provider: usedProvider,
     complexity,
-    generationTime: Date.now() - start,
+    generationTime: genTime,
     sanitization: { flagged, flags },
     modelHint: modelHint ? modelHint.alias : null,
   };
+
+  // Record usage
+  recordUsage({
+    prompt: clean,
+    provider: usedProvider,
+    model: usedModel,
+    ...usageFor(messages, raw, usage),
+    latencyMs: genTime,
+    cached: false,
+    cacheType: null,
+  });
+
+  // Store in prompt cache
+  if (config.cache.enabled) {
+    const cacheKey = createHash('sha256').update(clean).digest('hex').slice(0, 16);
+    promptCache.set(cacheKey, { result, timestamp: Date.now() });
+    // Evict expired entries periodically (every 100 cache writes)
+    if (promptCache.size % 100 === 0) {
+      const now = Date.now();
+      for (const [k, v] of promptCache) {
+        if (now - v.timestamp > config.cache.ttlMs) promptCache.delete(k);
+      }
+    }
+  }
+
+  return result;
+}
+
+// --- App evolution: modify or repair a running app ---
+
+const EVOLVE_ADDENDUM = `You are now EDITING an existing LLM OS program rather than writing a new one.
+You receive the current program, and a change request and/or runtime errors observed while it ran.
+Return the COMPLETE updated HTML document (same output format and header comments as above) — never a diff or a fragment.
+Preserve everything that already works, the app's name, and the storage keys and file formats it uses, so the user's data keeps working.
+When fixing errors, fix the root cause, not just the symptom. Update the capabilities comment if the app now needs more or fewer.`;
+
+const MAX_EVOLVE_ERRORS = 20;
+
+/**
+ * Produce a new version of an app from its current code plus an instruction
+ * and/or runtime errors (self-healing).
+ * @param {{ code: string, instruction?: string, errors?: string[], prompt?: string }} input
+ */
+export async function evolve({ code, instruction = '', errors = [], prompt = '' }, options = {}) {
+  const start = Date.now();
+  if (typeof code !== 'string' || !code.trim()) throw new Error('Missing code');
+
+  const modelHint = instruction ? extractModelHint(instruction) : null;
+  const { clean, flagged, flags } = sanitizePrompt(modelHint ? modelHint.cleanPrompt : instruction);
+  const cleanErrors = (Array.isArray(errors) ? errors : [])
+    .filter(e => typeof e === 'string')
+    .slice(-MAX_EVOLVE_ERRORS)
+    .map(e => sanitizePrompt(e.slice(0, 500)).clean);
+  if (!clean && cleanErrors.length === 0) throw new Error('Nothing to change: give an instruction or errors');
+
+  const route = await resolveRoute(modelHint, 'complex');
+  console.log(`[gateway] Evolving app: provider=${route.provider}${route.model ? ` model=${route.model}` : ''} errors=${cleanErrors.length}`);
+
+  let request = '';
+  if (prompt) request += `The app was originally created from this request: "${sanitizePrompt(prompt).clean}"\n\n`;
+  request += `<current_program>\n${code}\n</current_program>\n\n`;
+  if (clean) request += `Change request from the user: ${clean}\n\n`;
+  if (cleanErrors.length) request += `Runtime errors observed while the app ran:\n${cleanErrors.map(e => `- ${e}`).join('\n')}\n\n`;
+  request += 'Return the complete updated program.';
+
+  const messages = [
+    { role: 'system', content: SYSTEM_PROMPT },
+    { role: 'system', content: EVOLVE_ADDENDUM },
+    { role: 'user', content: request },
+  ];
+  const { raw, provider, model, usage } = await callWithFallback(route.provider, route.model, messages, { onText: options.onText, onReset: options.onReset });
+
+  const newCode = cleanResponse(raw);
+  const genTime = Date.now() - start;
+  recordUsage({
+    prompt: `[evolve] ${clean || 'fix errors'}`,
+    provider, model,
+    ...usageFor(messages, raw, usage),
+    latencyMs: genTime,
+    cached: false,
+    cacheType: null,
+  });
+
+  return {
+    code: newCode,
+    capabilities: extractCapabilities(newCode),
+    manifest: extractManifest(newCode),
+    model, provider,
+    generationTime: genTime,
+    sanitization: { flagged, flags },
+  };
+}
+
+// --- AI syscall: apps holding ai:generate can ask the OS model ---
+
+const AI_SYSCALL_SYSTEM = `You are the language model service of LLM OS, called by an application on the user's behalf. Answer the request directly and concisely in plain text unless the request asks for a specific format. Do not mention that you are being called by an app.`;
+const AI_RATE_PER_MINUTE = 20;
+const aiCalls = new Map(); // appId → timestamps (ms) within the last minute
+
+export function checkAiRateLimit(appId, now = Date.now()) {
+  const recent = (aiCalls.get(appId) || []).filter(t => now - t < 60000);
+  if (recent.length >= AI_RATE_PER_MINUTE) {
+    aiCalls.set(appId, recent);
+    return false;
+  }
+  recent.push(now);
+  aiCalls.set(appId, recent);
+  return true;
+}
+
+/**
+ * Text completion for apps. Rate-limited per app; prompt is sanitized like
+ * any other user input.
+ */
+export async function complete({ appId, prompt, system = '', maxTokens = 2048 }) {
+  if (typeof prompt !== 'string' || !prompt.trim()) throw new Error('Missing prompt');
+  if (!checkAiRateLimit(appId)) throw new Error(`AI rate limit: max ${AI_RATE_PER_MINUTE} calls per minute`);
+
+  const start = Date.now();
+  const { clean } = sanitizePrompt(prompt.slice(0, 100000));
+  const route = await selectBestProvider('medium');
+  const messages = [{ role: 'system', content: AI_SYSCALL_SYSTEM }];
+  if (typeof system === 'string' && system.trim()) {
+    messages.push({ role: 'system', content: `Instructions from the application: ${sanitizePrompt(system.slice(0, 20000)).clean}` });
+  }
+  messages.push({ role: 'user', content: clean });
+
+  const tokens = Math.max(1, Math.min(8192, parseInt(maxTokens, 10) || 2048));
+  let raw, provider, model, usage = null, truncated = false;
+  try {
+    ({ raw, provider, model, usage } = await callWithFallback(route.provider, route.model, messages, { maxTokens: tokens }));
+  } catch (err) {
+    if (err.name !== 'TruncatedOutputError') throw err;
+    // Hitting the app's own maxTokens is not an error — return what we have
+    raw = err.partial; provider = route.provider; model = route.model || getProviderConfig(route.provider).model; truncated = true;
+  }
+
+  recordUsage({
+    prompt: `[ai:${appId}] ${clean.slice(0, 80)}`,
+    provider, model,
+    ...usageFor(messages, raw, usage),
+    latencyMs: Date.now() - start,
+    cached: false,
+    cacheType: null,
+  });
+  return { text: raw.trim(), truncated, model, provider };
+}
+
+// --- System theme generation ---
+
+const THEME_SYSTEM = `You are the theme designer for LLM OS. Turn the user's description into a color theme for the whole operating system.
+
+Output ONLY a JSON object, no markdown, no explanation:
+{"name": "Short Theme Name", "vars": {
+  "--llmos-bg": "#rrggbb",         page background
+  "--llmos-surface": "#rrggbb",    panels, toolbars
+  "--llmos-surface-2": "#rrggbb",  inputs, hovered items
+  "--llmos-fg": "#rrggbb",         main text
+  "--llmos-muted": "#rrggbb",      secondary text
+  "--llmos-accent": "#rrggbb",     primary buttons, selection, links
+  "--llmos-accent-fg": "#rrggbb",  text on accent
+  "--llmos-border": "#rrggbb",
+  "--llmos-danger": "#rrggbb",
+  "--llmos-success": "#rrggbb",
+  "--llmos-radius": "0px"-"20px",
+  "--llmos-font": "font stack",    system fonts only, letters/quotes/commas/hyphens
+  "--llmos-mono": "font stack"
+}}
+
+Colors must be #rrggbb. Text must be comfortably readable: fg on bg at least 7:1, fg on surface 4.5:1, muted on bg 3:1, accent-fg on accent 3:1, accent on bg 3:1. Keep surfaces close to the background so the UI stays calm; let the accent carry the character of the description.`;
+
+/**
+ * Ask the model for a theme, validate it deterministically, and give the
+ * model one chance to correct contrast/format problems.
+ */
+export async function generateTheme(description, options = {}) {
+  const { clean } = sanitizePrompt(String(description || '').slice(0, 500));
+  if (!clean) throw new Error('Describe the theme you want');
+  const { validateTheme } = await import('./theme.js');
+
+  const route = await selectBestProvider('simple');
+  const messages = [
+    { role: 'system', content: THEME_SYSTEM },
+    { role: 'user', content: clean },
+  ];
+
+  let last = null;
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const started = Date.now();
+    const { raw, provider, model, usage } = await callWithFallback(route.provider, route.model, messages, { maxTokens: 2000, onText: options.onText, onReset: options.onReset });
+    recordUsage({
+      prompt: `[theme] ${clean.slice(0, 80)}`,
+      provider, model,
+      ...usageFor(messages, raw, usage),
+      latencyMs: Date.now() - started,
+      cached: false,
+      cacheType: null,
+    });
+    let parsed = null;
+    try {
+      const json = raw.trim().replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/, '');
+      parsed = JSON.parse(json.slice(json.indexOf('{'), json.lastIndexOf('}') + 1));
+    } catch {}
+    const check = validateTheme(parsed?.vars);
+    const name = typeof parsed?.name === 'string' ? parsed.name.replace(/[<>]/g, '').slice(0, 60) : 'Custom';
+    last = { name, description: clean, vars: check.vars, problems: check.problems, provider, model, attempts: attempt };
+    if (parsed && check.ok) return last;
+
+    // Feed the deterministic findings back once
+    messages.push({ role: 'assistant', content: raw });
+    messages.push({ role: 'user', content: parsed
+      ? `The theme was rejected by the validator:\n- ${check.problems.join('\n- ')}\nReturn the corrected JSON object only.`
+      : 'That was not a valid JSON object. Return only the JSON object.' });
+    options.onReset?.();
+  }
+  const err = new Error(`Theme rejected after 2 attempts: ${last.problems.join('; ') || 'invalid JSON'}`);
+  err.theme = last;
+  throw err;
 }

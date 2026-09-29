@@ -6,7 +6,7 @@ set -euo pipefail
 #   ./build/build-alpine-remote.sh
 #
 # Uses docker context 'gpu-machine' (configure with: docker context create gpu-machine --docker "host=tcp://YOUR_HOST:2375")
-# Output: build/output/llmos-0.2.3-server.qcow2
+# Output: build/output/llmos-0.3.0-server.qcow2
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"

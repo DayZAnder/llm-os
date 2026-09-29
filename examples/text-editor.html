@@ -1,0 +1,370 @@
+<!-- capabilities: ["ui:window", "fs:read", "fs:write", "storage:local"] -->
+<!-- app: {"name": "Notepad", "icon": "📝", "handles": [".txt", ".md", ".log", ".json", ".csv", ".yaml", ".yml", "text/plain", "text/markdown"]} -->
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  .app { display: flex; flex-direction: column; height: 100%; }
+  .menubar { display: flex; align-items: center; gap: 2px; padding: 4px 6px; background: var(--llmos-surface); border-bottom: 1px solid var(--llmos-border); font-size: 13px; overflow-x: auto; scrollbar-width: none; }
+  .mbtn { white-space: nowrap; flex-shrink: 0; }
+  @media (max-width: 760px) { .mbtn kbd { display: none; } }
+  .menubar .spacer { flex: 1; }
+  .menubar .doc { color: var(--llmos-muted); padding: 0 8px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 45%; }
+  .menubar .doc .dirty { color: var(--llmos-accent); }
+  .mbtn { background: none; border: 0; color: var(--llmos-fg); font: inherit; padding: 5px 9px; border-radius: 5px; cursor: pointer; }
+  .mbtn:hover, .mbtn.on { background: var(--llmos-surface-2); }
+  .mbtn kbd { color: var(--llmos-muted); font: 11px var(--llmos-mono); margin-left: 6px; }
+  .findbar { display: none; gap: 6px; align-items: center; padding: 6px 8px; border-bottom: 1px solid var(--llmos-border); background: var(--llmos-bg); font-size: 13px; }
+  .findbar.open { display: flex; }
+  .findbar input { background: var(--llmos-surface); border: 1px solid var(--llmos-border); color: var(--llmos-fg); border-radius: 5px; padding: 4px 8px; font: inherit; width: 160px; }
+  .findbar input:focus { outline: none; border-color: var(--llmos-accent); }
+  .findbar .hits { color: var(--llmos-muted); min-width: 70px; }
+  .editor { flex: 1; display: grid; grid-template-columns: auto 1fr; min-height: 0; font: var(--size, 14px)/1.6 var(--llmos-mono); }
+  .gutter { padding: 12px 10px 12px 14px; color: var(--llmos-muted); opacity: .6; text-align: right; user-select: none; overflow: hidden; white-space: pre; border-right: 1px solid var(--llmos-border); }
+  .gutter.hidden { display: none; }
+  textarea { resize: none; border: 0; outline: none; background: var(--llmos-bg); color: var(--llmos-fg); font: inherit; padding: 12px 16px; tab-size: 4; min-height: 0; }
+  textarea.nowrap { white-space: pre; overflow-x: auto; }
+  .statusbar { display: flex; gap: 16px; padding: 4px 12px; font: 12px var(--llmos-mono); color: var(--llmos-muted); background: var(--llmos-surface); border-top: 1px solid var(--llmos-border); }
+  .statusbar .grow { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .statusbar .err { color: var(--llmos-danger); }
+  .sheet { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
+  .panel { background: var(--llmos-surface); border: 1px solid var(--llmos-border); border-radius: 10px; width: min(460px, 92%); max-height: 80%; display: grid; grid-template-rows: auto 1fr auto; font-size: 13px; }
+  .panel header { padding: 12px 14px 8px; font-weight: 600; display: flex; gap: 8px; align-items: center; }
+  .panel header .path { color: var(--llmos-muted); font: 12px var(--llmos-mono); font-weight: 400; }
+  .panel .files { overflow: auto; border-top: 1px solid var(--llmos-border); border-bottom: 1px solid var(--llmos-border); min-height: 160px; }
+  .panel .f { padding: 6px 14px; cursor: pointer; display: flex; gap: 8px; }
+  .panel .f:hover, .panel .f.sel { background: var(--llmos-surface-2); }
+  .panel footer { padding: 10px 14px; display: flex; gap: 6px; align-items: center; }
+  .panel footer input { flex: 1; background: var(--llmos-bg); border: 1px solid var(--llmos-border); color: var(--llmos-fg); border-radius: 5px; padding: 6px 8px; font: 12px var(--llmos-mono); }
+  .btn { background: var(--llmos-surface-2); color: var(--llmos-fg); border: 1px solid var(--llmos-border); border-radius: 6px; padding: 5px 12px; font: inherit; cursor: pointer; }
+  .btn.primary { background: var(--llmos-accent); color: var(--llmos-accent-fg); border-color: var(--llmos-accent); }
+  .empty { padding: 20px 14px; color: var(--llmos-muted); }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="menubar">
+    <button class="mbtn" id="bNew">New<kbd>Ctrl+N</kbd></button>
+    <button class="mbtn" id="bOpen">Open<kbd>Ctrl+O</kbd></button>
+    <button class="mbtn" id="bSave">Save<kbd>Ctrl+S</kbd></button>
+    <button class="mbtn" id="bSaveAs">Save as</button>
+    <button class="mbtn" id="bFind">Find<kbd>Ctrl+F</kbd></button>
+    <button class="mbtn" id="bWrap">Wrap</button>
+    <button class="mbtn" id="bLines">Lines</button>
+    <button class="mbtn" id="bSmaller" title="Smaller text">A−</button>
+    <button class="mbtn" id="bBigger" title="Larger text">A+</button>
+    <span class="spacer"></span>
+    <span class="doc" id="docName"></span>
+  </div>
+  <div class="findbar" id="findbar">
+    <input id="fFind" placeholder="Find">
+    <input id="fRepl" placeholder="Replace with">
+    <span class="hits" id="fHits"></span>
+    <button class="btn" id="fPrev">↑</button>
+    <button class="btn" id="fNext">↓</button>
+    <button class="btn" id="fOne">Replace</button>
+    <button class="btn" id="fAll">All</button>
+    <button class="btn" id="fClose">✕</button>
+  </div>
+  <div class="editor" id="editor">
+    <div class="gutter" id="gutter">1</div>
+    <textarea id="text" spellcheck="false" placeholder="Start typing. Your draft is kept even if you close the window."></textarea>
+  </div>
+  <div class="statusbar">
+    <span class="grow" id="msg"></span>
+    <span id="pos">Ln 1, Col 1</span>
+    <span id="counts">0 words</span>
+  </div>
+</div>
+
+<script>
+(function () {
+  const h = LLMOS.ui.h;
+  const $ = (id) => document.getElementById(id);
+  const ta = $('text');
+
+  const state = { path: null, saved: '', wrap: true, lines: true, size: 14 };
+
+  // --- status + chrome ---
+  function msg(text, isErr) {
+    const el = $('msg');
+    el.className = isErr ? 'err' : '';
+    el.textContent = text || '';
+  }
+  const dirty = () => ta.value !== state.saved;
+  function updateTitle() {
+    const name = state.path ? state.path.split('/').pop() : 'Untitled';
+    $('docName').replaceChildren(dirty() ? h('span', { className: 'dirty' }, '● ') : '', state.path || 'Untitled — not saved to a file');
+    LLMOS.os.setTitle((dirty() ? '● ' : '') + name + ' — Notepad').catch(() => {});
+  }
+  function updateGutter() {
+    if (!state.lines) return;
+    const n = ta.value.split('\n').length;
+    const g = $('gutter');
+    if (g.dataset.n !== String(n)) {
+      g.dataset.n = n;
+      g.textContent = Array.from({ length: n }, (_, i) => i + 1).join('\n');
+    }
+    g.scrollTop = ta.scrollTop;
+  }
+  function updateStatus() {
+    const before = ta.value.slice(0, ta.selectionStart);
+    const line = before.split('\n').length;
+    const col = before.length - before.lastIndexOf('\n');
+    const sel = ta.selectionEnd - ta.selectionStart;
+    $('pos').textContent = `Ln ${line}, Col ${col}` + (sel ? ` (${sel} selected)` : '');
+    const words = (ta.value.match(/\S+/g) || []).length;
+    $('counts').textContent = `${words} word${words === 1 ? '' : 's'} · ${ta.value.length} chars`;
+  }
+  function applyView() {
+    ta.classList.toggle('nowrap', !state.wrap);
+    ta.wrap = state.wrap ? 'soft' : 'off';
+    $('gutter').classList.toggle('hidden', !state.lines);
+    $('bWrap').classList.toggle('on', state.wrap);
+    $('bLines').classList.toggle('on', state.lines);
+    $('editor').style.setProperty('--size', state.size + 'px');
+    updateGutter();
+  }
+  function savePrefs() {
+    LLMOS.storage.set('prefs', { wrap: state.wrap, lines: state.lines, size: state.size }).catch(() => {});
+  }
+
+  // Draft autosave: nothing typed is lost, even for untitled documents
+  let draftTimer = null;
+  function scheduleDraft() {
+    clearTimeout(draftTimer);
+    draftTimer = setTimeout(() => {
+      LLMOS.storage.set('draft', { path: state.path, text: ta.value, saved: state.saved }).catch(() => {});
+    }, 400);
+  }
+
+  function onChange() {
+    updateGutter();
+    updateStatus();
+    updateTitle();
+    scheduleDraft();
+    if (findOpen()) countHits();
+  }
+
+  // --- files ---
+  async function openPath(path) {
+    try {
+      const text = await LLMOS.fs.read(path);
+      state.path = path;
+      state.saved = text;
+      ta.value = text;
+      ta.setSelectionRange(0, 0);
+      ta.scrollTop = 0;
+      onChange();
+      msg('Opened ' + path);
+    } catch (err) {
+      msg('Could not open ' + path + ': ' + err.message, true);
+    }
+  }
+
+  async function save(asNew) {
+    let path = state.path;
+    if (!path || asNew) {
+      path = await pickFile('save', path || '/documents/untitled.txt');
+      if (!path) return false;
+    }
+    try {
+      const dir = path.replace(/\/[^/]*$/, '');
+      if (dir) await LLMOS.fs.mkdir(dir);
+      await LLMOS.fs.write(path, ta.value);
+      state.path = path;
+      state.saved = ta.value;
+      onChange();
+      msg('Saved ' + path);
+      return true;
+    } catch (err) {
+      msg('Save failed: ' + err.message, true);
+      return false;
+    }
+  }
+
+  async function confirmDiscard() {
+    return !dirty() || LLMOS.ui.confirm('You have unsaved changes. Discard them?');
+  }
+
+  // A small file browser for Open / Save as, backed by the shared filesystem
+  function pickFile(mode, suggested) {
+    return new Promise((resolve) => {
+      let dir = suggested ? suggested.replace(/\/[^/]*$/, '') || '/' : '/';
+      const pathLabel = h('span', { className: 'path' });
+      const files = h('div', { className: 'files' });
+      const nameInput = h('input', { value: suggested || dir });
+      const done = (v) => { sheet.remove(); ta.focus(); resolve(v); };
+      const confirmBtn = h('button', { className: 'btn primary', onClick: () => submit() }, mode === 'save' ? 'Save' : 'Open');
+
+      async function show(d) {
+        dir = d;
+        pathLabel.textContent = d;
+        let list = [];
+        try { list = await LLMOS.fs.list(d); } catch { list = []; }
+        const rows = [];
+        if (d !== '/') rows.push(h('div', { className: 'f', onClick: () => show(d.replace(/\/[^/]*$/, '') || '/') }, '↩', '..'));
+        for (const e of list) {
+          rows.push(h('div', {
+            className: 'f',
+            onClick: () => { if (e.type === 'dir') show(e.path); else nameInput.value = e.path; },
+            onDblclick: () => { if (e.type === 'file') { nameInput.value = e.path; submit(); } },
+          }, e.type === 'dir' ? '📁' : '📄', e.name));
+        }
+        if (!list.length) rows.push(h('div', { className: 'empty' }, 'Empty folder'));
+        files.replaceChildren(...rows);
+        if (mode === 'save') {
+          const base = nameInput.value.split('/').pop() || 'untitled.txt';
+          nameInput.value = (d === '/' ? '' : d) + '/' + base;
+        }
+      }
+      function submit() {
+        const v = nameInput.value.trim();
+        if (!v.startsWith('/') || v.endsWith('/')) return msg('Enter a full path like /notes/todo.md', true);
+        done(v);
+      }
+      nameInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') submit(); if (e.key === 'Escape') done(null); });
+      const sheet = h('div', { className: 'sheet', onClick: (e) => { if (e.target === sheet) done(null); } },
+        h('div', { className: 'panel' },
+          h('header', null, mode === 'save' ? 'Save as' : 'Open file', pathLabel),
+          files,
+          h('footer', null, nameInput, h('button', { className: 'btn', onClick: () => done(null) }, 'Cancel'), confirmBtn)));
+      document.body.appendChild(sheet);
+      show(dir);
+      nameInput.focus();
+    });
+  }
+
+  // --- find & replace ---
+  const findOpen = () => $('findbar').classList.contains('open');
+  function hits() {
+    const q = $('fFind').value;
+    if (!q) return [];
+    const out = [];
+    const hay = ta.value.toLowerCase(), needle = q.toLowerCase();
+    for (let i = hay.indexOf(needle); i !== -1; i = hay.indexOf(needle, i + needle.length)) out.push(i);
+    return out;
+  }
+  function countHits() {
+    const n = hits().length;
+    $('fHits').textContent = $('fFind').value ? `${n} match${n === 1 ? '' : 'es'}` : '';
+  }
+  function findStep(dir) {
+    const list = hits();
+    if (!list.length) return countHits();
+    const q = $('fFind').value.length;
+    const from = dir > 0 ? ta.selectionEnd : ta.selectionStart - 1;
+    let idx = dir > 0 ? list.find((i) => i >= from) : [...list].reverse().find((i) => i <= from);
+    if (idx === undefined) idx = dir > 0 ? list[0] : list[list.length - 1];
+    ta.focus();
+    ta.setSelectionRange(idx, idx + q);
+    const lineH = parseFloat(getComputedStyle(ta).lineHeight) || 20;
+    ta.scrollTop = Math.max(0, ta.value.slice(0, idx).split('\n').length * lineH - ta.clientHeight / 2);
+    $('fHits').textContent = `${list.indexOf(idx) + 1} of ${list.length}`;
+    updateStatus();
+  }
+  function replaceOne() {
+    const q = $('fFind').value;
+    const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+    if (q && sel.toLowerCase() === q.toLowerCase()) {
+      ta.setRangeText($('fRepl').value, ta.selectionStart, ta.selectionEnd, 'end');
+      onChange();
+    }
+    findStep(1);
+  }
+  function replaceAll() {
+    const q = $('fFind').value;
+    if (!q) return;
+    const n = hits().length;
+    const escaped = q.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    ta.value = ta.value.replace(new RegExp(escaped, 'gi'), () => $('fRepl').value);
+    onChange();
+    msg(`Replaced ${n} occurrence${n === 1 ? '' : 's'}`);
+  }
+  function toggleFind(open) {
+    $('findbar').classList.toggle('open', open);
+    $('bFind').classList.toggle('on', open);
+    if (open) {
+      const sel = ta.value.slice(ta.selectionStart, ta.selectionEnd);
+      if (sel && !sel.includes('\n')) $('fFind').value = sel;
+      $('fFind').focus();
+      $('fFind').select();
+      countHits();
+    } else {
+      ta.focus();
+    }
+  }
+
+  // --- wiring ---
+  async function newDoc() {
+    if (!(await confirmDiscard())) return;
+    state.path = null; state.saved = ''; ta.value = '';
+    onChange(); msg('New document'); ta.focus();
+  }
+  async function openDoc() {
+    if (!(await confirmDiscard())) return;
+    const p = await pickFile('open', state.path);
+    if (p) openPath(p);
+  }
+
+  $('bNew').onclick = newDoc;
+  $('bOpen').onclick = openDoc;
+  $('bSave').onclick = () => save(false);
+  $('bSaveAs').onclick = () => save(true);
+  $('bFind').onclick = () => toggleFind(!findOpen());
+  $('bWrap').onclick = () => { state.wrap = !state.wrap; applyView(); savePrefs(); };
+  $('bLines').onclick = () => { state.lines = !state.lines; applyView(); savePrefs(); };
+  $('bSmaller').onclick = () => { state.size = Math.max(10, state.size - 1); applyView(); savePrefs(); };
+  $('bBigger').onclick = () => { state.size = Math.min(28, state.size + 1); applyView(); savePrefs(); };
+  $('fNext').onclick = () => findStep(1);
+  $('fPrev').onclick = () => findStep(-1);
+  $('fOne').onclick = replaceOne;
+  $('fAll').onclick = replaceAll;
+  $('fClose').onclick = () => toggleFind(false);
+  $('fFind').addEventListener('input', countHits);
+  $('fFind').addEventListener('keydown', (e) => { if (e.key === 'Enter') findStep(e.shiftKey ? -1 : 1); if (e.key === 'Escape') toggleFind(false); });
+  $('fRepl').addEventListener('keydown', (e) => { if (e.key === 'Enter') replaceOne(); if (e.key === 'Escape') toggleFind(false); });
+
+  ta.addEventListener('input', onChange);
+  ta.addEventListener('scroll', () => { $('gutter').scrollTop = ta.scrollTop; });
+  ['keyup', 'click', 'select'].forEach((ev) => ta.addEventListener(ev, updateStatus));
+  ta.addEventListener('keydown', (e) => {
+    if (e.key === 'Tab' && !e.ctrlKey && !e.metaKey) {
+      e.preventDefault();
+      ta.setRangeText('    ', ta.selectionStart, ta.selectionEnd, 'end');
+      onChange();
+    }
+  });
+  document.addEventListener('keydown', (e) => {
+    if (!(e.ctrlKey || e.metaKey) || document.querySelector('.sheet')) return;
+    const k = e.key.toLowerCase();
+    if (k === 's') { e.preventDefault(); save(e.shiftKey); }
+    else if (k === 'o') { e.preventDefault(); openDoc(); }
+    else if (k === 'n') { e.preventDefault(); newDoc(); }
+    else if (k === 'f' || k === 'h') { e.preventDefault(); toggleFind(true); }
+  });
+
+  // --- start: file argument wins, otherwise restore the draft ---
+  (async () => {
+    const prefs = await LLMOS.storage.get('prefs').catch(() => null);
+    if (prefs) Object.assign(state, prefs);
+    applyView();
+    const argPath = LLMOS.os.args && LLMOS.os.args.path;
+    if (argPath) {
+      await openPath(argPath);
+    } else {
+      const draft = await LLMOS.storage.get('draft').catch(() => null);
+      if (draft && typeof draft.text === 'string') {
+        state.path = draft.path || null;
+        state.saved = draft.saved || '';
+        ta.value = draft.text;
+        if (draft.text) msg('Restored your draft');
+      }
+      onChange();
+    }
+    ta.focus();
+  })();
+})();
+</script>
+</body>
+</html>

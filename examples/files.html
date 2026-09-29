@@ -1,0 +1,342 @@
+<!-- capabilities: ["ui:window", "fs:read", "fs:write", "storage:local"] -->
+<!-- app: {"name": "Files", "icon": "🗂", "handles": []} -->
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  .app { display: grid; grid-template-rows: auto 1fr auto; height: 100%; font-size: 13px; }
+  .toolbar { display: flex; align-items: center; gap: 6px; padding: 8px 10px; border-bottom: 1px solid var(--llmos-border); background: var(--llmos-surface); }
+  .search { width: 150px; padding: 5px 9px; background: var(--llmos-bg); color: var(--llmos-fg); border: 1px solid var(--llmos-border); border-radius: 6px; font: inherit; }
+  .search:focus { outline: none; border-color: var(--llmos-accent); width: 190px; }
+  .row .name mark { background: color-mix(in srgb, var(--llmos-accent) 45%, transparent); color: inherit; border-radius: 2px; }
+  .crumbs { display: flex; align-items: center; gap: 2px; flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; }
+  .crumb { background: none; border: 0; color: var(--llmos-muted); font: inherit; padding: 3px 6px; border-radius: 4px; cursor: pointer; }
+  .crumb:hover { background: var(--llmos-surface-2); color: var(--llmos-fg); }
+  .crumb.current { color: var(--llmos-fg); font-weight: 600; }
+  .sep { color: var(--llmos-muted); opacity: .5; }
+  .btn { background: var(--llmos-surface-2); color: var(--llmos-fg); border: 1px solid var(--llmos-border); border-radius: 6px; padding: 5px 10px; font: inherit; cursor: pointer; }
+  .btn:hover:not(:disabled) { border-color: var(--llmos-accent); }
+  .btn:disabled { opacity: .4; cursor: default; }
+  .btn.danger:hover:not(:disabled) { border-color: var(--llmos-danger); color: var(--llmos-danger); }
+  .main { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 0.9fr); min-height: 0; }
+  .list { overflow: auto; border-right: 1px solid var(--llmos-border); outline: none; }
+  .row { display: grid; grid-template-columns: 22px minmax(0, 1fr) 70px 110px; gap: 8px; align-items: center; padding: 5px 12px; cursor: default; user-select: none; }
+  .row:hover { background: var(--llmos-surface); }
+  .row.selected { background: color-mix(in srgb, var(--llmos-accent) 22%, transparent); }
+  .row .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .row .size, .row .date { color: var(--llmos-muted); font-size: 12px; text-align: right; }
+  .head { position: sticky; top: 0; background: var(--llmos-bg); color: var(--llmos-muted); font-size: 11px; text-transform: uppercase; letter-spacing: .04em; border-bottom: 1px solid var(--llmos-border); }
+  .head:hover { background: var(--llmos-bg); }
+  .empty { padding: 32px 16px; color: var(--llmos-muted); text-align: center; line-height: 1.6; }
+  .preview { overflow: auto; padding: 14px 16px; min-width: 0; }
+  .preview h3 { margin: 0 0 4px; font-size: 15px; word-break: break-all; }
+  .preview .meta { color: var(--llmos-muted); font-size: 12px; margin-bottom: 12px; }
+  .preview pre { margin: 0; padding: 10px 12px; background: var(--llmos-surface); border: 1px solid var(--llmos-border); border-radius: var(--llmos-radius); font: 12px/1.55 var(--llmos-mono); white-space: pre-wrap; word-break: break-word; max-height: 60vh; overflow: auto; }
+  .preview .actions { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .status { display: flex; justify-content: space-between; gap: 12px; padding: 5px 12px; border-top: 1px solid var(--llmos-border); color: var(--llmos-muted); font-size: 12px; background: var(--llmos-surface); }
+  .status .err { color: var(--llmos-danger); }
+  .dialog-backdrop { position: fixed; inset: 0; background: rgba(0,0,0,.45); display: flex; align-items: center; justify-content: center; }
+  .dialog { background: var(--llmos-surface); border: 1px solid var(--llmos-border); border-radius: 10px; padding: 16px; width: min(360px, 90%); }
+  .dialog label { display: block; margin-bottom: 8px; color: var(--llmos-muted); }
+  .dialog input { width: 100%; padding: 7px 9px; background: var(--llmos-bg); color: var(--llmos-fg); border: 1px solid var(--llmos-border); border-radius: 6px; font: inherit; }
+  .dialog input:focus { outline: none; border-color: var(--llmos-accent); }
+  .dialog .row-btns { display: flex; justify-content: flex-end; gap: 6px; margin-top: 12px; }
+  @media (max-width: 520px) {
+    .main { grid-template-columns: 1fr; }
+    .preview { display: none; }
+    .row { grid-template-columns: 22px minmax(0, 1fr) 60px; }
+    .row .date { display: none; }
+  }
+</style>
+</head>
+<body>
+<div class="app">
+  <div class="toolbar">
+    <button class="btn" id="up" title="Up one folder (Backspace)">↑</button>
+    <div class="crumbs" id="crumbs"></div>
+    <input class="search" id="search" placeholder="Filter  (Ctrl+F)" spellcheck="false">
+    <button class="btn" id="newFile" title="New file">+ File</button>
+    <button class="btn" id="newDir" title="New folder">+ Folder</button>
+  </div>
+  <div class="main">
+    <div class="list" id="list" tabindex="0"></div>
+    <div class="preview" id="preview"></div>
+  </div>
+  <div class="status"><span id="status"></span><span id="count"></span></div>
+</div>
+
+<script>
+(function () {
+  const h = LLMOS.ui.h;
+  const $ = (id) => document.getElementById(id);
+  const TEXT_TYPES = /^(text\/|application\/(json|xml|javascript))|image\/svg/;
+
+  let cwd = '/';
+  let entries = [];
+  let selected = null;
+  let filter = '';
+
+  // Entries matching the filter box (case-insensitive substring on the name)
+  const visible = () => filter ? entries.filter((e) => e.name.toLowerCase().includes(filter)) : entries;
+  function highlight(name) {
+    if (!filter) return name;
+    const i = name.toLowerCase().indexOf(filter);
+    if (i < 0) return name;
+    return h('span', null, name.slice(0, i), h('mark', null, name.slice(i, i + filter.length)), name.slice(i + filter.length));
+  }
+
+  const join = (dir, name) => (dir === '/' ? '' : dir) + '/' + name;
+  const parent = (p) => p.replace(/\/[^/]*$/, '') || '/';
+  const icon = (e) => e.type === 'dir' ? '📁' : /\.(md|txt|log)$/i.test(e.name) ? '📄' : /\.(csv|json|ya?ml|xml)$/i.test(e.name) ? '🧾' : /\.(html|css|js)$/i.test(e.name) ? '🧩' : '📦';
+
+  function fmtSize(n) {
+    if (n < 1024) return n + ' B';
+    if (n < 1048576) return (n / 1024).toFixed(1) + ' KB';
+    return (n / 1048576).toFixed(1) + ' MB';
+  }
+  function fmtDate(ms) {
+    const d = new Date(ms);
+    const today = new Date();
+    return d.toDateString() === today.toDateString()
+      ? d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
+      : d.toLocaleDateString();
+  }
+  function setStatus(text, isError) {
+    const el = $('status');
+    el.className = isError ? 'err' : '';
+    el.textContent = text;
+  }
+  const validName = (n) => n && !/[\/\\]/.test(n) && n !== '.' && n !== '..';
+
+  async function load(dir) {
+    try {
+      entries = await LLMOS.fs.list(dir);
+      if (dir !== cwd) { filter = ''; $('search').value = ''; }
+      cwd = dir;
+      selected = null;
+      LLMOS.storage.set('cwd', cwd).catch(() => {});
+      LLMOS.os.setTitle('Files — ' + cwd).catch(() => {});
+      render();
+      setStatus('');
+    } catch (err) {
+      if (dir !== '/') return load('/');
+      entries = [];
+      render();
+      setStatus(err.message, true);
+    }
+  }
+
+  function renderCrumbs() {
+    const parts = cwd.split('/').filter(Boolean);
+    const nodes = [h('button', { className: 'crumb' + (parts.length === 0 ? ' current' : ''), onClick: () => load('/') }, '/')];
+    let acc = '';
+    parts.forEach((p, i) => {
+      acc += '/' + p;
+      const target = acc;
+      if (i > 0) nodes.push(h('span', { className: 'sep' }, '/'));
+      nodes.push(h('button', { className: 'crumb' + (i === parts.length - 1 ? ' current' : ''), onClick: () => load(target) }, p));
+    });
+    $('crumbs').replaceChildren(...nodes);
+    $('up').disabled = cwd === '/';
+  }
+
+  function renderList() {
+    const list = $('list');
+    const head = h('div', { className: 'row head' }, h('span'), h('span', null, 'Name'), h('span', { className: 'size' }, 'Size'), h('span', { className: 'date' }, 'Modified'));
+    if (entries.length === 0) {
+      list.replaceChildren(head, h('div', { className: 'empty' },
+        cwd === '/' ? 'Your filesystem is empty.' : 'This folder is empty.',
+        h('br'), 'Create a file or folder with the buttons above.'));
+      return;
+    }
+    const shown = visible();
+    if (shown.length === 0) {
+      list.replaceChildren(head, h('div', { className: 'empty' }, `Nothing here matches “${filter}”.`));
+      return;
+    }
+    const rows = shown.map((e) => h('div', {
+      className: 'row' + (selected && selected.path === e.path ? ' selected' : ''),
+      onClick: () => select(e),
+      onDblclick: () => activate(e),
+    },
+      h('span', null, icon(e)),
+      h('span', { className: 'name', title: e.name }, highlight(e.name)),
+      h('span', { className: 'size' }, e.type === 'dir' ? '—' : fmtSize(e.size)),
+      h('span', { className: 'date' }, fmtDate(e.modified)),
+    ));
+    list.replaceChildren(head, ...rows);
+  }
+
+  async function renderPreview() {
+    const pane = $('preview');
+    if (!selected) {
+      pane.replaceChildren(h('div', { className: 'empty' }, 'Select a file to preview it.', h('br'), 'Double-click or press Enter to open it in its app.'));
+      return;
+    }
+    const e = selected;
+    const actions = h('div', { className: 'actions' },
+      h('button', { className: 'btn', onClick: () => activate(e) }, e.type === 'dir' ? 'Open folder' : 'Open'),
+      h('button', { className: 'btn', onClick: () => rename(e) }, 'Rename'),
+      h('button', { className: 'btn danger', onClick: () => remove(e) }, 'Delete'));
+    const meta = h('div', { className: 'meta' }, e.type === 'dir' ? 'Folder' : `${e.mime || 'file'} · ${fmtSize(e.size)} · ${new Date(e.modified).toLocaleString()}`);
+    pane.replaceChildren(h('h3', null, e.name), meta, actions);
+    if (e.type === 'file' && TEXT_TYPES.test(e.mime || '') && e.size <= 200000) {
+      try {
+        const text = await LLMOS.fs.read(e.path);
+        if (selected !== e) return; // selection changed while loading
+        pane.appendChild(h('pre', null, text.length > 20000 ? text.slice(0, 20000) + '\n…' : text || '(empty file)'));
+      } catch (err) {
+        pane.appendChild(h('div', { className: 'meta' }, 'Could not read: ' + err.message));
+      }
+    }
+  }
+
+  function render() {
+    renderCrumbs();
+    renderList();
+    renderPreview();
+    const dirs = entries.filter((e) => e.type === 'dir').length;
+    const summary = `${dirs} folder${dirs === 1 ? '' : 's'}, ${entries.length - dirs} file${entries.length - dirs === 1 ? '' : 's'}`;
+    $('count').textContent = filter ? `${visible().length} of ${entries.length} shown · ${summary}` : summary;
+  }
+
+  function select(e) {
+    selected = e;
+    renderList();
+    renderPreview();
+  }
+
+  async function activate(e) {
+    if (e.type === 'dir') return load(e.path);
+    try {
+      setStatus('Opening ' + e.name + '…');
+      const r = await LLMOS.os.open(e.path);
+      setStatus(r && r.opened === false ? 'No app opened ' + e.name : '');
+    } catch (err) {
+      setStatus(err.message, true);
+    }
+  }
+
+  function ask(label, initial) {
+    return new Promise((resolve) => {
+      const input = h('input', { value: initial || '' });
+      const done = (v) => { backdrop.remove(); resolve(v); };
+      const backdrop = h('div', { className: 'dialog-backdrop', onClick: (ev) => { if (ev.target === backdrop) done(null); } },
+        h('div', { className: 'dialog' },
+          h('label', null, label), input,
+          h('div', { className: 'row-btns' },
+            h('button', { className: 'btn', onClick: () => done(null) }, 'Cancel'),
+            h('button', { className: 'btn', onClick: () => done(input.value.trim()) }, 'OK'))));
+      input.addEventListener('keydown', (ev) => {
+        if (ev.key === 'Enter') done(input.value.trim());
+        if (ev.key === 'Escape') done(null);
+      });
+      document.body.appendChild(backdrop);
+      input.focus();
+      const dot = (initial || '').lastIndexOf('.');
+      input.setSelectionRange(0, dot > 0 ? dot : (initial || '').length);
+    });
+  }
+
+  async function create(kind) {
+    const name = await ask(kind === 'dir' ? 'New folder name' : 'New file name', kind === 'dir' ? '' : 'untitled.txt');
+    if (name === null) return;
+    if (!validName(name)) return setStatus('Invalid name', true);
+    if (entries.some((e) => e.name === name)) return setStatus(name + ' already exists', true);
+    try {
+      const path = join(cwd, name);
+      if (kind === 'dir') await LLMOS.fs.mkdir(path); else await LLMOS.fs.write(path, '');
+      await load(cwd);
+      const made = entries.find((e) => e.path === path);
+      if (made) select(made);
+      setStatus('Created ' + name);
+    } catch (err) {
+      setStatus(err.message, true);
+    }
+  }
+
+  // The filesystem has no rename call: copy file contents (recursively for
+  // folders), then remove the original. Only done after the copy succeeded.
+  async function copyTree(from, to) {
+    const info = await LLMOS.fs.stat(from);
+    if (info.type === 'dir') {
+      await LLMOS.fs.mkdir(to);
+      for (const child of await LLMOS.fs.list(from)) await copyTree(child.path, join(to, child.name));
+    } else {
+      await LLMOS.fs.write(to, await LLMOS.fs.read(from));
+    }
+  }
+
+  async function rename(e) {
+    const name = await ask('Rename to', e.name);
+    if (name === null || name === e.name) return;
+    if (!validName(name)) return setStatus('Invalid name', true);
+    if (entries.some((x) => x.name === name)) return setStatus(name + ' already exists', true);
+    try {
+      const dest = join(cwd, name);
+      await copyTree(e.path, dest);
+      await LLMOS.fs.remove(e.path);
+      await load(cwd);
+      const moved = entries.find((x) => x.path === dest);
+      if (moved) select(moved);
+      setStatus('Renamed to ' + name);
+    } catch (err) {
+      setStatus('Rename failed: ' + err.message, true);
+      load(cwd);
+    }
+  }
+
+  async function remove(e) {
+    const what = e.type === 'dir' ? `the folder "${e.name}" and everything in it` : `"${e.name}"`;
+    if (!(await LLMOS.ui.confirm(`Delete ${what}? This cannot be undone.`))) return;
+    try {
+      await LLMOS.fs.remove(e.path);
+      await load(cwd);
+      setStatus('Deleted ' + e.name);
+    } catch (err) {
+      setStatus(err.message, true);
+    }
+  }
+
+  $('up').onclick = () => load(parent(cwd));
+  $('newFile').onclick = () => create('file');
+  $('newDir').onclick = () => create('dir');
+
+  $('search').addEventListener('input', () => {
+    filter = $('search').value.trim().toLowerCase();
+    if (selected && !visible().some((e) => e.path === selected.path)) selected = null;
+    render();
+  });
+  $('search').addEventListener('keydown', (ev) => {
+    if (ev.key === 'Escape') { $('search').value = ''; filter = ''; render(); $('list').focus(); }
+    if (ev.key === 'ArrowDown' || ev.key === 'Enter') {
+      ev.preventDefault();
+      const first = visible()[0];
+      if (first) { select(first); $('list').focus(); if (ev.key === 'Enter') activate(first); }
+    }
+  });
+  document.addEventListener('keydown', (ev) => {
+    if ((ev.ctrlKey || ev.metaKey) && ev.key.toLowerCase() === 'f') { ev.preventDefault(); $('search').focus(); $('search').select(); }
+  });
+
+  $('list').addEventListener('keydown', (ev) => {
+    if (document.querySelector('.dialog-backdrop')) return;
+    const list = visible();
+    const i = selected ? list.findIndex((e) => e.path === selected.path) : -1;
+    if (ev.key === 'ArrowDown' && list.length) { ev.preventDefault(); select(list[Math.min(list.length - 1, i + 1)]); }
+    else if (ev.key === 'ArrowUp' && list.length) { ev.preventDefault(); select(list[Math.max(0, i - 1)]); }
+    else if (ev.key === 'Enter' && selected) activate(selected);
+    else if (ev.key === 'Backspace' && cwd !== '/') load(parent(cwd));
+    else if (ev.key === 'Delete' && selected) remove(selected);
+    else if (ev.key === 'F2' && selected) rename(selected);
+  });
+
+  (async () => {
+    const start = (LLMOS.os.args && LLMOS.os.args.path) || (await LLMOS.storage.get('cwd').catch(() => null)) || '/';
+    await load(start);
+    $('list').focus();
+  })();
+})();
+</script>
+</body>
+</html>

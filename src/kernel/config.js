@@ -23,7 +23,8 @@ const providers = {
   },
   claude: {
     apiKey: process.env.ANTHROPIC_API_KEY || '',
-    model: process.env.CLAUDE_MODEL || 'claude-sonnet-4-5-20250929',
+    model: process.env.CLAUDE_MODEL || 'claude-opus-5',
+    effort: process.env.CLAUDE_EFFORT || '', // low | medium | high | xhigh | max (empty = model default)
   },
   openai: {
     apiKey: process.env.OPENAI_API_KEY || '',
@@ -49,6 +50,10 @@ export const config = {
     portStart: parseInt(process.env.DOCKER_PORT_START || '5100', 10),
     portEnd: parseInt(process.env.DOCKER_PORT_END || '5199', 10),
     maxContainers: parseInt(process.env.DOCKER_MAX_CONTAINERS || '5', 10),
+  },
+  cache: {
+    enabled: process.env.CACHE_ENABLED !== 'false',
+    ttlMs: parseInt(process.env.CACHE_TTL_MINUTES || '30', 10) * 60000,
   },
   scheduler: {
     enabled: process.env.SCHEDULER_ENABLED === 'true',

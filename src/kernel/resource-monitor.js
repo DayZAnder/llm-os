@@ -26,6 +26,11 @@ const MODEL_TIERS = {
   'qwen2.5:72b': 7,
 
   // Claude
+  'claude-haiku-4-5': 6,
+  'claude-sonnet-5': 8,
+  'claude-opus-5': 9,
+  'claude-opus-5-5': 10,
+  'claude-fable-5-1': 10,
   'claude-haiku-4-5-20251001': 5,
   'claude-sonnet-4-5-20250929': 7,
   'claude-sonnet-4-6': 7,
@@ -110,7 +115,7 @@ function probeCloud() {
     // Also add higher-tier Claude models that the key can access
     if (!claude.model.includes('opus')) {
       models.push({
-        name: 'claude-opus-4-6',
+        name: 'claude-opus-5',
         provider: 'claude',
         size: 0,
         tier: 9,
@@ -119,10 +124,10 @@ function probeCloud() {
     }
     if (!claude.model.includes('haiku')) {
       models.push({
-        name: 'claude-haiku-4-5-20251001',
+        name: 'claude-haiku-4-5',
         provider: 'claude',
         size: 0,
-        tier: 5,
+        tier: 6,
         requiresOverride: true,
       });
     }

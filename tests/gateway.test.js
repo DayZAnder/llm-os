@@ -146,7 +146,7 @@ console.log('\nModel hint extraction:');
   const hint = extractModelHint('make a calculator using opus');
   assert(hint !== null, '"using opus" detected');
   assert(hint.provider === 'claude', 'opus routes to claude');
-  assert(hint.model === 'claude-opus-4-6', 'opus resolves to claude-opus-4-6');
+  assert(hint.model === 'claude-opus-5', 'opus resolves to claude-opus-5');
   assert(hint.cleanPrompt === 'make a calculator', 'hint stripped from prompt');
 }
 
@@ -154,7 +154,7 @@ console.log('\nModel hint extraction:');
   const hint = extractModelHint('build a todo app with haiku');
   assert(hint !== null, '"with haiku" detected');
   assert(hint.provider === 'claude', 'haiku routes to claude');
-  assert(hint.model === 'claude-haiku-4-5-20251001', 'haiku resolves correctly');
+  assert(hint.model === 'claude-haiku-4-5', 'haiku resolves correctly');
   assert(hint.cleanPrompt === 'build a todo app', 'haiku hint stripped');
 }
 

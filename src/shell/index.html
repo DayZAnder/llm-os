@@ -191,6 +191,18 @@
   }
   .app-titlebar .win-btn:hover { color: var(--text-primary); }
   .app-titlebar .win-btn.close-btn:hover { color: var(--danger); }
+  .app-titlebar .err-badge { color: var(--warning); font-size: 11px; width: auto; padding: 0 6px; }
+  .app-titlebar .err-badge.hidden { display: none; }
+  .evolve-hint { color: var(--text-secondary); font-size: 13px; margin: 0 0 10px; }
+  .evolve-input { width: 100%; box-sizing: border-box; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 10px; font: inherit; resize: vertical; margin-bottom: 12px; }
+  .evolve-input:focus { outline: none; border-color: var(--accent); }
+  .cap-sensitive { color: var(--warning); }
+  .gen-live { position: fixed; right: 20px; bottom: 90px; width: min(560px, calc(100vw - 40px)); height: min(460px, 60vh); z-index: 9000; display: grid; grid-template-rows: auto 1fr 150px; background: var(--bg-secondary); border: 1px solid var(--accent-dim); border-radius: 10px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+  .gen-live-head { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; font: 12px var(--font-mono); border-bottom: 1px solid var(--border); }
+  .gen-live-title { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .gen-live-stats { color: var(--accent); white-space: nowrap; }
+  .gen-live-preview { width: 100%; height: 100%; border: 0; background: #12121f; }
+  .gen-live-code { margin: 0; padding: 8px 12px; border-top: 1px solid var(--border); font: 11px/1.45 var(--font-mono); color: var(--text-secondary); overflow: hidden; white-space: pre; background: var(--bg-primary); }
 
   .app-body {
     flex: 1;
@@ -1031,6 +1043,107 @@
   }
   .settings-stats strong { color: var(--text-secondary); }
 
+  /* Settings tabs */
+  .settings-tabs {
+    display: flex;
+    gap: 0;
+    padding: 0 20px;
+    border-bottom: 1px solid var(--border);
+    flex-shrink: 0;
+  }
+  .settings-tab {
+    background: none;
+    border: none;
+    border-bottom: 2px solid transparent;
+    padding: 10px 16px;
+    color: var(--text-dim);
+    font-size: 12px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+    transition: 0.15s;
+  }
+  .settings-tab:hover { color: var(--text-secondary); }
+  .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .settings-tab-content { display: none; }
+  .settings-tab-content.active { display: block; }
+
+  /* Usage dashboard */
+  .usage-pills {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+    margin-bottom: 16px;
+  }
+  .usage-pill {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 10px 14px;
+    text-align: center;
+  }
+  .usage-pill .pill-value {
+    font-size: 18px;
+    font-weight: 600;
+    font-family: var(--font-mono);
+    color: var(--text-primary);
+  }
+  .usage-pill .pill-label {
+    font-size: 10px;
+    color: var(--text-dim);
+    font-family: var(--font-mono);
+    margin-top: 2px;
+  }
+  .usage-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 11px;
+    font-family: var(--font-mono);
+    margin-bottom: 16px;
+  }
+  .usage-table th {
+    text-align: left;
+    color: var(--text-dim);
+    padding: 6px 8px;
+    border-bottom: 1px solid var(--border);
+    font-weight: normal;
+    text-transform: uppercase;
+    font-size: 9px;
+  }
+  .usage-table td {
+    padding: 6px 8px;
+    color: var(--text-secondary);
+    border-bottom: 1px solid rgba(42,42,74,0.4);
+  }
+  .usage-table td:first-child { color: var(--text-primary); }
+  .usage-recent-item {
+    font-size: 11px;
+    font-family: var(--font-mono);
+    color: var(--text-secondary);
+    padding: 4px 0;
+    border-bottom: 1px solid rgba(42,42,74,0.3);
+    display: flex;
+    justify-content: space-between;
+    gap: 8px;
+  }
+  .usage-recent-item .prompt-text { color: var(--text-primary); flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .usage-recent-item .cached-badge { color: var(--success); font-size: 9px; }
+  .usage-controls {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+  }
+  .usage-controls button {
+    background: var(--bg-tertiary);
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    padding: 6px 14px;
+    color: var(--text-secondary);
+    font-size: 11px;
+    font-family: var(--font-mono);
+    cursor: pointer;
+  }
+  .usage-controls button:hover { border-color: var(--accent); color: var(--text-primary); }
+
   .topbar .settings-btn {
     background: none;
     border: none;
@@ -1129,30 +1242,53 @@
 <div class="settings-overlay hidden" id="settings-overlay">
   <div class="settings-panel">
     <div class="settings-header">
-      <h2>Self-Improvement</h2>
+      <h2>Settings</h2>
       <button class="settings-close" id="settings-close">&times;</button>
     </div>
+    <div class="settings-tabs">
+      <button class="settings-tab active" data-tab="si-tab">Self-Improvement</button>
+      <button class="settings-tab" data-tab="usage-tab">Usage</button>
+    </div>
     <div class="settings-body">
-      <p class="settings-desc">
-        Enable automated tasks that run in the background when you're not using the OS.
-        All tasks defer when you're actively working and use local Ollama by default (free).
-      </p>
-      <div class="settings-global">
-        <button id="si-pause-all">Pause All</button>
-        <button id="si-resume-all">Resume All</button>
-      </div>
-      <div id="si-tasks"></div>
+      <!-- Self-Improvement Tab -->
+      <div class="settings-tab-content active" id="si-tab">
+        <p class="settings-desc">
+          Enable automated tasks that run in the background when you're not using the OS.
+          All tasks defer when you're actively working and use local Ollama by default (free).
+        </p>
+        <div class="settings-global">
+          <button id="si-pause-all">Pause All</button>
+          <button id="si-resume-all">Resume All</button>
+        </div>
+        <div id="si-tasks"></div>
 
-      <h3 style="margin-top:20px;color:var(--text-primary);font-size:14px;">Shell Versions</h3>
-      <p class="settings-desc">
-        AI can improve the shell UI itself. Request a specific change or let it improve autonomously.
-      </p>
-      <div style="display:flex;gap:8px;margin-bottom:12px;">
-        <input id="shell-improve-input" type="text" placeholder="Improvement request (optional)..."
-          style="flex:1;background:var(--bg-tertiary, #1a1a2e);border:1px solid var(--border, #2a2a4a);border-radius:4px;padding:6px 10px;color:var(--text-primary, #e0e0f0);font-size:12px;">
-        <button id="shell-improve-btn" style="white-space:nowrap;">Improve Shell</button>
+        <h3 style="margin-top:20px;color:var(--text-primary);font-size:14px;">Shell Versions</h3>
+        <p class="settings-desc">
+          AI can improve the shell UI itself. Request a specific change or let it improve autonomously.
+        </p>
+        <div style="display:flex;gap:8px;margin-bottom:12px;">
+          <input id="shell-improve-input" type="text" placeholder="Improvement request (optional)..."
+            style="flex:1;background:var(--bg-tertiary, #1a1a2e);border:1px solid var(--border, #2a2a4a);border-radius:4px;padding:6px 10px;color:var(--text-primary, #e0e0f0);font-size:12px;">
+          <button id="shell-improve-btn" style="white-space:nowrap;">Improve Shell</button>
+        </div>
+        <div id="shell-versions-list"></div>
       </div>
-      <div id="shell-versions-list"></div>
+
+      <!-- Usage Tab -->
+      <div class="settings-tab-content" id="usage-tab">
+        <p class="settings-desc">
+          Token usage, costs, and cache performance across all LLM generations.
+        </p>
+        <div class="usage-pills" id="usage-pills"></div>
+        <h3 style="color:var(--text-primary);font-size:13px;margin-bottom:8px;">By Model</h3>
+        <div id="usage-by-model"></div>
+        <h3 style="color:var(--text-primary);font-size:13px;margin:16px 0 8px;">Recent Generations</h3>
+        <div id="usage-recent"></div>
+        <div class="usage-controls">
+          <button id="usage-refresh-btn">Refresh</button>
+          <button id="usage-clear-btn">Clear Usage Data</button>
+        </div>
+      </div>
     </div>
     <div class="settings-stats" id="si-stats"></div>
   </div>
@@ -1400,6 +1536,7 @@ const EXAMPLES = [
   'a unit converter',
   'a digital clock with stopwatch',
   'a password generator',
+  '/theme nordic winter night',
 ];
 
 function initExamples() {
@@ -1492,7 +1629,7 @@ function createTitleButtons(appId, closeFn) {
   return frag;
 }
 
-function addAppWindow(appId, iframe, title, model) {
+function addAppWindow(appId, iframe, title, model, icon = '') {
   const win = document.createElement('div');
   win.className = 'app-window';
   win.id = `window-${appId}`;
@@ -1505,13 +1642,28 @@ function addAppWindow(appId, iframe, title, model) {
 
   const titleEl = document.createElement('span');
   titleEl.className = 'title';
-  titleEl.textContent = title;
+  titleEl.id = `title-${appId}`;
+  titleEl.textContent = icon ? `${icon} ${title}` : title;
 
   const modelTag = document.createElement('span');
   modelTag.className = 'model-tag';
-  modelTag.textContent = model.split('/').pop().split(':')[0];
+  modelTag.id = `model-${appId}`;
+  modelTag.textContent = (model || 'unknown').split('/').pop().split(':')[0];
 
-  titlebar.append(titleEl, modelTag, createTitleButtons(appId, () => closeApp(appId)));
+  // Self-healing: runtime errors reported by the SDK show up here; click to fix
+  const errBadge = document.createElement('button');
+  errBadge.className = 'win-btn err-badge hidden';
+  errBadge.id = `errors-${appId}`;
+  errBadge.title = 'This app reported errors — click to let AI fix it';
+  errBadge.onclick = (e) => { e.stopPropagation(); evolveApp(appId, '', { fixErrors: true }); };
+
+  const modifyBtn = document.createElement('button');
+  modifyBtn.className = 'win-btn';
+  modifyBtn.textContent = '✎';
+  modifyBtn.title = 'Modify this app with AI';
+  modifyBtn.onclick = (e) => { e.stopPropagation(); openEvolveDialog(appId); };
+
+  titlebar.append(titleEl, modelTag, errBadge, modifyBtn, createTitleButtons(appId, () => closeApp(appId)));
 
   const body = document.createElement('div');
   body.className = 'app-body';
@@ -1524,7 +1676,7 @@ function addAppWindow(appId, iframe, title, model) {
   const tbItem = document.createElement('div');
   tbItem.className = 'taskbar-item';
   tbItem.id = `taskbar-${appId}`;
-  tbItem.textContent = title;
+  tbItem.textContent = icon ? `${icon} ${title}` : title;
   tbItem.onclick = () => {
     const w = WM.windows.get(appId);
     if (w?.state === 'minimized') WM.restore(appId);
@@ -1701,8 +1853,8 @@ function saveSession() {
   for (const [appId, info] of openIframeApps) {
     const wm = WM.windows.get(appId);
     iframeApps.push({
-      appId, hash: info.hash, title: info.title,
-      model: info.model, capabilities: info.capabilities,
+      appId, hash: info.hash, title: info.title, icon: info.icon || '',
+      model: info.model, capabilities: info.capabilities, args: info.args || {},
       windowRect: wm ? { x: wm.x, y: wm.y, w: wm.w, h: wm.h } : null,
     });
   }
@@ -1743,23 +1895,10 @@ async function restoreSession() {
       if (!regRes.ok) continue;
       const app = await regRes.json();
 
-      // Grant capability tokens
-      let tokens = {};
-      try {
-        const grantRes = await fetch('/api/grant', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appId: entry.appId, capabilities: entry.capabilities || [] }),
-        });
-        if (grantRes.ok) tokens = (await grantRes.json()).tokens || {};
-      } catch {}
-
-      // Launch sandbox and create window
-      const iframe = sandboxMgr.launch(entry.appId, app.code, entry.capabilities || [], entry.title, tokens);
-      addAppWindow(entry.appId, iframe, entry.title, entry.model);
-      openIframeApps.set(entry.appId, {
-        hash: entry.hash, title: entry.title,
-        model: entry.model, capabilities: entry.capabilities || [],
+      await launchIframeApp({
+        appId: entry.appId, code: app.code, capabilities: entry.capabilities || [],
+        title: entry.title, icon: entry.icon, model: entry.model, provider: app.provider,
+        prompt: app.prompt, hash: entry.hash, args: entry.args || {},
       });
 
       // Restore window position
@@ -1782,9 +1921,430 @@ async function restoreSession() {
   if (restored > 0) log(`Restored ${restored} app(s) from previous session`, 'info');
 }
 
+// --- App Lifecycle (iframe apps) ---
+
+const CAP_DESCRIPTIONS = {
+  'ui:window': 'show a window',
+  'storage:local': 'keep its own private data',
+  'timer:basic': 'use timers',
+  'fs:read': 'read your files',
+  'fs:write': 'create, change and delete your files',
+  'network:http': 'access the internet',
+  'ai:generate': 'use the AI model (may cost API credits)',
+  'clipboard:rw': 'read and write the clipboard',
+  'ipc:bus': 'exchange messages with other apps',
+};
+// Capabilities that can leak or destroy user data — never granted silently
+const SENSITIVE_CAPS = ['fs:read', 'fs:write', 'network:http', 'ai:generate', 'clipboard:rw', 'ipc:bus'];
+
+async function grantTokens(appId, capabilities) {
+  try {
+    const res = await fetch('/api/grant', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ appId, capabilities }),
+    });
+    if (res.ok) return (await res.json()).tokens || {};
+  } catch (err) {
+    log(`Token grant failed: ${err.message}`, 'warn');
+  }
+  return {};
+}
+
+/**
+ * Start an iframe app in a new window. Single path used by fresh generations,
+ * registry launches, file opens and session restore.
+ * @returns {Promise<string>} appId
+ */
+async function launchIframeApp({ appId, code, capabilities, title, icon = '', model, provider, prompt = '', hash = null, args = {} }) {
+  appId = appId || `app-${++appCounter}`;
+  const tokens = await grantTokens(appId, capabilities);
+  const iframe = sandboxMgr.launch(appId, code, capabilities, title, tokens, args);
+  addAppWindow(appId, iframe, title, model || 'unknown', icon);
+  openIframeApps.set(appId, { hash, title, icon, model, provider, prompt, capabilities: [...capabilities], args });
+  saveSession();
+  return appId;
+}
+
+/** Launch a registry app; asks for approval when it wants sensitive capabilities. */
+async function launchRegistryApp(app, args = {}) {
+  fetch(`/api/registry/launch/${app.hash}`, { method: 'POST' }).catch(() => {});
+  const caps = app.capabilities || [];
+  const start = (approved) => launchIframeApp({
+    code: app.code, capabilities: approved, title: app.manifest?.name || app.title,
+    icon: app.manifest?.icon, model: app.model, provider: app.provider,
+    prompt: app.prompt, hash: app.hash, args,
+  }).then(appId => { log(`Launched "${app.title}" (${app.hash}) as ${appId}`, 'ok'); return appId; });
+
+  if (!caps.some(c => SENSITIVE_CAPS.includes(c))) return start(caps);
+
+  // Re-analyze and ask: registry apps may come from the community
+  const analysis = await fetch('/api/analyze', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code: app.code }),
+  }).then(r => r.json()).catch(() => ({ criticalCount: 0, warningCount: 0, findings: [] }));
+  return new Promise((resolve) => {
+    showCapabilityModal(app.prompt || app.title, { ...app, capabilities: caps }, analysis,
+      (approved) => start(approved).then(resolve), { onDeny: () => resolve(null) });
+  });
+}
+
+function setAppTitle(appId, title) {
+  const info = openIframeApps.get(appId);
+  const text = `${info?.icon ? info.icon + ' ' : ''}${String(title).slice(0, 60)}`;
+  const el = document.getElementById(`title-${appId}`);
+  if (el) el.textContent = text;
+  const tb = document.getElementById(`taskbar-${appId}`);
+  if (tb) tb.textContent = text;
+}
+
+function updateErrorBadge(appId) {
+  const badge = document.getElementById(`errors-${appId}`);
+  if (!badge) return;
+  const n = sandboxMgr.getErrors(appId).length;
+  badge.classList.toggle('hidden', n === 0);
+  badge.textContent = `⚠ ${n}`;
+}
+
+// --- App Evolution (modify / self-heal) ---
+
+function openEvolveDialog(appId) {
+  const info = openIframeApps.get(appId);
+  if (!info) return;
+  const overlay = document.createElement('div');
+  overlay.className = 'modal-overlay';
+  const modal = document.createElement('div');
+  modal.className = 'modal';
+  const h = document.createElement('h3');
+  h.textContent = `Modify "${info.title}"`;
+  const hint = document.createElement('p');
+  hint.className = 'evolve-hint';
+  const errCount = sandboxMgr.getErrors(appId).length;
+  hint.textContent = 'Describe the change. The app keeps its data.' +
+    (errCount ? ` ${errCount} runtime error(s) will also be sent so they get fixed.` : '');
+  const input = document.createElement('textarea');
+  input.className = 'evolve-input';
+  input.rows = 4;
+  input.placeholder = 'e.g. "add a dark/light toggle", "export to CSV", "make the buttons bigger"';
+  const row = document.createElement('div');
+  row.className = 'btn-row';
+  const cancel = document.createElement('button');
+  cancel.className = 'btn-deny';
+  cancel.textContent = 'Cancel';
+  const apply = document.createElement('button');
+  apply.className = 'btn-approve';
+  apply.textContent = 'Apply';
+  row.append(cancel, apply);
+  modal.append(h, hint, input, row);
+  overlay.appendChild(modal);
+  document.body.appendChild(overlay);
+  input.focus();
+
+  const close = () => overlay.remove();
+  const submit = () => {
+    const text = input.value.trim();
+    if (!text && !errCount) return;
+    close();
+    evolveApp(appId, text, { fixErrors: errCount > 0 });
+  };
+  cancel.onclick = close;
+  apply.onclick = submit;
+  input.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) submit();
+    if (e.key === 'Escape') close();
+  });
+}
+
+const evolving = new Set();
+
+/**
+ * Ask the LLM for a new version of a running app and hot-swap it into the
+ * same window. New capabilities go through the approval dialog.
+ */
+async function evolveApp(appId, instruction, { fixErrors = false } = {}) {
+  const info = openIframeApps.get(appId);
+  const running = sandboxMgr.getApp(appId);
+  if (!info || !running || evolving.has(appId)) return;
+  evolving.add(appId);
+
+  const errors = fixErrors
+    ? sandboxMgr.getErrors(appId).map(e => `${e.message}${e.where ? ` (${e.where})` : ''}${e.stack ? ` — ${e.stack}` : ''}`)
+    : [];
+  const modelTag = document.getElementById(`model-${appId}`);
+  const prevTag = modelTag?.textContent;
+  if (modelTag) modelTag.textContent = fixErrors && !instruction ? 'fixing…' : 'evolving…';
+  log(`${info.title}: ${instruction ? `modifying — "${instruction}"` : `fixing ${errors.length} error(s)`}`);
+
+  try {
+    const live = openLivePanel(`${instruction ? 'Updating' : 'Fixing'}: ${info.title}`);
+    let next;
+    try {
+      next = await streamJob('/api/evolve', { code: running.code, instruction, errors, prompt: info.prompt }, live);
+    } finally {
+      live.close();
+    }
+
+    const analysis = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code: next.code }),
+    }).then(r => r.json());
+
+    const apply = async (approved) => {
+      const tokens = await grantTokens(appId, approved);
+      sandboxMgr.replace(appId, next.code, approved, tokens);
+      info.capabilities = [...approved];
+      if (next.manifest?.name) { info.title = next.manifest.name; info.icon = next.manifest.icon || info.icon; setAppTitle(appId, info.title); }
+      info.model = next.model;
+      updateErrorBadge(appId);
+      const pub = await publishToRegistry({
+        prompt: info.prompt || info.title, code: next.code, type: 'iframe', manifest: next.manifest,
+        capabilities: approved, model: next.model, provider: next.provider, parentHash: info.hash,
+      });
+      if (pub?.hash) info.hash = pub.hash;
+      saveSession();
+      log(`${info.title}: new version live (${next.provider}/${next.model}, ${(next.generationTime / 1000).toFixed(1)}s)`, 'ok');
+    };
+
+    const newCaps = next.capabilities.filter(c => !info.capabilities.includes(c));
+    if (analysis.criticalCount > 0 || newCaps.length > 0) {
+      // Needs the user's eyes: blocked code or new permissions
+      showCapabilityModal(info.title, next, analysis, apply, { heading: 'Update' });
+    } else {
+      // Same or fewer permissions — keep only what the new version declares
+      await apply(info.capabilities.filter(c => next.capabilities.includes(c) || c === 'ui:window'));
+    }
+  } catch (err) {
+    log(`${info.title}: update failed — ${err.message}`, 'error');
+  } finally {
+    evolving.delete(appId);
+    if (modelTag) modelTag.textContent = (info.model || prevTag || '').split('/').pop().split(':')[0];
+  }
+}
+
+// --- File Associations ---
+
+/** Open a file from the shared filesystem in the app that handles its type. */
+async function openFile(path) {
+  const handlers = await fetch(`/api/registry/handlers?path=${encodeURIComponent(path)}`).then(r => r.json()).catch(() => []);
+  if (handlers.length > 0) {
+    const app = await fetch(`/api/registry/${handlers[0].hash}`).then(r => r.json());
+    const appId = await launchRegistryApp(app, { path });
+    return { opened: !!appId, appId, app: app.title };
+  }
+  // No app can open this type — the OS writes one
+  const ext = (path.match(/\.([a-z0-9]{1,10})$/i) || [])[1] || 'text';
+  const ok = window.confirm(`No app can open .${ext} files yet.\n\nGenerate one now?`);
+  if (!ok) return { opened: false, reason: 'no handler' };
+  generateApp(`an app to view and edit .${ext} files from the shared filesystem, declaring "handles": [".${ext}"]`, { args: { path } });
+  return { opened: true, generated: true };
+}
+
+// --- Syscalls delegated from the sandbox ---
+
+const FS_WRITE_OPS = new Set(['write', 'mkdir', 'remove']);
+
+async function kernelSyscall(url, body) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  });
+  const data = await res.json().catch(() => ({ error: `HTTP ${res.status}` }));
+  if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+  return data.result;
+}
+
+async function handleSyscall(appId, type, payload, app) {
+  const [ns, op] = type.split(':');
+  switch (ns) {
+    case 'fs': {
+      const cap = FS_WRITE_OPS.has(op) ? 'fs:write' : 'fs:read';
+      return kernelSyscall('/api/fs', { appId, token: app.tokens[cap], op, path: payload.path, content: payload.content });
+    }
+    case 'net':
+      return kernelSyscall('/api/net', { appId, token: app.tokens['network:http'], url: payload.url, method: payload.method, headers: payload.headers, body: payload.body });
+    case 'ai':
+      return kernelSyscall('/api/ai', { appId, token: app.tokens['ai:generate'], prompt: payload.prompt, system: payload.system, maxTokens: payload.maxTokens });
+    case 'clipboard':
+      if (op === 'write') { await navigator.clipboard.writeText(String(payload.text ?? '')); return true; }
+      return navigator.clipboard.readText();
+    case 'os':
+      if (op === 'setTitle') { setAppTitle(appId, payload.title); return true; }
+      if (op === 'open') return openFile(String(payload.path));
+  }
+  throw new Error(`SDK call not supported: ${type}`);
+}
+
+/** Runtime permission prompt (LLMOS.caps.request). */
+async function requestCapability(appId, capability) {
+  const info = openIframeApps.get(appId);
+  const app = sandboxMgr.getApp(appId);
+  if (!info || !app || !CAP_DESCRIPTIONS[capability]) return false;
+  if (app.capabilities.includes(capability)) return true;
+  const ok = window.confirm(`"${info.title}" wants to ${CAP_DESCRIPTIONS[capability]} (${capability}).\n\nAllow?`);
+  if (!ok) return false;
+  const approved = [...app.capabilities, capability];
+  app.tokens = await grantTokens(appId, approved);
+  app.capabilities = approved;
+  info.capabilities = approved;
+  saveSession();
+  log(`${info.title}: granted ${capability}`, 'ok');
+  return true;
+}
+
+// --- Live generation view ---
+// While the model writes, show the partial app rendered WITHOUT scripts
+// (empty sandbox: no script execution, CSP blocks all loads) next to the
+// tail of the code. Nothing runs until analysis + approval, as before.
+
+function openLivePanel(heading) {
+  const panel = document.createElement('div');
+  panel.className = 'gen-live';
+  const head = document.createElement('div');
+  head.className = 'gen-live-head';
+  const title = document.createElement('span');
+  title.className = 'gen-live-title';
+  title.textContent = heading;
+  const stats = document.createElement('span');
+  stats.className = 'gen-live-stats';
+  stats.textContent = 'waiting for model…';
+  head.append(title, stats);
+  const preview = document.createElement('iframe');
+  preview.className = 'gen-live-preview';
+  preview.setAttribute('sandbox', '');
+  preview.title = 'Live preview (scripts disabled)';
+  const code = document.createElement('pre');
+  code.className = 'gen-live-code';
+  panel.append(head, preview, code);
+  document.body.appendChild(panel);
+
+  const started = Date.now();
+  let text = '';
+  let lastRender = 0;
+  let renderTimer = null;
+  const CSP = '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'; style-src \'unsafe-inline\'; img-src data:;">';
+
+  const render = () => {
+    renderTimer = null;
+    lastRender = Date.now();
+    // Scripts would not run anyway (empty sandbox); strip them so partial
+    // <script> blocks don't swallow the rest of the markup.
+    const markup = text.replace(/<script[\s\S]*?(<\/script>|$)/gi, '');
+    preview.srcdoc = CSP + '<style>' + LIVE_THEME_CSS + '</style>' + markup;
+  };
+  const tick = setInterval(() => {
+    const secs = ((Date.now() - started) / 1000).toFixed(0);
+    stats.textContent = text ? `${(text.length / 1000).toFixed(1)}k chars · ${secs}s` : `waiting for model… ${secs}s`;
+  }, 250);
+
+  return {
+    append(chunk) {
+      text += chunk;
+      code.textContent = text.split('\n').slice(-18).join('\n');
+      if (!renderTimer) renderTimer = setTimeout(render, Math.max(0, 700 - (Date.now() - lastRender)));
+    },
+    reset() { text = ''; code.textContent = ''; },
+    close() { clearInterval(tick); clearTimeout(renderTimer); panel.remove(); },
+  };
+}
+
+// CSS variables the sandbox gives real apps, so the preview looks the same
+const LIVE_THEME_CSS = ':root{--llmos-bg:#12121f;--llmos-surface:#1a1a2e;--llmos-surface-2:#24243d;--llmos-fg:#e0e0f0;--llmos-muted:#8888a8;--llmos-accent:#6c63ff;--llmos-accent-fg:#fff;--llmos-border:#2e2e4a;--llmos-danger:#ff5c7a;--llmos-success:#3ddc97;--llmos-radius:8px;--llmos-font:"Segoe UI",system-ui,sans-serif;--llmos-mono:"Cascadia Code",Consolas,monospace;color-scheme:dark}html,body{height:100%;margin:0}body{background:var(--llmos-bg);color:var(--llmos-fg);font-family:var(--llmos-font)}';
+
+/**
+ * POST a generation job with { stream: true } and read the NDJSON reply.
+ * @returns the final result object; throws on {type:"error"}.
+ */
+async function streamJob(url, body, live) {
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ ...body, stream: true }),
+  });
+  if (!res.ok || !res.body) throw new Error(await res.text());
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = '';
+  let result = null;
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    let nl;
+    while ((nl = buf.indexOf('\n')) !== -1) {
+      const line = buf.slice(0, nl).trim();
+      buf = buf.slice(nl + 1);
+      if (!line) continue;
+      const msg = JSON.parse(line);
+      if (msg.type === 'delta') live?.append(msg.text);
+      else if (msg.type === 'reset') live?.reset();
+      else if (msg.type === 'error') throw new Error(msg.message);
+      else if (msg.type === 'result') { delete msg.type; result = msg; }
+    }
+  }
+  if (!result) throw new Error('Generation ended without a result');
+  return result;
+}
+
+// --- System theme ---
+// The shell has its own variable names; map the shared --llmos-* tokens onto
+// them so the desktop and every app change together.
+const SHELL_THEME_MAP = {
+  '--bg-primary': '--llmos-bg',
+  '--bg-secondary': '--llmos-surface',
+  '--bg-tertiary': '--llmos-surface-2',
+  '--bg-surface': '--llmos-surface-2',
+  '--border': '--llmos-border',
+  '--text-primary': '--llmos-fg',
+  '--text-secondary': '--llmos-muted',
+  '--text-dim': '--llmos-muted',
+  '--accent': '--llmos-accent',
+  '--accent-hover': '--llmos-accent',
+  '--accent-dim': '--llmos-border',
+  '--danger': '--llmos-danger',
+  '--success': '--llmos-success',
+  '--font-sans': '--llmos-font',
+  '--font-mono': '--llmos-mono',
+};
+
+function applyTheme(theme) {
+  const root = document.documentElement.style;
+  const custom = theme && theme.name && theme.name !== 'Default';
+  for (const [shellVar, token] of Object.entries(SHELL_THEME_MAP)) {
+    if (custom && theme.vars[token]) root.setProperty(shellVar, theme.vars[token]);
+    else root.removeProperty(shellVar); // default: the shell's own palette
+  }
+  sandboxMgr.setTheme(theme?.vars || {});
+}
+
+async function themeCommand(arg) {
+  if (/^reset$/i.test(arg)) {
+    const theme = await fetch('/api/theme/reset', { method: 'POST' }).then(r => r.json());
+    applyTheme(theme);
+    log('Theme reset to default', 'ok');
+    return;
+  }
+  if (!arg) { log('Usage: /theme <description>  or  /theme reset', 'warn'); return; }
+  log(`Designing theme: "${arg}"`);
+  const live = openLivePanel(`Theme: ${arg.slice(0, 60)}`);
+  try {
+    const theme = await streamJob('/api/theme', { description: arg }, live);
+    applyTheme(theme);
+    log(`Theme "${theme.name}" applied (${theme.provider}/${theme.model}${theme.attempts > 1 ? `, corrected after validator feedback` : ''})`, 'ok');
+  } catch (err) {
+    log(`Theme failed: ${err.message}`, 'error');
+  } finally {
+    live.close();
+  }
+}
+
 // --- Generation Flow ---
-async function generateApp(prompt) {
+async function generateApp(prompt, options = {}) {
   if (generating) return;
+  const themeCmd = prompt.match(/^\/theme\b\s*(.*)$/i);
+  if (themeCmd) return themeCommand(themeCmd[1].trim());
   generating = true;
   generateBtn.disabled = true;
   generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
@@ -1813,34 +2373,16 @@ async function generateApp(prompt) {
       return;
     }
 
-    // 1. Call LLM gateway (iframe app)
-    const genRes = await fetch('/api/generate', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ prompt }),
-    });
-
-    if (!genRes.ok) {
-      const err = await genRes.text();
-      throw new Error(`Generation failed: ${err}`);
-    }
-
-    const genData = await genRes.json();
-
-    // Handle clarification requests — auto-retry with force
-    if (genData.needsClarification) {
-      log(`Prompt is vague (confidence: ${genData.confidence?.score}). Generating anyway...`, 'warn');
-      const retryRes = await fetch('/api/generate', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ prompt, force: true }),
-      });
-      if (!retryRes.ok) {
-        const err = await retryRes.text();
-        throw new Error(`Generation failed: ${err}`);
-      }
-      const retryData = await retryRes.json();
-      Object.assign(genData, retryData);
+    // 1. Call LLM gateway (iframe app), streaming into the live view.
+    // The shell always generates (force) — vague prompts still get an app.
+    const live = openLivePanel(`${options.parentHash ? 'Regenerating' : 'Writing'}: ${prompt.slice(0, 60)}`);
+    let genData;
+    try {
+      genData = await streamJob('/api/generate', { prompt, force: true, fresh: !!options.fresh }, live);
+    } catch (err) {
+      throw new Error(`Generation failed: ${err.message}`);
+    } finally {
+      live.close();
     }
 
     const hintMsg = genData.modelHint ? ` (requested: ${genData.modelHint})` : '';
@@ -1871,7 +2413,7 @@ async function generateApp(prompt) {
     }
 
     // 3. Show capability approval modal
-    showCapabilityModal(prompt, genData, analysis);
+    showCapabilityModal(prompt, genData, analysis, null, options);
 
   } catch (err) {
     log(`Error: ${err.message}`, 'error');
@@ -1882,8 +2424,10 @@ async function generateApp(prompt) {
   }
 }
 
-function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
-  modalTitle.textContent = `Launch: "${prompt.slice(0, 50)}${prompt.length > 50 ? '...' : ''}"`;
+function showCapabilityModal(prompt, genData, analysis, onApprove = null, options = {}) {
+  const heading = options.heading || 'Launch';
+  const name = genData.manifest?.name || prompt;
+  modalTitle.textContent = `${heading}: "${name.slice(0, 50)}${name.length > 50 ? '...' : ''}"`;
 
   // Show analysis results
   modalAnalysis.innerHTML = '';
@@ -1923,7 +2467,8 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
     cb.id = `cap-${cap}`;
     const label = document.createElement('label');
     label.htmlFor = `cap-${cap}`;
-    label.textContent = cap;
+    label.textContent = CAP_DESCRIPTIONS[cap] ? `${cap} — ${CAP_DESCRIPTIONS[cap]}` : cap;
+    if (SENSITIVE_CAPS.includes(cap)) label.classList.add('cap-sensitive');
     li.append(cb, label);
     modalCaps.appendChild(li);
   }
@@ -1942,36 +2487,22 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
       // Process app — caller handles launch (Docker, no tokens needed)
       onApprove(approved);
     } else {
-      // Iframe app — grant capabilities and get signed tokens
-      const appId = `app-${++appCounter}`;
-      const title = prompt.slice(0, 40);
-
-      let tokens = {};
-      try {
-        const grantRes = await fetch('/api/grant', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ appId, capabilities: approved }),
-        });
-        if (grantRes.ok) {
-          const grantData = await grantRes.json();
-          tokens = grantData.tokens || {};
-        }
-      } catch (err) {
-        log(`Token grant failed: ${err.message} (launching without tokens)`, 'warn');
-      }
-
-      const iframe = sandboxMgr.launch(appId, genData.code, approved, title, tokens);
-      addAppWindow(appId, iframe, title, genData.model);
+      // Iframe app — launch with the approved capabilities
+      const title = genData.manifest?.name || prompt.slice(0, 40);
+      const appId = await launchIframeApp({
+        code: genData.code, capabilities: approved, title, icon: genData.manifest?.icon,
+        model: genData.model, provider: genData.provider, prompt, args: options.args || {},
+      });
       log(`Launched ${appId} with capabilities: [${approved.join(', ')}]`, 'ok');
 
-      // Auto-publish to registry and track for session persistence
+      // Auto-publish to registry and track the hash for session persistence
       const pubResult = await publishToRegistry({
-        prompt, code: genData.code, type: 'iframe',
+        prompt, code: genData.code, type: 'iframe', manifest: genData.manifest,
         capabilities: approved, model: genData.model, provider: genData.provider,
+        parentHash: options.parentHash || undefined,
       });
-      if (pubResult?.hash) {
-        openIframeApps.set(appId, { hash: pubResult.hash, title, model: genData.model, capabilities: approved });
+      if (pubResult?.hash && openIframeApps.has(appId)) {
+        openIframeApps.get(appId).hash = pubResult.hash;
         saveSession();
       }
     }
@@ -1982,6 +2513,7 @@ function showCapabilityModal(prompt, genData, analysis, onApprove = null) {
     modalApprove.removeEventListener('click', approveHandler);
     modalDeny.removeEventListener('click', denyHandler);
     log('App launch denied by user', 'warn');
+    options.onDeny?.();
   };
 
   modalApprove.addEventListener('click', approveHandler);
@@ -2288,7 +2820,29 @@ function renderRegistryApps(apps) {
 
     const actions = document.createElement('div');
     actions.className = 'app-card-actions';
-    actions.append(launchBtn, rateDiv, specBtn, deleteBtn);
+    actions.append(launchBtn, rateDiv, specBtn);
+
+    // Same prompt, today's model. Built-in apps weren't generated from a
+    // prompt, so there is nothing meaningful to re-run for them.
+    if (app.type === 'iframe' && app.provider !== 'built-in') {
+      const regenBtn = document.createElement('button');
+      regenBtn.className = 'app-card-spec';
+      regenBtn.textContent = '↻';
+      regenBtn.title = `Regenerate with the current model (was ${app.model})`;
+      regenBtn.onclick = (e) => {
+        e.stopPropagation();
+        closeRegistry();
+        generateApp(app.prompt, { fresh: true, parentHash: app.hash, heading: 'Regenerated' });
+      };
+      actions.appendChild(regenBtn);
+    }
+    actions.appendChild(deleteBtn);
+
+    if (app.version > 1) {
+      const ver = document.createElement('span');
+      ver.textContent = `v${app.version}`;
+      meta.prepend(ver);
+    }
 
     card.append(info, typeTag, actions);
     registryBody.appendChild(card);
@@ -2341,30 +2895,7 @@ async function launchFromRegistry(app) {
   closeRegistry();
 
   if (app.type === 'iframe') {
-    // Record launch
-    fetch(`/api/registry/launch/${app.hash}`, { method: 'POST' }).catch(() => {});
-
-    const appId = `app-${++appCounter}`;
-
-    // Grant capabilities and get signed tokens
-    let tokens = {};
-    try {
-      const grantRes = await fetch('/api/grant', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ appId, capabilities: app.capabilities }),
-      });
-      if (grantRes.ok) {
-        const grantData = await grantRes.json();
-        tokens = grantData.tokens || {};
-      }
-    } catch {}
-
-    const iframe = sandboxMgr.launch(appId, app.code, app.capabilities, app.title, tokens);
-    addAppWindow(appId, iframe, app.title, app.model);
-    openIframeApps.set(appId, { hash: app.hash, title: app.title, model: app.model, capabilities: app.capabilities || [] });
-    saveSession();
-    log(`Launched from registry: "${app.title}" (${app.hash})`, 'ok');
+    await launchRegistryApp(app);
   } else if (app.type === 'process') {
     log(`Launching process app from registry: "${app.title}"`, 'info');
     // Show capability modal for process apps
@@ -2454,6 +2985,13 @@ const settingsClose = document.getElementById('settings-close');
 const siTasks = document.getElementById('si-tasks');
 const siStats = document.getElementById('si-stats');
 
+// Escape text for HTML templates. Anything that can come from a user, a
+// model or an app (prompts, errors, model names) must go through this —
+// the shell runs with full kernel access, so markup here is a sandbox escape.
+function esc(value) {
+  return String(value ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
 function timeAgo(ts) {
   if (!ts) return 'never';
   const diff = Date.now() - ts;
@@ -2489,18 +3027,18 @@ function renderTaskCard(task) {
     const detail = h.success
       ? Object.entries(h.stats || {}).map(([k, v]) => `${k}: ${v}`).join(', ')
       : h.error;
-    return `<li><span class="ts">${timeAgo(h.at)}</span> — <span class="${cls}">${detail || (h.success ? 'ok' : 'failed')}</span></li>`;
+    return `<li><span class="ts">${timeAgo(h.at)}</span> — <span class="${cls}">${esc(detail || (h.success ? 'ok' : 'failed'))}</span></li>`;
   }).join('');
 
   return `<div class="task-card ${cardClass}" data-task="${task.id}">
     <div class="task-card-header">
-      <h3>${task.name} <span class="task-badge ${badgeClass}">${badgeText}</span></h3>
+      <h3>${esc(task.name)} <span class="task-badge ${badgeClass}">${badgeText}</span></h3>
       <label class="toggle">
         <input type="checkbox" ${s.enabled ? 'checked' : ''} onchange="window._siToggle('${task.id}', this.checked)">
         <span class="slider"></span>
       </label>
     </div>
-    <div class="task-card-desc">${task.description}${task.requiresLLM ? '' : ' (no LLM needed)'}</div>
+    <div class="task-card-desc">${esc(task.description)}${task.requiresLLM ? '' : ' (no LLM needed)'}</div>
     <div class="task-card-stats">
       <span><strong>${s.runCount}</strong> runs</span>
       <span><strong>${s.successCount}</strong> ok</span>
@@ -2532,7 +3070,7 @@ async function loadSettings() {
       statsRes.paused ? '<strong style="color:var(--warning)">PAUSED</strong>' : '',
     ].filter(Boolean).join(' &nbsp;|&nbsp; ');
   } catch (err) {
-    siTasks.innerHTML = `<p class="settings-desc">Failed to load tasks: ${err.message}</p>`;
+    siTasks.innerHTML = `<p class="settings-desc">Failed to load tasks: ${esc(err.message)}</p>`;
   }
 }
 
@@ -2540,10 +3078,97 @@ function openSettings() {
   settingsOverlay.classList.remove('hidden');
   loadSettings();
   loadShellVersions();
+  // Load usage if that tab is active
+  if (document.querySelector('.settings-tab.active')?.dataset.tab === 'usage-tab') {
+    loadUsage();
+  }
 }
 function closeSettings() {
   settingsOverlay.classList.add('hidden');
 }
+
+// --- Settings Tab Switching ---
+for (const tab of document.querySelectorAll('.settings-tab')) {
+  tab.addEventListener('click', () => {
+    document.querySelectorAll('.settings-tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-tab-content').forEach(c => c.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.tab).classList.add('active');
+    if (tab.dataset.tab === 'usage-tab') loadUsage();
+  });
+}
+
+// --- Usage Dashboard ---
+function fmtTokens(n) {
+  if (n >= 1_000_000) return (n / 1_000_000).toFixed(1) + 'M';
+  if (n >= 1_000) return (n / 1_000).toFixed(1) + 'k';
+  return String(n);
+}
+function fmtCost(n) {
+  if (n === 0) return '$0';
+  if (n < 0.01) return '$' + n.toFixed(4);
+  return '$' + n.toFixed(2);
+}
+function fmtMs(n) {
+  if (n >= 1000) return (n / 1000).toFixed(1) + 's';
+  return n + 'ms';
+}
+
+async function loadUsage() {
+  try {
+    const res = await fetch('/api/usage');
+    const data = await res.json();
+    const s = data.stats;
+
+    // Pills
+    document.getElementById('usage-pills').innerHTML = [
+      { value: s.totalGenerations, label: 'Generations' },
+      { value: fmtTokens(s.totalInputTokens), label: 'Tokens In' },
+      { value: fmtTokens(s.totalOutputTokens), label: 'Tokens Out' },
+      { value: fmtCost(s.totalCost), label: 'Total Cost' },
+      { value: `${s.cacheHits} (${s.cacheHitRate}%)`, label: 'Cache Hits' },
+      { value: fmtMs(s.avgLatencyMs), label: 'Avg Latency' },
+    ].map(p => `<div class="usage-pill"><div class="pill-value">${p.value}</div><div class="pill-label">${p.label}</div></div>`).join('');
+
+    // Model table
+    if (data.byModel.length > 0) {
+      document.getElementById('usage-by-model').innerHTML = `<table class="usage-table">
+        <tr><th>Model</th><th>Gens</th><th>Tokens</th><th>Cost</th><th>Avg</th></tr>
+        ${data.byModel.map(m => `<tr>
+          <td>${esc(m.model)}</td>
+          <td>${m.generations}</td>
+          <td>${fmtTokens(m.inputTokens + m.outputTokens)}</td>
+          <td>${fmtCost(m.cost)}</td>
+          <td>${fmtMs(m.avgLatencyMs)}</td>
+        </tr>`).join('')}
+      </table>`;
+    } else {
+      document.getElementById('usage-by-model').innerHTML = '<p class="settings-desc" style="opacity:0.6">No generations yet.</p>';
+    }
+
+    // Recent
+    if (data.recent.length > 0) {
+      document.getElementById('usage-recent').innerHTML = data.recent.map(r => `<div class="usage-recent-item">
+        <span class="prompt-text">${esc(r.prompt)}</span>
+        <span>${esc(r.model.split('/').pop().split(':')[0])}</span>
+        <span>${fmtMs(r.latencyMs)}</span>
+        <span title="${r.estimated ? 'Estimated from word count — provider did not report tokens' : 'Tokens reported by the provider'}">${r.estimated ? '≈' : ''}${fmtCost(r.cost)}</span>
+        ${r.cached ? '<span class="cached-badge">CACHED</span>' : ''}
+      </div>`).join('');
+    } else {
+      document.getElementById('usage-recent').innerHTML = '<p class="settings-desc" style="opacity:0.6">No generations yet.</p>';
+    }
+  } catch (err) {
+    document.getElementById('usage-pills').innerHTML = `<p class="settings-desc">Failed to load usage: ${esc(err.message)}</p>`;
+  }
+}
+
+document.getElementById('usage-refresh-btn').addEventListener('click', loadUsage);
+document.getElementById('usage-clear-btn').addEventListener('click', async () => {
+  if (!confirm('Clear all usage data?')) return;
+  await fetch('/api/usage', { method: 'DELETE' });
+  loadUsage();
+});
 
 // Global handlers (called from inline onclick in rendered HTML)
 window._siToggle = async (id, enabled) => {
@@ -2609,10 +3234,10 @@ async function loadShellVersions() {
       const timeStr = age < 60 ? `${age}m ago` : age < 1440 ? `${Math.round(age / 60)}h ago` : `${Math.round(age / 1440)}d ago`;
       return `<div style="background:var(--bg-tertiary, #1a1a2e);border:1px solid ${isCurrent ? 'var(--accent, #6c63ff)' : 'var(--border, #2a2a4a)'};border-radius:6px;padding:10px;margin-bottom:8px;">
         <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px;">
-          <span style="font-size:12px;color:var(--text-primary, #e0e0f0);">${isCurrent ? '● ' : ''}${v.id.slice(0, 16)}</span>
+          <span style="font-size:12px;color:var(--text-primary, #e0e0f0);">${isCurrent ? '● ' : ''}${esc(v.id.slice(0, 16))}</span>
           <span style="font-size:11px;background:${v.source === 'user' ? '#6c63ff33' : '#4caf5033'};color:${v.source === 'user' ? '#6c63ff' : '#4caf50'};padding:2px 6px;border-radius:3px;">${v.source}</span>
         </div>
-        <div style="font-size:11px;color:var(--text-secondary, #8888aa);margin-bottom:6px;">${v.prompt || '(autonomous improvement)'} — diff: ${v.diff}%</div>
+        <div style="font-size:11px;color:var(--text-secondary, #8888aa);margin-bottom:6px;">${esc(v.prompt || '(autonomous improvement)')} — diff: ${esc(v.diff)}%</div>
         <div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-secondary, #8888aa);">
           <span>${timeStr} · ${(v.byteSize / 1024).toFixed(1)} KB</span>
           ${!isCurrent ? `<button onclick="window._shellRollback('${v.id}')" style="font-size:11px;padding:2px 8px;">Rollback</button>` : '<span style="color:var(--accent, #6c63ff);">current</span>'}
@@ -2715,7 +3340,16 @@ async function init() {
     async onConfirm(appId, message) {
       return window.confirm(`[${appId}]: ${message}`);
     },
+    onSyscall: handleSyscall,
+    onCapRequest: requestCapability,
+    onAppError(appId, err, count) {
+      updateErrorBadge(appId);
+      if (count === 1) log(`[${appId}] runtime error: ${err.message} — click \u26a0 on the window to let AI fix it`, 'warn');
+    },
   });
+
+  // System theme (generated or default) for the shell and every app
+  try { applyTheme(await fetch('/api/theme').then(r => r.json())); } catch {}
 
   initExamples();
   checkLLMStatus();

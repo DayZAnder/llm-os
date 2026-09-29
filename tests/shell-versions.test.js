@@ -1,21 +1,33 @@
 // Tests for shell version store and improvement validation
 // Run: node tests/shell-versions.test.js
 
-import { rmSync, existsSync } from 'fs';
-import { join } from 'path';
+import { rmSync, existsSync, mkdirSync, renameSync } from 'fs';
+import { join, basename } from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const DATA_DIR = join(__dirname, '..', 'data');
 
-// Clean up test data BEFORE importing store (which loads on import)
+// The store writes to the real data/ dir. Move the user's shell versions
+// aside, run against a clean slate, and put them back afterwards — otherwise
+// running the tests leaves a stub "test shell" active in the real OS.
 const testFiles = [
   join(DATA_DIR, 'shell-versions.json'),
   join(DATA_DIR, 'shell-current.json'),
   join(DATA_DIR, 'shell-versions'),
 ];
+const stash = join(DATA_DIR, `.shell-test-stash-${process.pid}`);
+mkdirSync(stash, { recursive: true });
 for (const f of testFiles) {
-  if (existsSync(f)) rmSync(f, { recursive: true, force: true });
+  if (existsSync(f)) renameSync(f, join(stash, basename(f)));
+}
+function restoreUserShell() {
+  for (const f of testFiles) {
+    if (existsSync(f)) rmSync(f, { recursive: true, force: true });
+    const saved = join(stash, basename(f));
+    if (existsSync(saved)) renameSync(saved, f);
+  }
+  rmSync(stash, { recursive: true, force: true });
 }
 
 // Dynamic import so cleanup runs first
@@ -195,5 +207,6 @@ assert(halfDiff >= 45 && halfDiff <= 55, `half-changed = ~50% (got ${halfDiff}%)
 
 // --- Summary ---
 
+restoreUserShell();
 console.log(`\n${passed + failed} tests: ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

@@ -3,18 +3,23 @@ import { readFileSync, existsSync } from 'fs';
 import { join, extname } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './kernel/config.js';
-import { generate, generateProcess, getProviders } from './kernel/gateway.js';
+import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme } from './kernel/gateway.js';
+import { loadTheme, saveTheme, resetTheme, validateTheme } from './kernel/theme.js';
+import { checkApiRequest } from './kernel/http-guard.js';
+import * as vfs from './kernel/vfs.js';
+import { request as netRequest } from './kernel/net.js';
 import { analyze, analyzeDockerfile } from './kernel/analyzer.js';
 import { proposeCapabilities, grantCapabilities, getAppStorage, checkCapability, inferAppType, initTokenKey, verifyToken } from './kernel/capabilities.js';
 import { dockerPing } from './kernel/docker/client.js';
 import { buildImage, launchContainer, stopContainer, healthCheck, getContainerLogs, listProcesses, syncRunningContainers } from './kernel/docker/process-manager.js';
-import { publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, rateApp, updateSpec, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
+import { findHandlers, getLineage, publishApp, getApp, searchApps, browseApps, getTags, getStats, recordLaunch, rateApp, updateSpec, deleteApp, syncCommunity, isCommunityApp } from './kernel/registry/store.js';
 import { storageGet, storageSet, storageRemove, storageKeys, storageUsage, storageClear, storageExport, storageImport, storageListApps, storageExportAll, storageFlushAll } from './kernel/storage.js';
 import * as scheduler from './kernel/scheduler.js';
 import { tasks as selfImproveTasks } from './kernel/self-improve/index.js';
 import { loadQueue, queueClaudeTask } from './kernel/self-improve/claude-agent.js';
 import { loadProfile, reloadProfile, getBootApps, solidify, goEphemeral, isSolidified, getSnapshotInfo } from './kernel/profile.js';
 import * as knowledgeBase from './kernel/knowledge.js';
+import * as usageTracker from './kernel/usage-tracker.js';
 import { getShellPath, listVersions as listShellVersions, getCurrentId as getShellCurrentId, getCurrentVersion as getShellCurrentVersion, setCurrentId as setShellCurrentId, readVersionHtml } from './kernel/shell-versions/store.js';
 import { improveShell, addSseClient, removeSseClient, notifyShellReload } from './kernel/shell-versions/improve.js';
 import { matchKnownApp } from './apps/nanoclaw.js';
@@ -57,6 +62,65 @@ function serveStatic(url, res) {
 
   res.writeHead(200, { 'Content-Type': mime });
   res.end(content);
+}
+
+function sendJson(res, status, data) {
+  res.writeHead(status, { 'Content-Type': 'application/json' });
+  res.end(JSON.stringify(data));
+}
+
+// Syscalls from apps (fs, net, ai) must carry the signed capability token the
+// kernel issued for that app. The shell already enforces capabilities; this
+// is the second, independent check.
+const FS_OP_CAPS = { list: 'fs:read', read: 'fs:read', stat: 'fs:read', write: 'fs:write', mkdir: 'fs:write', remove: 'fs:write' };
+
+/**
+ * Run a generation job and reply either as one JSON document or, when
+ * streaming, as NDJSON with batched text deltas followed by the result.
+ */
+async function respond(res, stream, job) {
+  if (!stream) {
+    sendJson(res, 200, await job(undefined));
+    return;
+  }
+  res.writeHead(200, { 'Content-Type': 'application/x-ndjson', 'Cache-Control': 'no-cache' });
+  let pending = '';
+  let timer = null;
+  const line = (obj) => JSON.stringify(obj) + '\n';
+  const flush = () => {
+    timer = null;
+    if (pending) { res.write(line({ type: 'delta', text: pending })); pending = ''; }
+  };
+  const onText = (chunk) => {
+    pending += chunk;
+    if (!timer) timer = setTimeout(flush, 100);
+  };
+  // A provider failed mid-stream and another one starts over
+  const onReset = () => {
+    clearTimeout(timer);
+    timer = null;
+    pending = '';
+    res.write(line({ type: 'reset' }));
+  };
+  try {
+    const result = await job(onText, onReset);
+    clearTimeout(timer);
+    flush();
+    res.end(line({ type: 'result', ...result }));
+  } catch (err) {
+    clearTimeout(timer);
+    flush();
+    console.error('[server] Streaming job failed:', err.message);
+    res.end(line({ type: 'error', message: err.message }));
+  }
+}
+
+async function requireCap(appId, token, cap) {
+  const v = await verifyToken(token);
+  if (!v.valid) return `capability token rejected (${v.error})`;
+  if (v.payload.cap !== cap) return `token is for ${v.payload.cap}, not ${cap}`;
+  if (v.payload.appId !== appId) return 'token belongs to another app';
+  return null;
 }
 
 async function handleAPI(method, fullUrl, body, res) {
@@ -242,36 +306,158 @@ async function handleAPI(method, fullUrl, body, res) {
       return;
     }
 
+    // --- Usage Tracking ---
+
+    // GET /api/usage — usage stats + model breakdown + recent
+    if (method === 'GET' && url === '/api/usage') {
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({
+        stats: usageTracker.getStats(),
+        byModel: usageTracker.getByModel(),
+        byProvider: usageTracker.getByProvider(),
+        recent: usageTracker.getRecent(20),
+      }));
+      return;
+    }
+
+    // DELETE /api/usage — clear usage data
+    if (method === 'DELETE' && url === '/api/usage') {
+      usageTracker.clear();
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ ok: true }));
+      return;
+    }
+
     // POST /api/generate — generate an app from prompt
-    // Pass { force: true } to skip clarification and generate anyway
+    // { force: true } skips clarification. { stream: true } answers with
+    // NDJSON: {type:"delta",text} lines while the model writes, then one
+    // {type:"result",...} (or {type:"error",message}) line.
     if (method === 'POST' && url === '/api/generate') {
-      const { prompt, force } = JSON.parse(body);
+      const { prompt, force, stream, fresh } = JSON.parse(body);
       if (!prompt) {
         res.writeHead(400);
         res.end('Missing prompt');
         return;
       }
+      await respond(res, stream, async (onText, onReset) => {
+        const result = await generate(prompt, { force, fresh, onText, onReset });
+        if (result.needsClarification) return result;
+        // Merge LLM-declared capabilities with keyword-proposed ones
+        result.capabilities = [...new Set([...result.capabilities, ...proposeCapabilities(prompt)])];
+        knowledgeBase.recordGeneration(prompt, result);
+        return result;
+      });
+      return;
+    }
 
-      const result = await generate(prompt, { force });
+    // POST /api/evolve — modify or repair an app: { code, instruction?, errors?, prompt?, stream? }
+    if (method === 'POST' && url === '/api/evolve') {
+      const input = JSON.parse(body);
+      await respond(res, input.stream, async (onText, onReset) => {
+        const result = await evolve(input, { onText, onReset });
+        const proposed = input.instruction ? proposeCapabilities(input.instruction) : [];
+        result.capabilities = [...new Set([...result.capabilities, ...proposed])];
+        return result;
+      });
+      return;
+    }
 
-      // If clarification needed, return it directly
-      if (result.needsClarification) {
-        res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify(result));
+    // GET /api/theme — current system theme
+    if (method === 'GET' && url === '/api/theme') {
+      sendJson(res, 200, loadTheme());
+      return;
+    }
+
+    // POST /api/theme — { description, stream? } asks the model for a theme;
+    // { vars, name? } sets one directly. Both are validated before saving.
+    if (method === 'POST' && url === '/api/theme') {
+      const input = JSON.parse(body);
+      if (input.vars) {
+        const check = validateTheme(input.vars);
+        if (!check.ok) { sendJson(res, 400, { error: 'Theme rejected', problems: check.problems }); return; }
+        const theme = { name: String(input.name || 'Custom').slice(0, 60), description: '', vars: check.vars };
+        saveTheme(theme);
+        sendJson(res, 200, theme);
         return;
       }
+      await respond(res, input.stream, async (onText, onReset) => {
+        const theme = await generateTheme(input.description, { onText, onReset });
+        saveTheme(theme);
+        return theme;
+      });
+      return;
+    }
 
-      // Also propose capabilities based on the prompt
-      const proposed = proposeCapabilities(prompt);
-      // Merge with LLM-declared capabilities
-      const allCaps = [...new Set([...result.capabilities, ...proposed])];
-      result.capabilities = allCaps;
+    // POST /api/theme/reset — back to the default theme
+    if (method === 'POST' && url === '/api/theme/reset') {
+      sendJson(res, 200, resetTheme());
+      return;
+    }
 
-      // Record in knowledge base
-      knowledgeBase.recordGeneration(prompt, result);
+    // POST /api/fs — filesystem syscall: { appId, token, op, path, content? }
+    if (method === 'POST' && url === '/api/fs') {
+      const { appId, token, op, path, content } = JSON.parse(body);
+      const cap = FS_OP_CAPS[op];
+      if (!cap) { sendJson(res, 400, { error: `Unknown fs op: ${op}` }); return; }
+      const denied = await requireCap(appId, token, cap);
+      if (denied) { sendJson(res, 403, { error: denied }); return; }
+      try {
+        let result;
+        switch (op) {
+          case 'list': result = vfs.list(path || '/'); break;
+          case 'read': result = vfs.read(path); break;
+          case 'stat': result = vfs.stat(path); break;
+          case 'write': result = vfs.write(path, content ?? ''); break;
+          case 'mkdir': result = vfs.mkdir(path); break;
+          case 'remove': result = vfs.remove(path); break;
+        }
+        sendJson(res, 200, { result });
+      } catch (err) {
+        sendJson(res, 400, { error: err.message });
+      }
+      return;
+    }
 
-      res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify(result));
+    // POST /api/net — HTTP proxy syscall: { appId, token, url, method?, headers?, body? }
+    if (method === 'POST' && url === '/api/net') {
+      const req = JSON.parse(body);
+      const denied = await requireCap(req.appId, req.token, 'network:http');
+      if (denied) { sendJson(res, 403, { error: denied }); return; }
+      try {
+        sendJson(res, 200, { result: await netRequest(req) });
+      } catch (err) {
+        sendJson(res, 502, { error: err.message });
+      }
+      return;
+    }
+
+    // POST /api/ai — language model syscall: { appId, token, prompt, system?, maxTokens? }
+    if (method === 'POST' && url === '/api/ai') {
+      const req = JSON.parse(body);
+      const denied = await requireCap(req.appId, req.token, 'ai:generate');
+      if (denied) { sendJson(res, 403, { error: denied }); return; }
+      try {
+        sendJson(res, 200, { result: await complete(req) });
+      } catch (err) {
+        sendJson(res, 400, { error: err.message });
+      }
+      return;
+    }
+
+    // GET /api/registry/handlers?path=/a/b.csv — apps that can open a file
+    if (method === 'GET' && url === '/api/registry/handlers') {
+      const params = new URL(`http://x${fullUrl}`).searchParams;
+      const path = params.get('path') || '';
+      const handlers = findHandlers(path, vfs.mimeOf(path)).slice(0, 5)
+        .map(a => ({ hash: a.hash, title: a.title, manifest: a.manifest, capabilities: a.capabilities, model: a.model }));
+      sendJson(res, 200, handlers);
+      return;
+    }
+
+    // GET /api/registry/:hash/lineage — version history
+    const lineageMatch = url.match(/^\/api\/registry\/([a-f0-9]{16})\/lineage$/);
+    if (method === 'GET' && lineageMatch) {
+      sendJson(res, 200, getLineage(lineageMatch[1]));
       return;
     }
 
@@ -293,7 +479,8 @@ async function handleAPI(method, fullUrl, body, res) {
       const result = {
         code,
         capabilities: allCaps,
-        model: model || 'opus-4.6-manual',
+        manifest: extractManifest(code),
+        model: model || 'manual',
         provider: provider || 'inject',
         complexity: 'medium',
         generationTime: 0,
@@ -747,8 +934,20 @@ process.on('SIGTERM', () => { storageFlushAll(); process.exit(0); });
 // Initialize capability token signing key (session-scoped, rotates on restart)
 await initTokenKey();
 
+const MAX_BODY_BYTES = 25 * 1024 * 1024;
+
 const server = createServer((req, res) => {
   const pathOnly = req.url.split('?')[0];
+
+  if (pathOnly.startsWith('/api/')) {
+    const verdict = checkApiRequest(req);
+    if (!verdict.ok) {
+      console.warn(`[server] Rejected ${req.method} ${pathOnly}: ${verdict.reason}`);
+      res.writeHead(403, { 'Content-Type': 'text/plain' });
+      res.end(`Forbidden: ${verdict.reason}`);
+      return;
+    }
+  }
 
   // SSE endpoint — handle before body collection (long-lived connection)
   if (pathOnly === '/api/shell/events') {
@@ -765,9 +964,19 @@ const server = createServer((req, res) => {
 
   if (pathOnly.startsWith('/api/')) {
     let body = '';
-    req.on('data', chunk => body += chunk);
+    let size = 0;
+    req.on('data', chunk => {
+      size += chunk.length;
+      if (size > MAX_BODY_BYTES) {
+        res.writeHead(413);
+        res.end('Request body too large');
+        req.destroy();
+        return;
+      }
+      body += chunk;
+    });
     // Pass full URL (with query string) to API handler
-    req.on('end', () => handleAPI(req.method, req.url, body, res));
+    req.on('end', () => { if (size <= MAX_BODY_BYTES) handleAPI(req.method, req.url, body, res); });
   } else {
     serveStatic(pathOnly, res);
   }

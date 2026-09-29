@@ -30,6 +30,30 @@ jobs:
       - name: Run scheduler tests
         run: node tests/scheduler.test.js
 
+      - name: Run usage tracker tests
+        run: node tests/usage-tracker.test.js
+
+      - name: Run gateway tests
+        run: node tests/gateway.test.js
+
+      - name: Run WASM sandbox tests
+        run: node tests/wasm-sandbox.test.js
+
+      - name: Run capability tests
+        run: node tests/capabilities.test.js
+
+      - name: Run shell version tests
+        run: node tests/shell-versions.test.js
+
+      - name: Run syscall tests (HTTP guard, VFS, net proxy, sandbox)
+        run: node tests/syscalls.test.js
+
+      - name: Run Claude provider tests
+        run: node tests/claude-provider.test.js
+
+      - name: Run theme tests
+        run: node tests/theme.test.js
+
   build-vm:
     name: Build VM (${{ matrix.variant }})
     needs: test

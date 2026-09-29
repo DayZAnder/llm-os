@@ -40,6 +40,9 @@ src/
     gateway.js           — LLM routing (Ollama for simple, Claude for complex)
     analyzer.js          — Static analysis (regex-based, ~35 rules, blocks eval/injection)
     capabilities.js      — Capability tokens (HMAC-SHA256 signed, constant-time verify)
+    http-guard.js        — Host/Origin/content-type checks on /api/* (CSRF + DNS rebinding)
+    vfs.js               — Shared user filesystem (data/fs), path-traversal safe, quotas
+    net.js               — HTTP proxy for apps; blocks private/loopback/metadata IPs at connect time
     storage.js           — Per-app persistent storage (JSON files, 5MB quota)
     scheduler.js         — Background self-improvement task scheduler
     profile.js           — OS profile & ephemeral mode (data/profile.yaml)
@@ -69,7 +72,8 @@ src/
     sdk.js               — In-sandbox SDK (runs inside iframes, postMessage bridge)
   shell/
     index.html           — Desktop UI (prompt bar, windows, modals, log)
-    sandbox.js           — Iframe sandbox manager (creates, injects SDK, kills)
+    sandbox.js           — Iframe sandbox manager: capability enforcement per syscall,
+                           theme tokens, IPC bus, runtime error capture, hot-swap
   apps/
     nanoclaw.js          — Container-based agent framework
 tests/
@@ -82,6 +86,35 @@ tests/
   capabilities.test.js   — 51 tests: HMAC tokens, expiry, revocation, forgery
   security/              — Injection vectors, analyzer vectors (JSON test data)
 ```
+
+## The OS model
+
+Apps are single HTML documents written by the LLM. They get OS services only
+through the `LLMOS` SDK (see the system prompt in `gateway.js` for the full
+contract): `ui`, `storage` (private), `fs` (shared user files), `net` (kernel
+proxy), `ai` (the OS model), `clipboard`, `os` (launch args, open file, title),
+`ipc` (pub/sub between apps), `timer`.
+
+- **Capabilities are enforced twice**: `sandbox.js` checks every postMessage
+  against the user-approved list (apps can bypass the SDK), and `/api/fs`,
+  `/api/net`, `/api/ai` verify the signed capability token again.
+- **Manifest**: line 2 of every app is `<!-- app: {"name","icon","handles"} -->`.
+  `handles` registers file associations; `LLMOS.os.open(path)` finds a handler
+  in the registry or offers to generate one.
+- **Evolution**: `POST /api/evolve` rewrites a running app from an instruction
+  and/or runtime errors the SDK reported. The shell hot-swaps it into the same
+  window (same appId → same storage) and publishes it with `parentHash`, so
+  the registry keeps a version lineage.
+- **Design tokens**: the sandbox injects `--llmos-*` CSS variables; apps are
+  told to use them so the whole OS can be re-themed. `/theme <description>`
+  asks the model for a palette; `kernel/theme.js` validates keys, value syntax
+  and WCAG contrast deterministically before it is applied (one correction
+  round with the validator's findings).
+- **Streaming**: `/api/generate`, `/api/evolve` and `/api/theme` accept
+  `stream: true` and answer NDJSON (`delta`, `reset`, `result`, `error`). The
+  shell renders the partial app in a script-less sandbox while it is written.
+- **Default apps** live in `examples/` and are seeded into the registry on
+  first boot, manifest included (Files, Notepad).
 
 ## How It Works
 
@@ -108,6 +141,9 @@ tests/
 - The static analyzer (`analyzer.js`) must NEVER use an LLM — it must be deterministic.
 - The SDK (`sdk.js`) runs inside untrusted iframes — it must never trust the host directly.
 - The gateway (`gateway.js`) must sanitize ALL user input before passing to any LLM.
+- Every new SDK call needs an entry in `SYSCALL_CAPS` (`src/shell/sandbox.js`). Anything that
+  touches user data, the network, or costs money must require a capability.
+- Tests must not write to the real `data/` directory (or must restore it afterwards).
 - Generated apps must never be able to escape their sandbox. If you find an escape vector, fix it immediately and file an issue.
 
 ## Before You Submit — Mandatory Verification
