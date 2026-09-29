@@ -1,6 +1,8 @@
 // Ollama provider — local LLM inference
 // Endpoint: POST ${url}/api/generate
 
+import { TruncatedOutputError } from './errors.js';
+
 export const provider = {
   name: 'ollama',
 
@@ -94,7 +96,7 @@ export const provider = {
       options.onUsage?.({ inputTokens: data.prompt_eval_count || 0, outputTokens: data.eval_count || 0 });
     }
     if (data.done_reason === 'length') {
-      throw new Error(`Ollama output truncated at ${options.maxTokens ?? 16384} tokens — try a larger model or simpler request`);
+      throw new TruncatedOutputError(data.response, `Ollama output truncated at ${options.maxTokens ?? 16384} tokens — try a larger model or simpler request`);
     }
     return data.response;
   },

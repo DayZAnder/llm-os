@@ -2,6 +2,8 @@
 // Works with: OpenAI, OpenRouter, Together, Groq, vLLM, LM Studio
 // Endpoint: POST ${baseUrl}/chat/completions
 
+import { TruncatedOutputError, RefusalError } from './errors.js';
+
 export const provider = {
   name: 'openai',
 
@@ -43,14 +45,18 @@ export const provider = {
           outputTokens: data.usage.completion_tokens || 0,
         });
       }
-      const choice = data.choices[0];
-      if (choice.finish_reason === 'length') throw new Error('OpenAI output truncated (max_tokens reached)');
+      const choice = data.choices?.[0];
+      if (!choice) throw new Error('OpenAI returned no choices');
+      if (choice.message?.refusal) throw new RefusalError(`Model declined the request (${String(choice.message.refusal).slice(0, 200)})`);
+      if (choice.finish_reason === 'length') throw new TruncatedOutputError(choice.message?.content || '', 'OpenAI output truncated (max_tokens reached)');
+      if (choice.finish_reason === 'content_filter') throw new RefusalError('Model output was stopped by the provider content filter');
+      if (typeof choice.message?.content !== 'string') throw new Error('OpenAI returned no text');
       return choice.message.content;
     }
 
     // SSE: "data: {choices:[{delta:{content}, finish_reason}]}" … "data: [DONE]"
     const decoder = new TextDecoder();
-    let buf = '', text = '', finish = null;
+    let buf = '', text = '', finish = null, refusal = '';
     for await (const chunk of res.body) {
       buf += decoder.decode(chunk, { stream: true });
       let nl;
@@ -61,6 +67,7 @@ export const provider = {
         const payload = line.slice(5).trim();
         if (payload === '[DONE]') continue;
         const choice = JSON.parse(payload).choices?.[0];
+        if (choice?.delta?.refusal) refusal += choice.delta.refusal;
         const delta = choice?.delta?.content;
         if (delta) {
           text += delta;
@@ -69,7 +76,10 @@ export const provider = {
         if (choice?.finish_reason) finish = choice.finish_reason;
       }
     }
-    if (finish === 'length') throw new Error('OpenAI output truncated (max_tokens reached)');
+    if (refusal) throw new RefusalError(`Model declined the request (${refusal.slice(0, 200)})`);
+    if (finish === 'length') throw new TruncatedOutputError(text, 'OpenAI output truncated (max_tokens reached)');
+    if (finish === 'content_filter') throw new RefusalError('Model output was stopped by the provider content filter');
+    if (!finish) throw new Error('OpenAI stream ended before the answer was complete');
     return text;
   },
 };

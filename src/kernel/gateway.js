@@ -10,6 +10,8 @@ import { estimateTokenCount } from './utils/normalize.js';
 
 // Prompt cache — exact match dedup (in-memory, ephemeral)
 const promptCache = new Map(); // hash → { result, timestamp }
+// "… , opus" must not be answered from another model's cached result
+const promptCacheKey = (clean, modelHint) => createHash('sha256').update(`${modelHint?.alias || ''}\n${clean}`).digest('hex').slice(0, 16);
 
 // Provider registry — add new providers here
 const providers = new Map();
@@ -404,7 +406,8 @@ async function callWithFallback(providerName, modelOverride, messages, options =
     const raw = await prov.generate(messages, cfg, opts);
     return { raw, provider: providerName, model: cfg.model, usage };
   } catch (err) {
-    if (err.name === 'TruncatedOutputError' || err.name === 'AbortError') throw err;
+    // Cut off or declined: another provider would be billed for the same outcome
+    if (err.name === 'TruncatedOutputError' || err.name === 'RefusalError' || err.name === 'AbortError') throw err;
     const fb = getFallbackProvider(providerName);
     if (!fb) throw err;
     console.warn(`[gateway] ${providerName} failed, trying ${fb}:`, err.message);
@@ -605,7 +608,7 @@ export async function generate(prompt, options = {}) {
   // Prompt cache — return cached result for identical prompts within TTL.
   // { fresh: true } skips it: regenerating on purpose must hit the model.
   if (config.cache.enabled && !options.fresh) {
-    const cacheKey = createHash('sha256').update(clean).digest('hex').slice(0, 16);
+    const cacheKey = promptCacheKey(clean, modelHint);
     const cached = promptCache.get(cacheKey);
     if (cached && (Date.now() - cached.timestamp) < config.cache.ttlMs) {
       console.log(`[gateway] Cache hit: ${cacheKey} (${clean.slice(0, 40)}...)`);
@@ -666,7 +669,7 @@ export async function generate(prompt, options = {}) {
 
   // Store in prompt cache
   if (config.cache.enabled) {
-    const cacheKey = createHash('sha256').update(clean).digest('hex').slice(0, 16);
+    const cacheKey = promptCacheKey(clean, modelHint);
     promptCache.set(cacheKey, { result, timestamp: Date.now() });
     // Evict expired entries periodically (every 100 cache writes)
     if (promptCache.size % 100 === 0) {
@@ -795,7 +798,7 @@ export async function complete({ appId, prompt, system = '', maxTokens = 2048 })
   } catch (err) {
     if (err.name !== 'TruncatedOutputError') throw err;
     // Hitting the app's own maxTokens is not an error — return what we have
-    raw = err.partial; provider = route.provider; model = route.model || getProviderConfig(route.provider).model; truncated = true;
+    raw = err.partial || ''; provider = route.provider; model = route.model || getProviderConfig(route.provider).model; truncated = true;
   }
 
   recordUsage({

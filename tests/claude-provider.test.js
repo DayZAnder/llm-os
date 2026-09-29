@@ -59,16 +59,16 @@ assert(lastRequest.body.fallbacks === 'default', 'opus-5 opts into refusal fallb
 assert(lastRequest.init.headers['anthropic-beta'] === 'server-side-fallback-2026-07-01', 'fallback beta header sent');
 assert(!('temperature' in lastRequest.body), 'no sampling params (rejected on current models)');
 
-mockFetch([delta('ok'), stop('end_turn')]);
+mockFetch([delta('ok'), stop('end_turn'), { type: 'message_stop' }]);
 await provider.generate(messages, { apiKey: 'k', model: 'claude-haiku-4-5', effort: '' });
 assert(!('fallbacks' in lastRequest.body) && !lastRequest.init.headers['anthropic-beta'], 'no fallbacks for models without support');
 assert(!('output_config' in lastRequest.body), 'no effort unless configured');
 
-mockFetch([delta('ok'), stop('end_turn')]);
+mockFetch([delta('ok'), stop('end_turn'), { type: 'message_stop' }]);
 await provider.generate(messages, { ...cfg, effort: 'xhigh' });
 assert(lastRequest.body.output_config?.effort === 'xhigh', 'effort from config goes into output_config');
 
-mockFetch([delta('refused partial'), { type: 'content_block_start', index: 1, content_block: { type: 'fallback', from: { model: 'claude-opus-5' }, to: { model: 'claude-opus-4-8' } } }, delta('<html>ok</html>'), stop('end_turn')]);
+mockFetch([delta('refused partial'), { type: 'content_block_start', index: 1, content_block: { type: 'fallback', from: { model: 'claude-opus-5' }, to: { model: 'claude-opus-4-8' } } }, delta('<html>ok</html>'), stop('end_turn'), { type: 'message_stop' }]);
 assert(await provider.generate(messages, cfg) === '<html>ok</html>', 'fallback block discards the declined partial output');
 
 mockFetch([delta('<html><body>half'), stop('max_tokens')]);
@@ -103,6 +103,30 @@ try {
 } catch (err) {
   assert(/overloaded_error/.test(err.message), 'mid-stream error events throw');
 }
+
+// Connection closed cleanly mid-answer: no message_delta / message_stop
+mockFetch([delta('<html><body>half an app')]);
+try {
+  await provider.generate(messages, cfg);
+  assert(false, 'early end throws');
+} catch (err) {
+  assert(/ended before/.test(err.message), 'a stream that ends early is not returned as a finished answer');
+}
+
+// Last event without the trailing blank line is still read
+globalThis.fetch = async () => ({ ok: true, status: 200, body: (async function* () {
+  yield new TextEncoder().encode(`data: ${JSON.stringify(delta('done'))}\n\ndata: ${JSON.stringify(stop('end_turn'))}\n\ndata: {"type":"message_stop"}`);
+})() });
+assert(await provider.generate(messages, cfg) === 'done', 'final SSE event without a trailing blank line is processed');
+
+// The declined partial output is withdrawn from the live view too
+let resets = 0;
+mockFetch([delta('refused'), { type: 'content_block_start', index: 1, content_block: { type: 'fallback' } }, delta('ok'), stop('end_turn'), { type: 'message_stop' }]);
+await provider.generate(messages, cfg, { onText: () => {}, onReset: () => resets++ });
+assert(resets === 1, 'fallback block resets the live view');
+
+mockFetch([stop('refusal', { stop_details: { explanation: 'no' } }), { type: 'message_stop' }]);
+try { await provider.generate(messages, cfg); } catch (err) { assert(err.name === 'RefusalError', 'refusals have their own error type (not retried elsewhere)'); }
 
 console.log(`\nResults: ${passed} passed, ${failed} failed\n`);
 process.exit(failed > 0 ? 1 : 0);

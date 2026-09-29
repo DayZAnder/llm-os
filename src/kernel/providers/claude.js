@@ -11,32 +11,34 @@
 // failing the generation.
 const FALLBACK_MODELS = new Set(['claude-opus-5', 'claude-fable-5-1']);
 
-export class TruncatedOutputError extends Error {
-  constructor(partial) {
-    super('Model output hit max_tokens and was truncated');
-    this.name = 'TruncatedOutputError';
-    this.partial = partial;
-  }
-}
+import { TruncatedOutputError, RefusalError } from './errors.js';
+export { TruncatedOutputError };
 
 /** Parse an SSE byte stream into {event, data} objects. */
 async function* sseEvents(body) {
   const decoder = new TextDecoder();
   let buf = '';
+  const parse = (raw) => {
+    let event = 'message', data = '';
+    for (const line of raw.split('\n')) {
+      if (line.startsWith('event:')) event = line.slice(6).trim();
+      else if (line.startsWith('data:')) data += line.slice(5).trim();
+    }
+    return data ? { event, data: JSON.parse(data) } : null;
+  };
   for await (const chunk of body) {
-    buf += decoder.decode(chunk, { stream: true });
+    buf += decoder.decode(chunk, { stream: true }).replace(/\r\n/g, '\n');
     let idx;
     while ((idx = buf.indexOf('\n\n')) !== -1) {
-      const raw = buf.slice(0, idx);
+      const ev = parse(buf.slice(0, idx));
       buf = buf.slice(idx + 2);
-      let event = 'message', data = '';
-      for (const line of raw.split('\n')) {
-        if (line.startsWith('event:')) event = line.slice(6).trim();
-        else if (line.startsWith('data:')) data += line.slice(5).trim();
-      }
-      if (data) yield { event, data: JSON.parse(data) };
+      if (ev) yield ev;
     }
   }
+  // A last event without the trailing blank line
+  buf += decoder.decode();
+  const last = buf.trim() && parse(buf.trim());
+  if (last) yield last;
 }
 
 export const provider = {
@@ -99,6 +101,7 @@ export const provider = {
     let text = '';
     let stopReason = null;
     let stopDetails = null;
+    let stopped = false;
     let usage = {};
     for await (const { data } of sseEvents(res.body)) {
       switch (data.type) {
@@ -108,7 +111,7 @@ export const provider = {
         case 'content_block_start':
           // A fallback block means the first model declined mid-stream and a
           // fallback model continues. Discard the declined partial output.
-          if (data.content_block?.type === 'fallback') text = '';
+          if (data.content_block?.type === 'fallback') { text = ''; options.onReset?.(); }
           break;
         case 'content_block_delta':
           if (data.delta?.type === 'text_delta') {
@@ -120,6 +123,9 @@ export const provider = {
           stopReason = data.delta?.stop_reason ?? stopReason;
           stopDetails = data.delta?.stop_details ?? stopDetails;
           if (data.usage) usage = { ...usage, ...data.usage };
+          break;
+        case 'message_stop':
+          stopped = true;
           break;
         case 'error':
           throw new Error(`Claude stream error: ${data.error?.type} ${data.error?.message}`);
@@ -134,9 +140,12 @@ export const provider = {
     });
     if (stopReason === 'refusal') {
       const why = stopDetails?.explanation || stopDetails?.category || 'no details';
-      throw new Error(`Claude declined the request (${why})`);
+      throw new RefusalError(`Claude declined the request (${why})`);
     }
     if (stopReason === 'max_tokens') throw new TruncatedOutputError(text);
+    // A connection that closed cleanly before the end must not pass a
+    // half-written app off as finished.
+    if (!stopped || !stopReason) throw new Error('Claude stream ended before the answer was complete');
     return text;
   },
 };
