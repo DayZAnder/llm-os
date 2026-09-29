@@ -303,10 +303,16 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
           <figcaption>Designed from a sentence: clock in the middle, dock on the left. “Mail” isn’t installed, so its ✦ writes it on first click.</figcaption>
         </figure>
       </div>
-      <figure style="margin-top:40px">
-        <img src="screenshots/v040_native_vs_browser.png" alt="The Tasks app rendered by the browser on the left and by the native renderer on the right" loading="lazy">
-        <figcaption>The portable Tasks app, left in the browser, right drawn by the native renderer from the same tree — no browser involved.</figcaption>
-      </figure>
+      <div class="figs" style="margin-top:40px">
+        <figure>
+          <img src="screenshots/v040_tasks_browser.png" alt="The Tasks app in the browser-based shell" loading="lazy">
+          <figcaption><strong>In the browser.</strong> The portable Tasks app, rendered to HTML by the shell.</figcaption>
+        </figure>
+        <figure>
+          <img src="screenshots/v040_tasks_native.png" alt="The same Tasks app drawn by the native renderer" loading="lazy">
+          <figcaption><strong>Native renderer, no browser.</strong> The same tree drawn by a 1.4 MB Rust binary, straight to pixels.</figcaption>
+        </figure>
+      </div>
       <div class="figs">
         <figure>
           <img src="screenshots/v030_live_generation.png" alt="A panel showing a notepad app rendered while its code is still being generated" loading="lazy">
@@ -477,6 +483,7 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
           <ul>
             <li>Multi-file apps with a backend</li>
             <li>The whole shell as portable UI, drawn natively</li>
+            <li>Change display resolution and scaling from the desktop</li>
             <li>Shell regenerated at boot from your profile</li>
             <li>WASM as the default app runtime</li>
             <li>Rust microkernel, UEFI boot</li>
