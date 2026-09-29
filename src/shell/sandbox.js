@@ -175,6 +175,7 @@ export class SandboxManager {
           if (HOTKEYS.includes(payload.combo)) this.callbacks.onHotkey?.(payload.combo, appId);
           return;
         case 'ipc:subscribe':
+          if (app.topics.size >= 100) throw new Error('Too many ipc subscriptions');
           app.topics.add(String(payload.topic).slice(0, 100));
           result = true;
           break;

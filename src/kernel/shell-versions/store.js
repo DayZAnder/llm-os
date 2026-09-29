@@ -1,7 +1,7 @@
 // Shell Version Store — manages AI-generated shell UI versions.
 // Each version is stored as a flat .html file with metadata in an index.
 
-import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
+import { readFileSync, writeFileSync, existsSync, mkdirSync, rmSync } from 'fs';
 import { join } from 'path';
 import { fileURLToPath } from 'url';
 import { DATA_DIR as BASE_DATA_DIR } from '../paths.js';
@@ -77,8 +77,14 @@ export function saveVersion({ id, html, source, prompt, diff, parentId }) {
   versions.unshift(meta);
 
   // Cap at MAX_VERSIONS
+  // (the files go too, or every improvement would stay on disk forever —
+  // except the version in use, which stays until another one is chosen)
+  const current = getCurrentId();
   while (versions.length > MAX_VERSIONS) {
-    versions.pop();
+    const dropped = versions.pop();
+    if (dropped?.id && dropped.id !== current && /^[\w-]+$/.test(dropped.id)) {
+      rmSync(join(VERSIONS_DIR, `${dropped.id}.html`), { force: true });
+    }
   }
 
   saveIndex();
