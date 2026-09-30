@@ -49,7 +49,7 @@ export const PRESETS = {
       showWindows: false, tray: true,
     },
     dock: { position: 'bottom', iconSize: 48, labels: false, pinned: ['Files', 'Notepad', 'Writer', 'Reader', 'Terminal', 'Tasks'] },
-    windows: { controls: 'left' },
+    windows: { controls: 'right' }, // where people expect them; 'left' stays available
     promptBar: 'hidden',
     wallpaper: { type: 'gradient', from: '#101024', to: '#2a1b4a' },
   },

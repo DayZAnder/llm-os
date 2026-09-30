@@ -898,7 +898,7 @@ Output ONLY a JSON object, no markdown:
          "clock": {"show": true, "format": "24h"|"12h", "seconds": false, "date": true, "position": "left"|"center"|"right"},
          "showWindows": true, "tray": true},
  "dock": {"position": "bottom"|"left"|"right"|"none", "iconSize": 24-80, "labels": false, "pinned": ["App Name", ...]},
- "windows": {"controls": "left"|"right"},
+ "windows": {"controls": "right"|"left"},   right unless the user asks for left
  "promptBar": "visible"|"hidden",
  "wallpaper": {"type": "solid"|"gradient", "from": "#rrggbb", "to": "#rrggbb"}}
 

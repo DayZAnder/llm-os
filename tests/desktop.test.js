@@ -25,7 +25,7 @@ for (const [name, preset] of Object.entries(PRESETS)) {
   const { problems } = validateLayout(preset, preset);
   assert(problems.length === 0, `preset "${name}" validates cleanly`);
 }
-assert(PRESETS.dock.windows.controls === 'left' && PRESETS.dock.dock.position === 'bottom', 'mac: controls left, dock bottom');
+assert(PRESETS.dock.windows.controls === 'right' && PRESETS.dock.dock.position === 'bottom', 'dock: window controls right (where people expect them), dock bottom');
 assert(PRESETS.taskbar.bar.position === 'bottom' && PRESETS.taskbar.bar.launcher.label === 'Prompt', 'windows: bottom bar with a Prompt launcher');
 
 console.log('\nvalidateLayout:');

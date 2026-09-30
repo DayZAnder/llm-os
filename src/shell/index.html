@@ -191,6 +191,7 @@
   }
   .app-titlebar .win-btn:hover { color: var(--text-primary); }
   .app-titlebar .win-btn.close-btn:hover { color: var(--danger); }
+  .app-titlebar .app-actions { display: inline-flex; gap: 2px; margin-right: 8px; pointer-events: auto; }
   .app-titlebar .err-badge { color: var(--warning); font-size: 11px; width: auto; padding: 0 6px; }
   .app-titlebar .err-badge.hidden { display: none; }
   .evolve-hint { color: var(--text-secondary); font-size: 13px; margin: 0 0 10px; }
@@ -1800,7 +1801,12 @@ function addAppWindow(appId, iframe, title, model, icon = '') {
   upgradeBtn.title = 'Upgrade with a bigger model (Ctrl+Alt+U)';
   upgradeBtn.onclick = (e) => { e.stopPropagation(); openUpgradeDialog(appId); };
 
-  titlebar.append(titleEl, modelTag, errBadge, modifyBtn, upgradeBtn, createTitleButtons(appId, () => closeApp(appId)));
+  // What you can do with the app on the left; minimize/maximize/close on
+  // the right, where every other OS has them
+  const appActions = document.createElement('span');
+  appActions.className = 'app-actions';
+  appActions.append(modifyBtn, upgradeBtn);
+  titlebar.append(appActions, titleEl, modelTag, errBadge, createTitleButtons(appId, () => closeApp(appId)));
 
   const body = document.createElement('div');
   body.className = 'app-body';
