@@ -8,7 +8,9 @@ set -euo pipefail
 DISK_SIZE_MB=4096
 IMAGE_RAW="/tmp/llmos.raw"
 MOUNT_DIR="/tmp/rootfs"
-VERSION="0.4.1"
+# From package.json, so a release can never ship with the previous number
+VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' /build/llmos-src/package.json | head -1)"
+[ -n "${VERSION}" ] || { echo "Could not read the version from package.json" >&2; exit 1; }
 VARIANT="${VARIANT:-server}"  # server (headless) or desktop (kiosk Chromium)
 
 echo "

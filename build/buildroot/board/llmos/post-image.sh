@@ -9,7 +9,9 @@ BINARIES_DIR="${BINARIES_DIR:-$1}"
 BOARD_DIR="$(dirname "$0")"
 GENIMAGE_CFG="${BOARD_DIR}/genimage.cfg"
 GENIMAGE_TMP="${BUILD_DIR}/genimage.tmp"
-VERSION="0.4.1"
+# From package.json, so a release can never ship with the previous number
+VERSION="$(sed -n 's/.*"version": *"\([^"]*\)".*/\1/p' /llmos-src/package.json | head -1)"
+[ -n "${VERSION}" ] || { echo "Could not read the version from package.json" >&2; exit 1; }
 NAME="llmos-${VERSION}-micro"
 
 echo "[llmos] Post-image: creating disk images..."
