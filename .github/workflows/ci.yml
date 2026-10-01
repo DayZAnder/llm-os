@@ -80,6 +80,9 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
+      # One image failing its tests must not cancel the others' — the report
+      # should show every image's result
+      fail-fast: false
       matrix:
         variant: [server, desktop, micro]
     steps:
