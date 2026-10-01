@@ -6,6 +6,8 @@ on:
     tags: ['v*']
   pull_request:
     branches: [master]
+  # Build and test the VM images without releasing (try a release first)
+  workflow_dispatch:
 
 jobs:
   test:
@@ -75,7 +77,7 @@ jobs:
   build-vm:
     name: Build VM (${{ matrix.variant }})
     needs: test
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
     strategy:
       matrix:

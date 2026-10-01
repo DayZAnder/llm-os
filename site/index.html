@@ -208,7 +208,7 @@
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#"><img src="favicon.svg" alt="">LLM OS <span class="ver">0.4.3</span></a>
+    <a class="brand" href="#"><img src="favicon.svg" alt="">LLM OS <span class="ver">0.4.4</span></a>
     <nav>
       <a href="#new">What's new</a>
       <a href="#sdk">SDK</a>
@@ -223,7 +223,7 @@
 <main>
   <div class="hero">
     <div class="wrap">
-      <p class="kicker">Version 0.4.3 · October 2026 · <a href="#new">release notes</a></p>
+      <p class="kicker">Version 0.4.4 · October 2026 · <a href="#new">release notes</a></p>
       <h1>An operating system with no apps until you ask for one.</h1>
       <p class="lede">You describe a program. LLM OS writes it, <strong>checks it, sandboxes it and runs it</strong> — and rewrites it when you want something changed or it crashes.</p>
       <div class="actions">
@@ -252,13 +252,17 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
   <section id="new">
     <div class="wrap">
       <div class="section-head">
-        <div class="label">0.4.3</div>
+        <div class="label">0.4.4</div>
         <div>
-          <h2>Make it bigger — by clicking, or by saying so.</h2>
-          <p>The first OS setting that works both ways, and the groundwork for upgrades that can change how your data is stored without risking it.</p>
+          <h2>Every image is now tested for what it is for.</h2>
+          <p>Before a release, each VM image is booted and used the way a person would — and the first run found that the Desktop image’s screen never showed LLM OS.</p>
         </div>
       </div>
       <ul class="changes body-col">
+        <li><span class="kind fix">fix</span><div><p>The Desktop image shows LLM OS on its screen.</p><p>The full-screen browser never started in a VM: the display stack was missing the device manager it needs, and VMs without a GPU need software drawing. App icons were empty boxes too (no emoji font).</p></div></li>
+        <li><span class="kind new">new</span><div><p>Functional tests for every image, before every release.</p><p>Each image is booted and used: write an app, save and open a file, a permission refused, desktop and display settings — and for the Desktop image, its own screen and keyboard. Then the previous release with your data, this one on the same disk, and back again.</p></div></li>
+        <li><span class="kind fix">fix</span><div><p>A fresh VM no longer reports local models as failed.</p><p>Not having Ollama is a choice, not an error.</p></div></li>
+        <li class="changes-divider"><span class="kind">0.4.3</span><div><p>Make it bigger — by clicking, or by saying so.</p></div></li>
         <li><span class="kind new">new</span><div><p>Display scale: point and click, or describe it.</p><p>Settings → Display has sizes from 75% to 200%. Or type <code>/display 150%</code>, or <code>/display I sit far from the screen</code>. Both go through the same check in the kernel; the model only proposes, and an answer that makes things smaller when you asked for bigger is sent back.</p></div></li>
         <li><span class="kind new">new</span><div><p>Your data knows its format.</p><p>A future version that changes how data is stored converts it once at boot, after backing up what it touches. Going back to an older version never converts it back, and the boot screen tells you.</p></div></li>
         <li><span class="kind new">new</span><div><p>Apps say which SDK they were written for.</p><p>An app shared from a newer LLM OS asks before it runs instead of breaking quietly.</p></div></li>
@@ -568,7 +572,7 @@ npm test                  <span class="c"># 604 tests</span></pre>
 
 <footer>
   <div class="wrap">
-    <span>LLM OS 0.4.3 · <a href="https://github.com/DayZAnder/llm-os/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/CONTRIBUTING.md">Contributing</a></span>
+    <span>LLM OS 0.4.4 · <a href="https://github.com/DayZAnder/llm-os/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/CONTRIBUTING.md">Contributing</a></span>
     <span>This site makes no third-party requests and sets no cookies.</span>
     <span class="tm">Windows is a trademark of Microsoft; macOS of Apple. LLM OS is not affiliated with either.</span>
   </div>
