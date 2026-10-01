@@ -49,8 +49,10 @@ assert(!/Cloud models still work/.test(by(r, 'local-models').fix), 'does not cla
 r = await bootReport({ ...base, listModels: async () => [base.listModels && { provider: 'claude', model: 'x', label: 'X', local: false }] });
 assert(by(r, 'local-models').status === 'warn' && /Cloud models still work/.test(by(r, 'local-models').fix), 'Ollama down but cloud works: warning, not error');
 
-r = await bootReport({ ...base, ollamaUrl: '' });
-assert(by(r, 'local-models').status === 'off', 'Ollama not configured: off');
+r = await bootReport({ ...base, ollamaUrl: '', listModels: async () => [{ provider: 'claude', model: 'x', label: 'X', local: false }] });
+assert(by(r, 'local-models').status === 'off', 'Ollama not configured and not running: off (a fresh VM is not an error)');
+r = await bootReport({ ...base, ollamaUrl: '', defaultOllamaUrl: 'http://localhost:11434' });
+assert(by(r, 'local-models').status === 'ok' && /default|localhost/.test(by(r, 'local-models').detail), 'not configured but answering at the default address: ok');
 
 r = await bootReport({ ...base, dockerPing: async () => { throw new Error('no socket'); } });
 assert(by(r, 'processes').status === 'off' && /Server or Desktop image/.test(by(r, 'processes').detail), 'no Docker: off, says where it exists');

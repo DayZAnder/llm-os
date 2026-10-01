@@ -19,6 +19,10 @@ echo "LLM OS ready — launching kiosk browser"
 
 # Set up Wayland runtime directory
 export XDG_RUNTIME_DIR=/tmp/runtime-root
+# VMs usually have no GPU: let wlroots draw in software, and start even
+# before an input device shows up
+export WLR_RENDERER_ALLOW_SOFTWARE=1
+export WLR_LIBINPUT_NO_DEVICES=1
 mkdir -p "$XDG_RUNTIME_DIR"
 chmod 0700 "$XDG_RUNTIME_DIR"
 

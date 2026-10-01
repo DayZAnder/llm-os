@@ -93,8 +93,10 @@ function serveStatic(url, res) {
 function bootDeps() {
   return {
     listModels: listUpgradeModels,
-    // Same URL the gateway uses (it defaults to localhost:11434 when unset)
-    ollamaUrl: config.ollama?.url || '',
+    // Set by the user, or empty; the gateway still tries the default
+    // address (defaultOllamaUrl), so models found there count too
+    ollamaUrl: process.env.OLLAMA_URL || '',
+    defaultOllamaUrl: config.ollama?.url || '',
     cloudConfigured: Object.entries(getProviders()).filter(([n, p]) => n !== 'ollama' && p.available).map(([n]) => n),
     registryStats: getStats,
     dockerEnabled: config.docker.enabled,

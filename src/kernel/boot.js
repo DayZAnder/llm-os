@@ -107,8 +107,13 @@ export async function bootReport(deps) {
     }),
 
     timed('local-models', 'Local models', async () => {
-      if (!deps.ollamaUrl) return { status: 'off', detail: 'not configured (optional: offline app writing, free)' };
       const local = (await deps.listModels()).filter(m => m.local);
+      if (!deps.ollamaUrl) {
+        // Not set up — unless Ollama answers at the default address anyway
+        return local.length
+          ? { status: 'ok', detail: `${local.length} installed via Ollama at ${deps.defaultOllamaUrl || 'the default address'}` }
+          : { status: 'off', detail: 'not configured (optional: offline app writing, free)' };
+      }
       if (local.length) return { status: 'ok', detail: `${local.length} installed via Ollama` };
       return {
         status: deps.cloudConfigured.length ? 'warn' : 'error',

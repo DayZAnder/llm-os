@@ -92,8 +92,17 @@ if [ "${VARIANT}" = "desktop" ]; then
         chromium \
         cage seatd eudev \
         mesa-dri-gallium mesa-egl \
-        font-noto ttf-dejavu
+        font-noto font-noto-emoji ttf-dejavu
     rc-update add seatd default
+    # The kiosk compositor (wlroots) and libinput find the screen and input
+    # devices through udev; busybox mdev alone left the kiosk crash-looping
+    # on "Unable to start the wlroots backend". Found by the CI kiosk test.
+    rc-update del mdev sysinit || true
+    rc-update del hwdrivers sysinit || true
+    rc-update add udev sysinit
+    rc-update add udev-trigger sysinit
+    rc-update add udev-settle sysinit
+    rc-update add udev-postmount default
 fi
 
 echo "  Generating initramfs..."
