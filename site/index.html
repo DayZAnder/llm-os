@@ -208,7 +208,7 @@
 
 <header class="top">
   <div class="wrap">
-    <a class="brand" href="#"><img src="favicon.svg" alt="">LLM OS <span class="ver">0.4.2</span></a>
+    <a class="brand" href="#"><img src="favicon.svg" alt="">LLM OS <span class="ver">0.4.3</span></a>
     <nav>
       <a href="#new">What's new</a>
       <a href="#sdk">SDK</a>
@@ -223,7 +223,7 @@
 <main>
   <div class="hero">
     <div class="wrap">
-      <p class="kicker">Version 0.4.2 · September 2026 · <a href="#new">release notes</a></p>
+      <p class="kicker">Version 0.4.3 · October 2026 · <a href="#new">release notes</a></p>
       <h1>An operating system with no apps until you ask for one.</h1>
       <p class="lede">You describe a program. LLM OS writes it, <strong>checks it, sandboxes it and runs it</strong> — and rewrites it when you want something changed or it crashes.</p>
       <div class="actions">
@@ -252,13 +252,18 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
   <section id="new">
     <div class="wrap">
       <div class="section-head">
-        <div class="label">0.4.2</div>
+        <div class="label">0.4.3</div>
         <div>
-          <h2>It tells you what’s running, and it keeps what you made.</h2>
-          <p>A boot screen that lists the services and what to do when one is missing, user data that survives upgrades and hard power-offs — and a security review of the whole sandbox boundary, with every finding fixed.</p>
+          <h2>Make it bigger — by clicking, or by saying so.</h2>
+          <p>The first OS setting that works both ways, and the groundwork for upgrades that can change how your data is stored without risking it.</p>
         </div>
       </div>
       <ul class="changes body-col">
+        <li><span class="kind new">new</span><div><p>Display scale: point and click, or describe it.</p><p>Settings → Display has sizes from 75% to 200%. Or type <code>/display 150%</code>, or <code>/display I sit far from the screen</code>. Both go through the same check in the kernel; the model only proposes, and an answer that makes things smaller when you asked for bigger is sent back.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Your data knows its format.</p><p>A future version that changes how data is stored converts it once at boot, after backing up what it touches. Going back to an older version never converts it back, and the boot screen tells you.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Apps say which SDK they were written for.</p><p>An app shared from a newer LLM OS asks before it runs instead of breaking quietly.</p></div></li>
+        <li><span class="kind security">security</span><div><p>Opening files needs file access; permissions you grant survive updates.</p><p>An app without permissions could launch other apps through “open file”. And a permission granted while an app ran was lost when it was updated.</p></div></li>
+        <li class="changes-divider"><span class="kind">0.4.2</span><div><p>It tells you what’s running, and it keeps what you made.</p></div></li>
         <li><span class="kind new">new</span><div><p>A boot screen, and a list of what’s running.</p><p>Your data, AI models, apps, sandbox, background apps, self-improvement — each with its state and, when something is missing, the one thing to do about it. <code>/status</code> shows it again; the VM console prints the same list, systemd-style.</p></div></li>
         <li><span class="kind new">new</span><div><p>Move an older install’s data to its own disk.</p><p><code>llmos-data-move</code> copies apps, files and settings from a 0.4.0 VM to the data disk, so the next upgrade is a disk swap. A data disk attached to a running install is filled automatically on the next boot.</p></div></li>
         <li><span class="kind fix">fix</span><div><p>Settings and app data survive a hard power-off.</p><p>Found by booting the released image: files written in the last ~30 seconds came back empty after a VM was stopped. Every write of your data is now flushed to disk before it counts as saved, and the VMs power off cleanly when the hypervisor asks them to.</p></div></li>
@@ -503,7 +508,7 @@ permissions  fs:read fs:write storage:local        <span class="ok">approved</sp
           <ul>
             <li>Multi-file apps with a backend</li>
             <li>The whole shell as portable UI, drawn natively</li>
-            <li>Change display resolution and scaling from the desktop</li>
+            <li>Change the screen resolution of the desktop VM — click or describe it, like scaling</li>
             <li>Shell regenerated at boot from your profile</li>
             <li>WASM as the default app runtime</li>
             <li>Rust microkernel, UEFI boot</li>
@@ -563,7 +568,7 @@ npm test                  <span class="c"># 604 tests</span></pre>
 
 <footer>
   <div class="wrap">
-    <span>LLM OS 0.4.2 · <a href="https://github.com/DayZAnder/llm-os/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/CONTRIBUTING.md">Contributing</a></span>
+    <span>LLM OS 0.4.3 · <a href="https://github.com/DayZAnder/llm-os/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/CONTRIBUTING.md">Contributing</a></span>
     <span>This site makes no third-party requests and sets no cookies.</span>
     <span class="tm">Windows is a trademark of Microsoft; macOS of Apple. LLM OS is not affiliated with either.</span>
   </div>
