@@ -17,23 +17,38 @@ const CANDIDATES = [
 
 export const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-export async function launch({ width = 1600, height = 1000, port = 9300 + Math.floor(Math.random() * 500) } = {}) {
+/** Start headless Chrome and return its first page target (one retry). */
+async function startChrome(bin, width, height) {
+  let lastErr = '';
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const port = 9300 + Math.floor(Math.random() * 600);
+    const profile = mkdtempSync(join(tmpdir(), 'llmos-e2e-chrome-'));
+    const chrome = spawn(bin, [
+      '--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
+      `--window-size=${width},${height}`, '--no-first-run', '--no-default-browser-check',
+      '--disable-gpu', '--disable-dev-shm-usage', ...(process.platform === 'linux' ? ['--no-sandbox'] : []), 'about:blank',
+    ], { stdio: ['ignore', 'ignore', 'pipe'] });
+    let stderr = '';
+    chrome.stderr.on('data', (d) => { stderr = (stderr + d).slice(-2000); });
+    let targets = [];
+    // A cold start on a busy CI machine can take a while
+    for (let i = 0; i < 240 && !targets.some(t => t.type === 'page') && chrome.exitCode === null; i++) {
+      try { targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); } catch {}
+      await sleep(250);
+    }
+    const page = targets.find(t => t.type === 'page');
+    if (page) return { chrome, page, profile };
+    chrome.kill();
+    lastErr = `attempt ${attempt}: exit ${chrome.exitCode}; ${stderr.trim().split('\n').slice(-3).join(' | ')}`;
+    console.error(`Chrome did not start (${lastErr})`);
+  }
+  throw new Error(`Chrome did not start — ${lastErr}`);
+}
+
+export async function launch({ width = 1600, height = 1000 } = {}) {
   const bin = CANDIDATES.find(p => existsSync(p));
   if (!bin) throw new Error('Chrome not found (set CHROME=/path/to/chrome)');
-  const profile = mkdtempSync(join(tmpdir(), 'llmos-e2e-chrome-'));
-  const chrome = spawn(bin, [
-    '--headless=new', `--remote-debugging-port=${port}`, `--user-data-dir=${profile}`,
-    `--window-size=${width},${height}`, '--no-first-run', '--no-default-browser-check',
-    '--disable-gpu', ...(process.platform === 'linux' ? ['--no-sandbox'] : []), 'about:blank',
-  ], { stdio: 'ignore' });
-
-  let targets = [];
-  for (let i = 0; i < 80 && !targets.some(t => t.type === 'page'); i++) {
-    try { targets = await (await fetch(`http://127.0.0.1:${port}/json/list`)).json(); } catch {}
-    await sleep(250);
-  }
-  const page = targets.find(t => t.type === 'page');
-  if (!page) { chrome.kill(); throw new Error('Chrome did not start'); }
+  const { chrome, page, profile } = await startChrome(bin, width, height);
   const ws = new WebSocket(page.webSocketDebuggerUrl);
   await new Promise((resolve, reject) => { ws.addEventListener('open', resolve); ws.addEventListener('error', reject); });
 
