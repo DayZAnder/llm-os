@@ -1998,7 +1998,7 @@ function saveSession() {
     const wm = WM.windows.get(appId);
     iframeApps.push({
       appId, hash: info.hash, title: info.title, icon: info.icon || '',
-      model: info.model, capabilities: info.capabilities, args: info.args || {},
+      model: info.model, capabilities: info.capabilities, runtimeCaps: info.runtimeCaps || [], args: info.args || {},
       windowRect: wm ? { x: wm.x, y: wm.y, w: wm.w, h: wm.h } : null,
     });
   }
@@ -2045,6 +2045,7 @@ async function restoreSession() {
         prompt: app.prompt, hash: entry.hash, args: entry.args || {},
       });
 
+      if (Array.isArray(entry.runtimeCaps) && openIframeApps.has(entry.appId)) openIframeApps.get(entry.appId).runtimeCaps = entry.runtimeCaps;
       // Restore window position
       if (entry.windowRect) WM.applyRect(entry.appId, entry.windowRect);
 
@@ -2239,7 +2240,11 @@ async function evolveApp(appId, instruction, { fixErrors = false, target = null 
       body: JSON.stringify({ code: next.code }),
     }).then(r => r.json());
 
-    const apply = async (approved) => {
+    const apply = async (approvedNow) => {
+      // Permissions the user granted while the app ran (LLMOS.caps.request)
+      // aren't in any manifest; the new version keeps them
+      const runtime = (info.runtimeCaps || []).filter(c => info.capabilities.includes(c));
+      const approved = [...new Set([...approvedNow, ...runtime])];
       const tokens = await grantTokens(appId, approved);
       sandboxMgr.replace(appId, next.code, approved, tokens);
       info.capabilities = [...approved];
@@ -2292,6 +2297,7 @@ async function openFile(path) {
 // --- Syscalls delegated from the sandbox ---
 
 const FS_WRITE_OPS = new Set(['write', 'mkdir', 'remove']);
+const osOpenAt = new Map(); // appId → time of its last os.open
 
 async function kernelSyscall(url, body) {
   const res = await fetch(url, {
@@ -2320,7 +2326,14 @@ async function handleSyscall(appId, type, payload, app) {
       return navigator.clipboard.readText();
     case 'os':
       if (op === 'setTitle') { setAppTitle(appId, payload.title); return true; }
-      if (op === 'open') return openFile(String(payload.path));
+      if (op === 'open') {
+        // Opening launches another app (or offers to write one): at a human
+        // pace, one at a time per app
+        const last = osOpenAt.get(appId) || 0;
+        if (Date.now() - last < 1000) throw new Error('Opening files too quickly');
+        osOpenAt.set(appId, Date.now());
+        return openFile(String(payload.path));
+      }
   }
   throw new Error(`SDK call not supported: ${type}`);
 }
@@ -2395,6 +2408,7 @@ async function requestCapability(appId, capability) {
   app.tokens = await grantTokens(appId, approved);
   app.capabilities = approved;
   info.capabilities = approved;
+  info.runtimeCaps = [...new Set([...(info.runtimeCaps || []), capability])];
   saveSession();
   log(`${info.title}: granted ${capability}`, 'ok');
   return true;

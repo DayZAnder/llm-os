@@ -108,7 +108,7 @@ assert(checkSyscall('fs:read', ['fs:read']) === null, 'fs:read allowed');
 assert(checkSyscall('net:request', []) !== null, 'net denied by default');
 assert(checkSyscall('ai:complete', ['ai:generate']) === null, 'ai allowed with ai:generate');
 assert(checkSyscall('notify', []) === null, 'notify always allowed');
-assert(checkSyscall('os:open', []) === null, 'os:open always allowed');
+assert(checkSyscall('os:open', []) !== null && checkSyscall('os:open', ['fs:read']) === null, 'os:open needs fs:read (opening a file means reading it)');
 assert(checkSyscall('__proto__', ['ui:window']) !== null, 'prototype keys are unknown calls');
 assert(checkSyscall('kernel:shutdown', ['ui:window']) !== null, 'unknown call rejected');
 const known = new Set(listCapabilityTypes());

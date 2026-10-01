@@ -77,7 +77,7 @@ clipboard (clipboard:rw)
   LLMOS.clipboard.write(text) · read() → string
 os — integration with the rest of the OS (no capability needed)
   LLMOS.os.args → object passed at launch, e.g. {path: "/docs/a.csv"} when the user opened a file with this app
-  LLMOS.os.open(path) — open a file in the app that handles its type (the OS may generate one)
+  LLMOS.os.open(path) — open a file in the app that handles its type (the OS may generate one). Needs fs:read
   LLMOS.os.setTitle(text) — change the window title
 ipc (ipc:bus) — publish/subscribe between running apps
   LLMOS.ipc.publish(topic, data) · LLMOS.ipc.subscribe(topic, (data, fromAppId) => {})

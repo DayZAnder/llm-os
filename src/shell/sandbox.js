@@ -27,7 +27,7 @@ export const SYSCALL_CAPS = Object.freeze({
   'confirm': null,
   'caps:has': null,
   'caps:request': null,
-  'os:open': null,
+  'os:open': 'fs:read',           // opening a file means reading it; also keeps capless apps from launching others
   'os:setTitle': null,
   'sys:error': null,
   'sys:hotkey': null,
