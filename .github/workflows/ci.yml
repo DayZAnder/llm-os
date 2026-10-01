@@ -115,6 +115,37 @@ jobs:
           IMG=$(ls build/output/*.qcow2 | head -1)
           sh build/test/vm-boot-test.sh "$IMG" ${{ matrix.variant == 'micro' && 300 || 900 }}
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      # Does the image do what it is for: write and run an app with the
+      # model stub, files, opening a file in its app, a refused permission,
+      # desktop layout, display scale — and for the desktop image, the kiosk
+      # on the VM's own screen.
+      - name: Functional test (QEMU + headless Chrome)
+        run: |
+          IMG=$(ls build/output/*.qcow2 | head -1)
+          CHROME=$(command -v google-chrome || command -v chromium) sh build/test/vm-func-test.sh "$IMG" ${{ matrix.variant }} e2e-artifacts/${{ matrix.variant }}
+
+      # The previous release with the user's data, then this one, then back.
+      - name: Upgrade and rollback test
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          IMG=$(ls build/output/*.qcow2 | head -1)
+          PREV_TAG=$(gh release list -R ${{ github.repository }} --exclude-drafts --exclude-pre-releases --limit 1 --json tagName -q '.[0].tagName')
+          gh release download "$PREV_TAG" -R ${{ github.repository }} -p "llmos-*-${{ matrix.variant }}.qcow2" -D prev
+          sh build/test/vm-upgrade-test.sh "$(ls prev/*.qcow2 | head -1)" "$IMG" ${{ matrix.variant == 'micro' && 300 || 900 }}
+
+      - name: Upload test screenshots and logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: e2e-${{ matrix.variant }}
+          path: e2e-artifacts/
+          if-no-files-found: ignore
+
       - name: Upload artifacts
         uses: actions/upload-artifact@v4
         with:

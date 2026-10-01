@@ -15,3 +15,4 @@ build/output/
 
 # Rust build output
 native/*/target/
+e2e-artifacts/
