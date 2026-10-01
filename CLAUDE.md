@@ -123,6 +123,12 @@ proxy), `ai` (the OS model), `clipboard`, `os` (launch args, open file, title),
   launcher and Alt+Tab switcher with portable UI trees. System hotkeys
   (Alt+Tab/Alt+`, Super, Ctrl+Space) are forwarded from apps by the SDK
   (`sys:hotkey`); apps can only trigger that fixed set.
+- **Settings pattern** (`kernel/display.js` is the model): every OS setting
+  can be set by pointing and clicking (Settings) AND by describing it
+  (`/display bigger text`); both go through the same deterministic
+  validator, the model only proposes. Exact values (`150%`) need no model.
+  Display scale zooms the whole shell (`--ui-scale`): viewport units in the
+  shell CSS are divided by it, and pointer deltas in the window manager too.
 - **Versions and upgrades**: `SDK_VERSION` in `gateway.js` is the app contract
   (`window.LLMOS.version` in `sdk.js` must match — a test checks it). App
   manifests carry `"sdk"`; the shell warns before running an app that needs a

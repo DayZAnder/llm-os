@@ -66,6 +66,9 @@ jobs:
       - name: Run data format migration tests
         run: node tests/migrations.test.js
 
+      - name: Run display setting tests
+        run: node tests/display.test.js
+
       - name: Run data disk tests (real ext4 mounts on loop devices)
         run: sudo sh tests/vm/data-disk.test.sh
 

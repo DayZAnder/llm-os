@@ -5,7 +5,8 @@ import { fileURLToPath } from 'url';
 import { config } from './kernel/config.js';
 // Before anything that reads user data (see data-init.js)
 import { dataMigration } from './kernel/data-init.js';
-import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme, generateDesktop, listUpgradeModels, SDK_VERSION } from './kernel/gateway.js';
+import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme, generateDesktop, listUpgradeModels, SDK_VERSION, generateDisplay } from './kernel/gateway.js';
+import { loadDisplay, saveDisplay, resetDisplay, validateDisplay, parseDisplayDirect, SCALE_STEPS, SCALE_MIN, SCALE_MAX } from './kernel/display.js';
 import { loadTheme, saveTheme, resetTheme, validateTheme } from './kernel/theme.js';
 import { loadLayout, saveLayout, resetLayout, validateLayout, resolvePreset, PRESETS as DESKTOP_PRESETS } from './kernel/desktop.js';
 import { checkApiRequest } from './kernel/http-guard.js';
@@ -101,7 +102,7 @@ function bootDeps() {
     schedulerEnabled: config.scheduler.enabled,
     tokenKeyReady: tokenKeyReady(),
     theme: loadTheme().name,
-    desktop: loadLayout().name,
+    desktop: loadLayout().name + (loadDisplay().scale !== 1 ? ` · ${Math.round(loadDisplay().scale * 100)}%` : ''),
     dataMigration,
   };
 }
@@ -512,6 +513,39 @@ Explain in two or three short sentences what this means for the user and exactly
         saveLayout(layout);
         return layout;
       });
+      return;
+    }
+
+    // GET /api/display — current display setting (+ the offered steps)
+    if (method === 'GET' && url === '/api/display') {
+      sendJson(res, 200, { ...loadDisplay(), steps: SCALE_STEPS, min: SCALE_MIN, max: SCALE_MAX });
+      return;
+    }
+
+    // POST /api/display — { scale } sets it directly (the Settings buttons),
+    // { description, screen?, stream? } asks the model ("bigger text").
+    // Either way the kernel validates before saving.
+    if (method === 'POST' && url === '/api/display') {
+      const input = JSON.parse(body);
+      if (input.scale !== undefined) {
+        const { problems } = validateDisplay(input);
+        if (problems.length) { sendJson(res, 400, { error: 'Display setting rejected', problems }); return; }
+        sendJson(res, 200, saveDisplay(input));
+        return;
+      }
+      await respond(res, input.stream, async (onText, onReset) => {
+        // "150%", "1.25x", "reset" need no model
+        const direct = parseDisplayDirect(input.description);
+        if (direct) return { ...saveDisplay(direct), reason: 'as typed' };
+        const proposal = await generateDisplay(input.description, { screen: input.screen, current: loadDisplay() }, { onText, onReset });
+        return { ...saveDisplay(proposal), reason: proposal.reason, provider: proposal.provider, model: proposal.model };
+      });
+      return;
+    }
+
+    // POST /api/display/reset
+    if (method === 'POST' && url === '/api/display/reset') {
+      sendJson(res, 200, resetDisplay());
       return;
     }
 

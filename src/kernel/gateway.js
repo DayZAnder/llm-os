@@ -994,3 +994,84 @@ export async function listUpgradeModels() {
   }
   return out.sort((a, b) => b.tier - a.tier);
 }
+
+// --- Display settings from a description ---
+
+const DISPLAY_SYSTEM = `You set the display scale of LLM OS from what the user says. Scale 1 is the default size; 1.5 draws everything 50% bigger, 0.75 smaller. Allowed: 0.5 to 3.
+
+Rules:
+- "bigger", "larger text", "far from the screen", "hard to read", "4K/TV" → LARGER than the current scale (typically current × 1.25, or 1.5–2 on a 4K screen).
+- "smaller", "fit more", "compact", "small laptop" → SMALLER than the current scale (typically current × 0.8).
+- "normal", "default", "reset" → 1.
+- A number or percentage the user gives is used as is.
+Never answer with the current scale when the user asks for a change.
+
+Output ONLY a JSON object, no markdown:
+{"scale": number, "reason": "one short sentence for the user"}`;
+
+// Deterministic check of the model's answer: when the request clearly asks
+// for bigger or smaller, the scale must move that way.
+function displayDirection(text) {
+  const t = text.toLowerCase();
+  if (/\b(bigger|larger|large|increase|zoom in|far from|hard to read|can'?t read|tv|4k|större|förstora)\b/.test(t)) return 1;
+  if (/\b(smaller|small|decrease|zoom out|fit more|more space|compact|mindre)\b/.test(t)) return -1;
+  return 0;
+}
+
+/**
+ * Ask the model for a display setting, validate it, one correction round.
+ * @param {string} description
+ * @param {{ screen?: { width, height, dpr }, current?: { scale } }} context
+ */
+export async function generateDisplay(description, context = {}, options = {}) {
+  const { clean } = sanitizePrompt(String(description || '').slice(0, 300));
+  if (!clean) throw new Error('Describe how you want the display');
+  const { validateDisplay } = await import('./display.js');
+  const s = context.screen || {};
+  const facts = [
+    Number.isFinite(s.width) && Number.isFinite(s.height) ? `Screen: ${Math.round(s.width)}×${Math.round(s.height)} CSS px at device pixel ratio ${Number(s.dpr) || 1}.` : 'Screen size unknown.',
+    `Current scale: ${Number(context.current?.scale) || 1}.`,
+  ].join(' ');
+
+  const route = await selectBestProvider('simple');
+  const messages = [
+    { role: 'system', content: DISPLAY_SYSTEM },
+    { role: 'user', content: `${facts}\n\nUser: ${clean}` },
+  ];
+  for (let attempt = 1; attempt <= 2; attempt++) {
+    const started = Date.now();
+    const { raw, provider, model, usage } = await callWithFallback(route.provider, route.model, messages, { maxTokens: 300, onText: options.onText, onReset: options.onReset });
+    recordUsage({
+      prompt: `[display] ${clean.slice(0, 80)}`,
+      provider, model,
+      ...usageFor(messages, raw, usage),
+      latencyMs: Date.now() - started,
+      cached: false,
+      cacheType: null,
+    });
+    let parsed = null;
+    try { parsed = JSON.parse(raw.slice(raw.indexOf('{'), raw.lastIndexOf('}') + 1)); } catch {}
+    const check = validateDisplay(parsed);
+    const current = Number(context.current?.scale) || 1;
+    const want = displayDirection(clean);
+    if (parsed && check.problems.length === 0 && want && Math.sign(check.display.scale - current) !== want) {
+      check.problems.push(`scale ${check.display.scale} does not make things ${want > 0 ? 'bigger' : 'smaller'} than the current ${current}`);
+    }
+    if (parsed && check.problems.length === 0) {
+      return { ...check.display, reason: String(parsed.reason || '').replace(/[<>]/g, '').slice(0, 200), provider, model, attempts: attempt };
+    }
+    messages.push({ role: 'assistant', content: raw });
+    messages.push({ role: 'user', content: parsed
+      ? `Rejected by the validator:\n- ${check.problems.join('\n- ')}\nReturn the corrected JSON object only.`
+      : 'That was not a valid JSON object. Return only the JSON object.' });
+    options.onReset?.();
+  }
+  // A clear "bigger"/"smaller" still gets done when the model can't
+  const want = displayDirection(clean);
+  if (want) {
+    const current = Number(context.current?.scale) || 1;
+    const { display } = validateDisplay({ scale: current * (want > 0 ? 1.25 : 0.8) });
+    return { ...display, reason: want > 0 ? 'One step bigger.' : 'One step smaller.', attempts: 2 };
+  }
+  throw new Error('No valid display setting after 2 attempts');
+}

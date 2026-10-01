@@ -30,7 +30,9 @@
     font-family: var(--font-sans);
     background: var(--bg-primary);
     color: var(--text-primary);
-    height: 100vh;
+    /* --ui-scale is the display scale (zoom on <html>): viewport units are
+       not zoomed, so divide them to keep the shell exactly one screen tall */
+    height: calc(100vh / var(--ui-scale, 1));
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -217,9 +219,9 @@
   .boot-status { font: 13px var(--font-mono); color: var(--text-secondary); min-height: 20px; }
   .boot-status b { color: var(--text-primary); font-weight: 500; }
   .boot-status.err { color: var(--danger); }
-  .boot-services { display: none; width: min(760px, 92vw); max-height: 62vh; overflow: auto; color-scheme: dark; }
+  .boot-services { display: none; width: min(760px, calc(92vw / var(--ui-scale, 1))); max-height: calc(62vh / var(--ui-scale, 1)); overflow: auto; color-scheme: dark; }
   .boot-splash.details .boot-services { display: block; }
-  .boot-splash.details { justify-content: flex-start; padding-top: 5vh; gap: 14px; }
+  .boot-splash.details { justify-content: flex-start; padding-top: calc(5vh / var(--ui-scale, 1)); gap: 14px; }
   .boot-splash.details .boot-stage { transform: scale(.5); margin: -60px 0; }
   .boot-splash.details .boot-orbit { display: none; }
   .boot-continue { display: block; margin: 14px auto 0; background: var(--accent); color: #fff; border: 0; border-radius: 6px; padding: 8px 22px; font: 14px var(--font-sans); cursor: pointer; }
@@ -237,12 +239,12 @@
   .svc-explain { color: var(--text-secondary); border-left: 2px solid var(--accent); padding-left: 8px; }
   .svc-ask { grid-column: 4; grid-row: 1; background: none; border: 1px solid var(--border); color: var(--text-secondary); border-radius: 5px; font-size: 11px; padding: 2px 8px; cursor: pointer; }
   .svc-ask:hover { color: var(--text-primary); border-color: var(--accent); }
-  .status-modal { width: min(760px, 94vw); }
+  .status-modal { width: min(760px, calc(94vw / var(--ui-scale, 1))); }
   @media (prefers-reduced-motion: reduce) {
     .boot-orbit { display: none; }
     .boot-mark { animation: none; }
   }
-  .upgrade-modal { width: min(560px, 92vw); }
+  .upgrade-modal { width: min(560px, calc(92vw / var(--ui-scale, 1))); }
   .upgrade-models { display: flex; flex-direction: column; gap: 2px; margin: 0 0 12px; max-height: 300px; overflow: auto; }
   .upgrade-model { display: grid; grid-template-columns: 20px 1fr auto auto; gap: 12px; align-items: center; padding: 8px 10px; border-radius: 6px; cursor: pointer; font-size: 13px; }
   .upgrade-model:hover { background: var(--bg-tertiary); }
@@ -275,8 +277,8 @@
   .desk-dock .llu-button:hover { transform: translateY(-3px) scale(1.06); filter: none; }
   body.desk-dock-left .desk-dock .llu-button:hover { transform: translateX(3px) scale(1.06); }
   body.desk-dock-right .desk-dock .llu-button:hover { transform: translateX(-3px) scale(1.06); }
-  .desk-launcher-overlay { position: fixed; inset: 0; z-index: 200000; background: rgba(0,0,0,.35); display: flex; justify-content: center; align-items: flex-start; padding-top: 14vh; }
-  .desk-launcher { width: min(640px, 92vw); background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.55); }
+  .desk-launcher-overlay { position: fixed; inset: 0; z-index: 200000; background: rgba(0,0,0,.35); display: flex; justify-content: center; align-items: flex-start; padding-top: calc(14vh / var(--ui-scale, 1)); }
+  .desk-launcher { width: min(640px, calc(92vw / var(--ui-scale, 1))); background: var(--bg-secondary); border: 1px solid var(--border); border-radius: 12px; box-shadow: 0 24px 64px rgba(0,0,0,.55); }
   .desk-launcher .llu-input { font-size: 17px; padding: 12px 14px; }
   .desk-launcher .llu-button { text-align: left; }
   .desk-switcher { position: fixed; left: 50%; top: 42%; transform: translate(-50%, -50%); z-index: 200001; box-shadow: 0 24px 64px rgba(0,0,0,.55); border-radius: 12px; }
@@ -292,7 +294,7 @@
   body.desk-controls-left .app-titlebar:hover .win-btn:nth-last-child(-n+3) { color: var(--text-primary); }
   body.desk-controls-left .app-titlebar .win-btn:nth-last-child(-n+3):hover { background: var(--accent); color: #fff; }
   body.desk-controls-left .app-titlebar .win-btn.close-btn:hover { background: var(--danger); color: #fff; }
-  .gen-live { position: fixed; right: 20px; bottom: 90px; width: min(560px, calc(100vw - 40px)); height: min(460px, 60vh); z-index: 9000; display: grid; grid-template-rows: auto 1fr 150px; background: var(--bg-secondary); border: 1px solid var(--accent-dim); border-radius: 10px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
+  .gen-live { position: fixed; right: 20px; bottom: 90px; width: min(560px, calc(100vw / var(--ui-scale, 1) - 40px)); height: min(460px, calc(60vh / var(--ui-scale, 1))); z-index: 9000; display: grid; grid-template-rows: auto 1fr 150px; background: var(--bg-secondary); border: 1px solid var(--accent-dim); border-radius: 10px; overflow: hidden; box-shadow: 0 12px 40px rgba(0,0,0,.5); }
   .gen-live-head { display: flex; justify-content: space-between; gap: 12px; padding: 8px 12px; font: 12px var(--font-mono); border-bottom: 1px solid var(--border); }
   .gen-live-title { color: var(--text-primary); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .gen-live-stats { color: var(--accent); white-space: nowrap; }
@@ -586,7 +588,7 @@
     border-radius: 8px;
     width: 90%;
     max-width: 800px;
-    max-height: 80vh;
+    max-height: calc(80vh / var(--ui-scale, 1));
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -818,8 +820,8 @@
     border: 1px solid var(--border);
     border-radius: 8px;
     width: 600px;
-    max-width: 90vw;
-    max-height: 80vh;
+    max-width: calc(90vw / var(--ui-scale, 1));
+    max-height: calc(80vh / var(--ui-scale, 1));
     display: flex;
     flex-direction: column;
   }
@@ -939,7 +941,7 @@
     border-radius: 8px;
     width: 90%;
     max-width: 700px;
-    max-height: 85vh;
+    max-height: calc(85vh / var(--ui-scale, 1));
     display: flex;
     flex-direction: column;
     overflow: hidden;
@@ -1162,6 +1164,13 @@
   }
   .settings-tab:hover { color: var(--text-secondary); }
   .settings-tab.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .display-steps { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 16px; }
+  .display-steps button, .display-ask button { background: var(--bg-tertiary); color: var(--text-secondary); border: 1px solid var(--border); border-radius: 6px; padding: 8px 14px; font: 13px var(--font-mono); cursor: pointer; }
+  .display-steps button:hover, .display-ask button:hover { color: var(--text-primary); border-color: var(--accent); }
+  .display-steps button.active { background: var(--accent); color: #fff; border-color: var(--accent); }
+  .display-ask { display: flex; gap: 8px; margin-bottom: 12px; }
+  .display-ask input { flex: 1; background: var(--bg-primary); color: var(--text-primary); border: 1px solid var(--border); border-radius: 6px; padding: 8px 10px; font: 13px var(--font-sans); }
+  .display-ask input:focus { outline: none; border-color: var(--accent); }
   .settings-tab-content { display: none; }
   .settings-tab-content.active { display: block; }
 
@@ -1365,6 +1374,7 @@
     <div class="settings-tabs">
       <button class="settings-tab active" data-tab="si-tab">Self-Improvement</button>
       <button class="settings-tab" data-tab="usage-tab">Usage</button>
+      <button class="settings-tab" data-tab="display-tab">Display</button>
     </div>
     <div class="settings-body">
       <!-- Self-Improvement Tab -->
@@ -1405,6 +1415,20 @@
           <button id="usage-refresh-btn">Refresh</button>
           <button id="usage-clear-btn">Clear Usage Data</button>
         </div>
+      </div>
+
+      <!-- Display Tab -->
+      <div class="settings-tab-content" id="display-tab">
+        <p class="settings-desc">
+          How big everything is drawn — the desktop and every app. Pick a size, or describe it:
+          <code>/display bigger text</code> in the prompt does the same.
+        </p>
+        <div class="display-steps" id="display-steps"></div>
+        <form class="display-ask" id="display-ask">
+          <input id="display-ask-input" placeholder="Or describe it — “I sit far from the screen”, “fit more on screen”" autocomplete="off">
+          <button type="submit">Apply</button>
+        </form>
+        <p class="settings-desc" id="display-current"></p>
       </div>
     </div>
     <div class="settings-stats" id="si-stats"></div>
@@ -1566,8 +1590,10 @@ const WM = {
 
     const onMove = (ev) => {
       const dw = desktop.clientWidth, dh = desktop.clientHeight;
-      w.x = Math.max(0, Math.min(dw - 40, origX + ev.clientX - startX));
-      w.y = Math.max(0, Math.min(dh - 40, origY + ev.clientY - startY));
+      // Pointer coordinates are screen pixels; window positions are scaled
+      // with everything else (Settings → Display), so convert
+      w.x = Math.max(0, Math.min(dw - 40, origX + (ev.clientX - startX) / uiScale));
+      w.y = Math.max(0, Math.min(dh - 40, origY + (ev.clientY - startY) / uiScale));
       w.el.style.left = w.x + 'px';
       w.el.style.top = w.y + 'px';
     };
@@ -1595,8 +1621,8 @@ const WM = {
     iframes.forEach(f => f.style.pointerEvents = 'none');
 
     const onMove = (ev) => {
-      const dx = ev.clientX - startX;
-      const dy = ev.clientY - startY;
+      const dx = (ev.clientX - startX) / uiScale;
+      const dy = (ev.clientY - startY) / uiScale;
 
       if (dir.includes('e')) w.w = Math.max(this.MIN_W, origW + dx);
       if (dir.includes('s')) w.h = Math.max(this.MIN_H, origH + dy);
@@ -2817,6 +2843,81 @@ async function desktopCommand(arg) {
   }
 }
 
+// --- Display scale ---
+// Everything — shell and apps — is drawn `uiScale` times its normal size.
+// Set by clicking (Settings → Display) or by saying it (/display bigger
+// text); the kernel validates both the same way.
+
+let uiScale = 1;
+
+function applyDisplay(display) {
+  const s = Number(display?.scale);
+  uiScale = Number.isFinite(s) && s > 0 ? s : 1;
+  document.documentElement.style.zoom = uiScale === 1 ? '' : String(uiScale);
+  document.documentElement.style.setProperty('--ui-scale', String(uiScale));
+  renderDisplaySettings();
+}
+
+/** Screen facts the model needs to pick a sensible size. */
+function screenInfo() {
+  return { width: window.screen.width, height: window.screen.height, dpr: window.devicePixelRatio || 1 };
+}
+
+async function setDisplay(body) {
+  const res = await fetch('/api/display', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  const data = await res.json();
+  if (!res.ok) throw new Error(data.problems?.join('; ') || data.error || 'rejected');
+  applyDisplay(data);
+  return data;
+}
+
+async function displayCommand(arg) {
+  try {
+    if (!arg) {
+      log(`Display scale is ${Math.round(uiScale * 100)}%. Usage: /display 125% | bigger text | reset`, 'info');
+      return;
+    }
+    let result;
+    if (/^reset$/i.test(arg)) {
+      result = await fetch('/api/display/reset', { method: 'POST' }).then(r => r.json());
+      applyDisplay(result);
+    } else {
+      const live = openLivePanel(`Display: ${arg.slice(0, 60)}`);
+      try { result = await streamJob('/api/display', { description: arg, screen: screenInfo() }, live); }
+      finally { live.close(); }
+      applyDisplay(result);
+    }
+    log(`Display scale ${Math.round(uiScale * 100)}%${result.reason && result.reason !== 'as typed' ? ` — ${result.reason}` : ''}`, 'ok');
+  } catch (err) {
+    log(`Display: ${err.message}`, 'error');
+  }
+}
+
+let displaySteps = [0.75, 0.9, 1, 1.1, 1.25, 1.5, 1.75, 2];
+
+/** Settings → Display: the same setting, by pointing and clicking. */
+function renderDisplaySettings() {
+  const box = document.getElementById('display-steps');
+  if (!box) return;
+  box.replaceChildren(...displaySteps.map(s => {
+    const b = document.createElement('button');
+    b.textContent = `${Math.round(s * 100)}%`;
+    b.className = Math.abs(s - uiScale) < 0.001 ? 'active' : '';
+    b.onclick = () => setDisplay({ scale: s }).then(() => log(`Display scale ${Math.round(s * 100)}%`, 'ok')).catch(err => log(`Display: ${err.message}`, 'error'));
+    return b;
+  }));
+  const cur = document.getElementById('display-current');
+  if (cur) cur.textContent = `${Math.round(uiScale * 100)}% · screen ${window.screen.width}×${window.screen.height}`;
+}
+
+async function loadDisplay() {
+  try {
+    const d = await fetch('/api/display').then(r => r.json());
+    if (Array.isArray(d.steps)) displaySteps = d.steps;
+    applyDisplay(d);
+  } catch {}
+}
+
 // --- Launcher: the "Prompt" button ---
 
 function openLauncher() {
@@ -3075,6 +3176,8 @@ async function generateApp(prompt, options = {}) {
   if (/^\/status\s*$/i.test(prompt)) return statusCommand();
   const deskCmd = prompt.match(/^\/desktop\b\s*(.*)$/i);
   if (deskCmd) return desktopCommand(deskCmd[1].trim());
+  const displayCmd = prompt.match(/^\/display\b\s*(.*)$/i);
+  if (displayCmd) return displayCommand(displayCmd[1].trim());
   generating = true;
   generateBtn.disabled = true;
   generateBtn.innerHTML = '<span class="spinner"></span> Generating...';
@@ -4275,6 +4378,16 @@ async function boot() {
     bootStatus('arranging', 'desktop', layout.name);
     applyDesktop(layout);
   } catch (err) { console.warn('[desktop]', err); }
+  // Display scale (Settings → Display, /display)
+  await loadDisplay();
+  document.getElementById('display-ask').addEventListener('submit', (e) => {
+    e.preventDefault();
+    const input = document.getElementById('display-ask-input');
+    const text = input.value.trim();
+    if (!text) return;
+    input.value = '';
+    displayCommand(text);
+  });
   // Services (data, models, apps, sandbox, …): may pause on new problems
   await bootServices();
 
