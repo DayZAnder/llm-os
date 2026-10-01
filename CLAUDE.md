@@ -123,6 +123,15 @@ proxy), `ai` (the OS model), `clipboard`, `os` (launch args, open file, title),
   launcher and Alt+Tab switcher with portable UI trees. System hotkeys
   (Alt+Tab/Alt+`, Super, Ctrl+Space) are forwarded from apps by the SDK
   (`sys:hotkey`); apps can only trigger that fixed set.
+- **Versions and upgrades**: `SDK_VERSION` in `gateway.js` is the app contract
+  (`window.LLMOS.version` in `sdk.js` must match — a test checks it). App
+  manifests carry `"sdk"`; the shell warns before running an app that needs a
+  newer one. User data has a format version in `data/schema.json`
+  (`kernel/migrations.js`): to change how any data file is stored, add a step
+  to `MIGRATIONS` and bump `DATA_SCHEMA`. Steps run once at boot, before
+  anything reads data (`data-init.js` is imported first), with the touched
+  files backed up. Data from a newer version is never converted back.
+  Every write of user data goes through `writeFileAtomic` (`kernel/fsutil.js`).
 - **Portable UI** (`src/sdk/ui.js`): apps with `"ui": "portable"` build their
   interface only from `LLMOS.ui.app` + components (column, row, text, button,
   input, …) — plain-data trees, no DOM. The browser renders them with keyed

@@ -63,6 +63,9 @@ jobs:
       - name: Run boot report tests
         run: node tests/boot.test.js
 
+      - name: Run data format migration tests
+        run: node tests/migrations.test.js
+
       - name: Run data disk tests (real ext4 mounts on loop devices)
         run: sudo sh tests/vm/data-disk.test.sh
 

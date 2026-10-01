@@ -3,7 +3,9 @@ import { readFileSync, existsSync, statSync } from 'fs';
 import { join, extname, resolve, sep } from 'path';
 import { fileURLToPath } from 'url';
 import { config } from './kernel/config.js';
-import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme, generateDesktop, listUpgradeModels } from './kernel/gateway.js';
+// Before anything that reads user data (see data-init.js)
+import { dataMigration } from './kernel/data-init.js';
+import { generate, generateProcess, getProviders, evolve, complete, extractManifest, generateTheme, generateDesktop, listUpgradeModels, SDK_VERSION } from './kernel/gateway.js';
 import { loadTheme, saveTheme, resetTheme, validateTheme } from './kernel/theme.js';
 import { loadLayout, saveLayout, resetLayout, validateLayout, resolvePreset, PRESETS as DESKTOP_PRESETS } from './kernel/desktop.js';
 import { checkApiRequest } from './kernel/http-guard.js';
@@ -100,6 +102,7 @@ function bootDeps() {
     tokenKeyReady: tokenKeyReady(),
     theme: loadTheme().name,
     desktop: loadLayout().name,
+    dataMigration,
   };
 }
 
@@ -181,7 +184,7 @@ async function handleAPI(method, fullUrl, body, res) {
     // GET /api/version — returns current version
     if (method === 'GET' && url === '/api/version') {
       res.writeHead(200, { 'Content-Type': 'application/json' });
-      res.end(JSON.stringify({ version: VERSION }));
+      res.end(JSON.stringify({ version: VERSION, sdk: SDK_VERSION }));
       return;
     }
 

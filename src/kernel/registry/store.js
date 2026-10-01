@@ -193,7 +193,8 @@ function sanitizeManifest(m) {
   const handles = Array.isArray(m.handles)
     ? m.handles.filter(h => typeof h === 'string' && /^(\.[a-z0-9]{1,10}|[a-z]+\/[a-z0-9.+-]+)$/i.test(h)).map(h => h.toLowerCase()).slice(0, 20)
     : [];
-  return { name: str(m.name, 40), icon: str(m.icon, 8), handles, ...(m.ui === 'portable' ? { ui: 'portable' } : {}) };
+  const sdk = Number.isInteger(m.sdk) && m.sdk > 0 && m.sdk < 1000 ? { sdk: m.sdk } : {};
+  return { name: str(m.name, 40), icon: str(m.icon, 8), handles, ...sdk, ...(m.ui === 'portable' ? { ui: 'portable' } : {}) };
 }
 
 // Which variant of an app to prefer: the user's own, then what ships with the

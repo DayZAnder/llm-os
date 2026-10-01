@@ -1,7 +1,7 @@
 // Tests for LLM gateway — sanitization, complexity, provider selection, routing
 // Run: node tests/gateway.test.js
 
-import { sanitizePrompt, estimateComplexity, selectProvider, getProviders, scoreConfidence, generateClarifications, extractModelHint } from '../src/kernel/gateway.js';
+import { sanitizePrompt, estimateComplexity, selectProvider, getProviders, scoreConfidence, generateClarifications, extractModelHint, extractManifest, SDK_VERSION } from '../src/kernel/gateway.js';
 
 let passed = 0;
 let failed = 0;
@@ -207,6 +207,17 @@ console.log('\nClarification generation:');
 {
   const qs = generateClarifications('make a timer that saves to storage');
   assert(!qs.some(q => q.includes('save data')), 'does not ask about persistence when storage mentioned');
+}
+
+// --- SDK version in manifests ---
+console.log('\nSDK version:');
+{
+  const { readFileSync } = await import('fs');
+  const sdkSrc = readFileSync(new URL('../src/sdk/sdk.js', import.meta.url), 'utf-8');
+  assert(sdkSrc.includes(`version: ${SDK_VERSION} })`), 'window.LLMOS.version in sdk.js matches the kernel SDK_VERSION');
+  assert(extractManifest('<!-- app: {"name":"A"} -->').sdk === SDK_VERSION, 'apps written now are stamped with the current SDK');
+  assert(extractManifest('<!-- app: {"name":"A","sdk":7} -->').sdk === 7, 'a declared sdk is kept');
+  assert(extractManifest('<!-- app: {"name":"A","sdk":"x"} -->').sdk === SDK_VERSION, 'nonsense sdk values fall back');
 }
 
 // --- Summary ---

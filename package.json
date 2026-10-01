@@ -6,7 +6,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "test": "node tests/analyzer.test.js && node tests/storage.test.js && node tests/registry.test.js && node tests/scheduler.test.js && node tests/gateway.test.js && node tests/wasm-sandbox.test.js && node tests/capabilities.test.js && node tests/shell-versions.test.js && node tests/usage-tracker.test.js && node tests/syscalls.test.js && node tests/claude-provider.test.js && node tests/theme.test.js && node tests/portable-ui.test.js && node tests/desktop.test.js && node tests/boot.test.js"
+    "test": "node tests/analyzer.test.js && node tests/storage.test.js && node tests/registry.test.js && node tests/scheduler.test.js && node tests/gateway.test.js && node tests/wasm-sandbox.test.js && node tests/capabilities.test.js && node tests/shell-versions.test.js && node tests/usage-tracker.test.js && node tests/syscalls.test.js && node tests/claude-provider.test.js && node tests/theme.test.js && node tests/portable-ui.test.js && node tests/desktop.test.js && node tests/boot.test.js && node tests/migrations.test.js"
   },
   "license": "MIT",
   "repository": {

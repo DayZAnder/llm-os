@@ -455,6 +455,9 @@ async function resolveRoute(modelHint, complexity) {
  *   <!-- app: {"name": "...", "icon": "...", "handles": [".csv"]} -->
  * Returns a sanitized manifest; never trusts the model for anything but data.
  */
+/** Version of the LLMOS SDK contract (window.LLMOS.version in src/sdk/sdk.js). */
+export const SDK_VERSION = 2;
+
 export function extractManifest(code) {
   const m = code.match(/<!--\s*app\s*:\s*(\{[\s\S]*?\})\s*-->/);
   let raw = {};
@@ -463,7 +466,11 @@ export function extractManifest(code) {
   const handles = Array.isArray(raw.handles)
     ? raw.handles.filter(h => typeof h === 'string' && /^(\.[a-z0-9]{1,10}|[a-z]+\/[a-z0-9.+-]+)$/i.test(h)).map(h => h.toLowerCase()).slice(0, 20)
     : [];
-  return { name: str(raw.name, 40), icon: str(raw.icon, 8), handles, ...(raw.ui === 'portable' ? { ui: 'portable' } : {}) };
+  // The SDK contract the app was written against. Code from this kernel is
+  // written against the current one; a header can say otherwise (an app
+  // shared from a newer LLM OS), and the shell warns before running it.
+  const sdk = Number.isInteger(raw.sdk) && raw.sdk > 0 && raw.sdk < 1000 ? raw.sdk : SDK_VERSION;
+  return { name: str(raw.name, 40), icon: str(raw.icon, 8), handles, sdk, ...(raw.ui === 'portable' ? { ui: 'portable' } : {}) };
 }
 
 function extractCapabilities(code) {

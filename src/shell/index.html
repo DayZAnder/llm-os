@@ -2116,7 +2116,19 @@ async function launchIframeApp({ appId, code, capabilities, title, icon = '', mo
 }
 
 /** Launch a registry app; asks for approval when it wants sensitive capabilities. */
+let shellSdkVersion = 2; // replaced by /api/version at boot
+
 async function launchRegistryApp(app, args = {}) {
+  // An app shared from a newer LLM OS may call things this one doesn't have
+  const needs = app.manifest?.sdk;
+  if (Number.isInteger(needs) && needs > shellSdkVersion) {
+    const ok = await shellAsk({
+      title: `${String(app.manifest?.name || app.title).slice(0, 60)} needs a newer LLM OS`,
+      message: `It was written for SDK ${needs}; this version has SDK ${shellSdkVersion}. It may not work until you upgrade.`,
+      ok: 'Run anyway', cancel: 'Cancel', delayMs: 300,
+    });
+    if (!ok) return null;
+  }
   fetch(`/api/registry/launch/${app.hash}`, { method: 'POST' }).catch(() => {});
   const caps = app.capabilities || [];
   const start = (approved) => launchIframeApp({
@@ -4297,7 +4309,8 @@ async function boot() {
   // Fetch version dynamically
   try {
     const vRes = await fetch('/api/version');
-    const { version } = await vRes.json();
+    const { version, sdk } = await vRes.json();
+    if (Number.isInteger(sdk)) shellSdkVersion = sdk;
     log(`LLM OS v${version} ready`, 'ok');
   } catch {
     log('LLM OS ready', 'ok');

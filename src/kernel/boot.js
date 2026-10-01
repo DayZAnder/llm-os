@@ -57,6 +57,27 @@ export function checkData() {
   return result;
 }
 
+/** Fold the data-format check (kernel/migrations.js) into the data line. */
+export function withDataFormat(result, m) {
+  if (!m) return result;
+  if (m.status === 'newer') {
+    return {
+      status: 'warn',
+      detail: `${result.detail} · written by a newer LLM OS${m.writtenBy ? ` (${m.writtenBy})` : ''}`,
+      fix: 'This version may not understand all of it and won\'t convert it back. Upgrade LLM OS again before making big changes.',
+    };
+  }
+  if (m.status === 'error') {
+    return {
+      status: 'error',
+      detail: `${result.detail} · could not update the data format: ${m.error}`,
+      fix: m.backup ? `The files it changed are backed up in ${m.backup}.` : 'Nothing was changed.',
+    };
+  }
+  if (m.status === 'migrated') return { ...result, detail: `${result.detail} · updated to format ${m.to}` };
+  return result;
+}
+
 /**
  * Build the report.
  * @param {object} deps — injected so the report stays testable:
@@ -65,7 +86,7 @@ export function checkData() {
  */
 export async function bootReport(deps) {
   const checks = await Promise.all([
-    timed('data', 'Your data', () => checkData()),
+    timed('data', 'Your data', () => withDataFormat(checkData(), deps.dataMigration)),
 
     timed('models', 'AI models', async () => {
       const models = await deps.listModels();
