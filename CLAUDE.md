@@ -197,6 +197,19 @@ If it reports CRITICAL findings, fix them before committing. No exceptions.
 
 On pull requests, a second layer runs: an AI-powered Values Guardian that reviews the full diff against the core values and posts its findings as a PR comment.
 
+## Release notes and the site
+
+`site/` deploys to llm-os.dev on every push to master (shared `style.css`).
+- **`site/changelog.html`** has every release in full, newest first: a
+  `changes-divider` line per version, then `new` / `fix` / `change` /
+  `security` items written for users (what it means for them, not how).
+- **`site/index.html#new`** shows only the current minor series: one line
+  per release, with the latest release named above the list. When a new
+  minor starts (0.5), the list starts over.
+- Download links on the front page point at a release only after its CI run
+  (with the image tests) has created it. Try a release first with the
+  `workflow_dispatch` run (builds and tests the images, no release).
+
 ## Running the Prototype
 
 ```bash

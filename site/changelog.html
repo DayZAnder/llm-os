@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>LLM OS changelog</title>
+<meta name="description" content="Every LLM OS release: what changed, what was fixed, and what it means for you.">
+<meta property="og:title" content="LLM OS">
+<meta property="og:description" content="An operating system with no apps until you ask for one. Open source, local-first, capability-sandboxed.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://llm-os.dev/screenshots/og.jpg">
+<meta name="theme-color" content="#0c0c0f">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<!-- No analytics, no tracking, no third-party requests. -->
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="top">
+  <div class="wrap">
+    <a class="brand" href="index.html"><img src="favicon.svg" alt="">LLM OS <span class="ver">0.4.4</span></a>
+    <nav>
+      <a href="changelog.html">Changelog</a>
+      <a href="index.html#sdk">SDK</a>
+      <a href="index.html#security">Security</a>
+      <a href="index.html#roadmap">Roadmap</a>
+      <a href="index.html#run">Run it</a>
+      <a class="gh" href="https://github.com/DayZAnder/llm-os">GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main>
+  <section id="changelog">
+    <div class="wrap">
+      <div class="section-head">
+        <div class="label">changelog</div>
+        <div>
+          <h2>Every release, newest first.</h2>
+          <p>What changed, what was fixed, and what it means for you. The front page shows only what's current.</p>
+        </div>
+      </div>
+      <ul class="changes body-col">
+        <li class="changes-divider"><span class="kind">0.4.4</span><div><p>Every image is now tested for what it is for.</p></div></li>
+        <li><span class="kind fix">fix</span><div><p>The Desktop image shows LLM OS on its screen.</p><p>The full-screen browser never started in a VM: the display stack was missing the device manager it needs, and VMs without a GPU need software drawing. App icons were empty boxes too (no emoji font).</p></div></li>
+        <li><span class="kind new">new</span><div><p>Functional tests for every image, before every release.</p><p>Each image is booted and used: write an app, save and open a file, a permission refused, desktop and display settings — and for the Desktop image, its own screen and keyboard. Then the previous release with your data, this one on the same disk, and back again.</p></div></li>
+        <li><span class="kind fix">fix</span><div><p>A fresh VM no longer reports local models as failed.</p><p>Not having Ollama is a choice, not an error.</p></div></li>
+        <li class="changes-divider"><span class="kind">0.4.3</span><div><p>Make it bigger — by clicking, or by saying so.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Display scale: point and click, or describe it.</p><p>Settings → Display has sizes from 75% to 200%. Or type <code>/display 150%</code>, or <code>/display I sit far from the screen</code>. Both go through the same check in the kernel; the model only proposes, and an answer that makes things smaller when you asked for bigger is sent back.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Your data knows its format.</p><p>A future version that changes how data is stored converts it once at boot, after backing up what it touches. Going back to an older version never converts it back, and the boot screen tells you.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Apps say which SDK they were written for.</p><p>An app shared from a newer LLM OS asks before it runs instead of breaking quietly.</p></div></li>
+        <li><span class="kind security">security</span><div><p>Opening files needs file access; permissions you grant survive updates.</p><p>An app without permissions could launch other apps through “open file”. And a permission granted while an app ran was lost when it was updated.</p></div></li>
+        <li class="changes-divider"><span class="kind">0.4.2</span><div><p>It tells you what’s running, and it keeps what you made.</p></div></li>
+        <li><span class="kind new">new</span><div><p>A boot screen, and a list of what’s running.</p><p>Your data, AI models, apps, sandbox, background apps, self-improvement — each with its state and, when something is missing, the one thing to do about it. <code>/status</code> shows it again; the VM console prints the same list, systemd-style.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Move an older install’s data to its own disk.</p><p><code>llmos-data-move</code> copies apps, files and settings from a 0.4.0 VM to the data disk, so the next upgrade is a disk swap. A data disk attached to a running install is filled automatically on the next boot.</p></div></li>
+        <li><span class="kind fix">fix</span><div><p>Settings and app data survive a hard power-off.</p><p>Found by booting the released image: files written in the last ~30 seconds came back empty after a VM was stopped. Every write of your data is now flushed to disk before it counts as saved, and the VMs power off cleanly when the hypervisor asks them to.</p></div></li>
+        <li><span class="kind fix">fix</span><div><p>The Server and Desktop images boot again.</p><p>The 0.4.1 images stopped at the bootloader. Every image is now booted in CI before it is released — with a data disk, a shutdown from the hypervisor, and an upgrade that must keep your data.</p></div></li>
+        <li><span class="kind">change</span><div><p>Desktop layouts have neutral names.</p><p><code>/desktop taskbar</code> and <code>/desktop dock</code>; the old names still work. Minimize, maximize and close sit on the right, where people expect them; ✎ modify and ⇪ upgrade on the left of the title.</p></div></li>
+        <li><span class="kind security">security</span><div><p>An app can no longer hand its window to a web page.</p><p>A sandboxed app could navigate its own frame to any site, and the page there kept the app’s permissions. The browser now refuses such pages, and an app that tries is closed.</p></div></li>
+        <li><span class="kind security">security</span><div><p>Apps can’t impersonate the OS to each other, or inherit another app’s data.</p><p>One app could answer another app’s pending requests with fake data. And after a fresh browser profile, a new app could get the private storage of an old one.</p></div></li>
+        <li><span class="kind security">security</span><div><p>Permission prompts can’t be ambushed.</p><p>An app could time a permission request to catch your next Enter key. Prompts now default to “no”, “Allow” unlocks after a moment, a “no” is remembered, and taking a permission away takes effect at once.</p></div></li>
+        <li><span class="kind security">security</span><div><p>Websites can’t crash or frame the OS; apps can’t reach your network through IPv6 tricks.</p><p>Plus: stricter checks on apps from the community registry, which is no longer contacted at startup unless you turn it on.</p></div></li>
+        <li class="changes-divider"><span class="kind">0.4.1</span><div><p>Your data on its own disk, and upgrades that keep your changes.</p></div></li>
+        <li><span class="kind new">new</span><div><p>A separate data disk for the VMs.</p><p>Apps, files and settings live on <code>llmos-data</code>; upgrading means replacing the OS disk.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Your version of an app wins.</p><p>When a new release ships a newer built-in app, the one you changed is still the one that opens.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Upgrade an app with a bigger model.</p><p>⇪ in the title bar or Ctrl+Alt+U: pick any installed or cloud model and let it improve the running app.</p></div></li>
+        <li class="changes-divider"><span class="kind">0.4.0</span><div><p>A generated desktop, and a first step out of the browser.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Describe your desktop.</p><p><code>/desktop taskbar</code>, <code>/desktop dock</code>, or any description: a taskbar at the bottom (Windows-like) or a menu bar with a dock (Mac-like), dock position, clock, window buttons, wallpaper. The model proposes a layout, the kernel validates every field. Pinned apps that don’t exist yet are written the first time you click them.</p></div></li>
+        <li><span class="kind new">new</span><div><p>A Prompt button instead of a Start menu.</p><p>Search your apps or describe a new one from the same box. Also on the Super/Windows key and Ctrl+Space.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Alt+Tab window switcher.</p><p>Works in kiosk mode and on the native renderer; in a normal browser, where the host OS keeps Alt+Tab, use Alt+` instead. Shortcuts work even while an app has focus.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Terminal, Writer and Reader.</p><p>A shell for the OS itself (files, network, the model), a word processor that saves HTML documents, and a reader-mode browser that shows pages without scripts, trackers or cookies.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Portable UI.</p><p>Apps can describe their interface as plain data — columns, rows, text, buttons, inputs — instead of HTML. The browser renders it today; the same tree can be drawn by anything. Terminal and Tasks are written this way.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Native renderer (spike).</p><p>A 1.4 MB Rust binary lays out and draws portable apps in Full HD in about 2 ms, to a PNG or a Linux framebuffer. No input and no app logic yet — but the layout already matches the browser.</p></div></li>
+        <li class="changes-divider"><span class="kind">0.3.0</span><div><p>Apps that work together, change and heal themselves.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Watch the app being written.</p><p>Generation streams from every provider. A preview renders the half-finished app as the code arrives — with scripts disabled, since nothing runs before the analyzer and your approval.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Modify a running app from its title bar.</p><p>Describe the change; the model rewrites the app and it is swapped into the same window with its data intact. Every version is kept in the registry with its parent.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Self-healing.</p><p>Runtime errors are captured inside the sandbox and shown on the window. One click sends the code and the errors back for a fix.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Shared filesystem and file associations.</p><p>Apps declare which file types they handle. Opening a file launches the right app — or, if none exists, offers to write one.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Apps can use the model.</p><p><code>LLMOS.ai.complete()</code> behind the <code>ai:generate</code> capability, rate-limited per app.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Network proxy, clipboard, inter-app messaging, runtime permission prompts.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Describe a theme, get a theme.</p><p><code>/theme nordic winter night</code> asks the model for a palette. The kernel checks every value and the text contrast before applying it — too dark, and the model gets one try to fix it. Every running app re-themes at once.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Regenerate with today’s model.</p><p>Every generated app in the registry has a ↻ button that runs its original prompt again on the current model and stores the result as a new version.</p></div></li>
+        <li><span class="kind new">new</span><div><p>Two default apps: Files and Notepad.</p><p>Written by Claude Opus 5.5 against the new SDK. Files got its search box through the modify loop.</p></div></li>
+        <li><span class="kind">models</span><div><p>Claude Opus 5 by default; <code>"… using opus 5.5"</code>, <code>"… with fable"</code> as prompt hints.</p><p>Streaming generation, prompt caching, refusal fallback. Truncated output is detected instead of silently producing a broken app.</p></div></li>
+        <li><span class="kind security">security</span><div><p>The kernel API rejects cross-origin and DNS-rebinding requests.</p><p>Before this, any web page you visited could talk to <code>localhost:3000</code> — including the Docker endpoints.</p></div></li>
+        <li><span class="kind security">security</span><div><p>Capabilities are enforced on every call, twice.</p><p>Once in the shell for each message an app sends, and again in the kernel with a signed token. Registry apps that ask for files, network or AI need your approval.</p></div></li>
+      </ul>
+    </div>
+  </section>
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>LLM OS 0.4.4 · <a href="https://github.com/DayZAnder/llm-os/blob/master/LICENSE">MIT license</a> · <a href="https://github.com/DayZAnder/llm-os/blob/master/CONTRIBUTING.md">Contributing</a></span>
+    <span>This site makes no third-party requests and sets no cookies.</span>
+    <span class="tm">Windows is a trademark of Microsoft; macOS of Apple. LLM OS is not affiliated with either.</span>
+  </div>
+</footer>
+
+</body>
+</html>
